@@ -174,5 +174,8 @@ def report() -> int:
     return 1
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
+    # 本文件是骨架的冒烟检查脚本（对应 CI 的 smoke 作业），
+    # 其逻辑由 python skeleton/run_skeleton.py 实际执行验证，
+    # 不计入单元测试覆盖率（L1 只覆盖库代码 module_system.py 与 modules.py）。
     raise SystemExit(main())

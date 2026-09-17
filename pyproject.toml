@@ -1,0 +1,26 @@
+# 工具与测试配置 —— 本仓库零依赖即可运行，本文件只固化「门禁口径」。
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+# 覆盖率只统计**库代码**。
+#
+# skeleton/run_skeleton.py 是骨架冒烟检查脚本（对应 CI 的 smoke 作业），
+# 它由 `python skeleton/run_skeleton.py` 实际执行验证，不属单元测试的覆盖对象；
+# 把它计入会让 L1 覆盖率指标失真（既虚高也不可信）。
+source = ["skeleton"]
+omit = ["skeleton/run_skeleton.py"]
+
+[tool.coverage.report]
+# 覆盖率门槛：行覆盖率 ≥ 80%（与 templates/05-测试类/03-单元测试记录.md 的约定一致）。
+# 说明：该阈值是本仓库**工程约定**，并非国标规定数值
+# （GB/T 38634 系列规定测试过程与文档要求，不规定统一覆盖率数值）。
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

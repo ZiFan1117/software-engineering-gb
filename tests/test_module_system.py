@@ -92,36 +92,25 @@ class TestModuleId:
         assert parse_module_id("M45") == 45
         assert parse_module_id("M99") == 99
 
-    @pytest.mark.parametrize("bad", ["M1", "M001", "m01", "X01", "MAA", "", "M00"])
-    def test_非法模块号被拒绝(self, bad: str = "M1") -> None:
-        # pytest 下按参数逐个展开；降级执行器下自动遍历全部非法取值
-        candidates = [bad]
-        if bad == "M1":
-            candidates = ["M1", "M001", "m01", "X01", "MAA", "", "M00"]
-        for bad_id in candidates:
+    def test_非法模块号被拒绝(self) -> None:
+        # 用循环而非 @pytest.mark.parametrize：参数化会让参数失去默认值，
+        # 使得本文件无法在无 pytest 环境下降级运行（CI 已把两种模式都跑一遍）。
+        for bad in ["M1", "M001", "m01", "X01", "MAA", "", "M00"]:
             with pytest.raises(ContractError):
-                parse_module_id(bad_id)
+                parse_module_id(bad)
 
     def test_非字符串模块号被拒绝(self) -> None:
         with pytest.raises(ContractError):
             parse_module_id(123)  # type: ignore[arg-type]
 
-    @pytest.mark.parametrize(
-        "module_id,expected",
-        [("M01", "表现层"), ("M20", "业务层"), ("M45", "数据访问层"), ("M60", "基础设施层"), ("M80", "公共/工具层")],
-    )
-    def test_分层划分正确(self, module_id: str = "M01", expected: str = "表现层") -> None:
-        # pytest 下按参数逐个展开；降级执行器下自动遍历全部分层
-        pairs = [(module_id, expected)]
-        if module_id == "M01":
-            pairs = [
-                ("M01", "表现层"),
-                ("M20", "业务层"),
-                ("M45", "数据访问层"),
-                ("M60", "基础设施层"),
-                ("M80", "公共/工具层"),
-            ]
-        for mid, want in pairs:
+    def test_分层划分正确(self) -> None:
+        for mid, want in [
+            ("M01", "表现层"),
+            ("M20", "业务层"),
+            ("M45", "数据访问层"),
+            ("M60", "基础设施层"),
+            ("M80", "公共/工具层"),
+        ]:
             assert layer_of(mid) == want
 
 
@@ -148,6 +137,21 @@ class TestModuleContract:
     def test_必须声明职责(self) -> None:
         with pytest.raises(ContractError, match="职责"):
             make_module(responsibility="")
+
+    def test_模块名称不能为空(self) -> None:
+        with pytest.raises(ContractError, match="名称不能为空"):
+            ModuleDef(
+                module_id="M01",
+                name="",
+                responsibility="做一件事",
+                not_responsible="不做另一件事",
+            )
+
+    def test_提供接口默认空集(self) -> None:
+        module = make_module()
+        assert module.provides == frozenset()
+        assert module.owner == "<未指派>"
+        assert module.implemented is False
 
     def test_必须声明不负责什么(self) -> None:
         with pytest.raises(ContractError, match="不负责"):
@@ -227,11 +231,52 @@ class TestRegistry:
         with pytest.raises(ContractError, match="循环依赖"):
             registry.validate()
 
-    def test_公共工具层可被任何层依赖(self) -> None:
+    def test_工具层可被任何层依赖(self) -> None:
         registry = ModuleRegistry()
         registry.register(make_module("M80"))
         registry.register(make_module("M01", depends_on=frozenset({"M80"})))
         registry.validate()  # 不应抛错
+
+    def test_工具层不得依赖业务层(self) -> None:
+        registry = ModuleRegistry()
+        registry.register(make_module("M60"))
+        registry.register(make_module("M80", depends_on=frozenset({"M60"})))
+        with pytest.raises(ContractError, match="工具层越界"):
+            registry.validate()
+
+    def test_工具层内部互相依赖允许(self) -> None:
+        registry = ModuleRegistry()
+        registry.register(make_module("M81"))
+        registry.register(make_module("M80", depends_on=frozenset({"M81"})))
+        registry.validate()  # 同层依赖允许
+
+    def test_作废未登记模块报错(self) -> None:
+        registry = ModuleRegistry()
+        with pytest.raises(ContractError, match="未登记的模块无法作废"):
+            registry.retire("M09")
+
+    def test_模块集合查询与计数(self) -> None:
+        registry = build_registry()
+        assert len(registry) == 4
+        assert set(registry.modules) == {"M01", "M20", "M40", "M80"}
+        # 返回的是副本，外部修改不影响注册表
+        registry.modules.clear()
+        assert len(registry) == 4
+
+    def test_概览输出包含全部模块(self) -> None:
+        text = build_registry().summary()
+        for mid in ("M01", "M20", "M40", "M80"):
+            assert mid in text
+        assert "模块总数: 4" in text
+        assert "已实现:   4" in text
+
+    def test_概览输出区分桩与实现(self) -> None:
+        registry = ModuleRegistry()
+        registry.register(make_module("M01"))
+        registry.register(make_module("M02", implemented=True, depends_on=frozenset({"M01"})))
+        text = registry.summary()
+        assert "仍为桩:   1" in text
+        assert "已实现:   1" in text
 
     def test_装配顺序满足被依赖者在前(self) -> None:
         registry = ModuleRegistry()
