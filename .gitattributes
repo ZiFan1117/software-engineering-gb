@@ -1,0 +1,33 @@
+# 统一行尾与文本处理，保证跨平台一致（Windows / Linux / macOS）
+# 依据：docs/04-配置与版本/配置管理与版本化.md（配置项一致性要求）
+
+# 默认：入库一律 LF，检出时按平台自动处理
+* text=auto eol=lf
+
+# 显式声明文本文件类型
+*.md      text eol=lf
+*.py      text eol=lf
+*.csv     text eol=lf
+*.json    text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.svg     text eol=lf
+*.txt     text eol=lf
+
+# Windows 脚本保留 CRLF
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.ps1     text eol=crlf
+
+# 二进制文件不参与行尾转换
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.pdf     binary
+*.zip     binary
+*.exe     binary
+*.dll     binary
+
+# Git 差异展示优化：CSV 按行比较，便于评审追溯矩阵的改动
+*.csv     diff

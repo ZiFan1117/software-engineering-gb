@@ -1,0 +1,79 @@
+name: 国标流程门禁
+
+# 把「能自动判定的门禁」全部交给 CI：
+#   - L0 骨架冒烟测试（S3 准出）
+#   - L1 单元测试（S4 逐模块准出）
+#   - RTM 需求追溯完整性（S1 / S5 / S6 准出）
+#   - 改动范围检查（受控变更，防止静默改框架）
+# 人工评审只负责机器判不了的判断项（契约合理性、假设成立性、测试覆盖真实风险）。
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  smoke:
+    name: L0 骨架冒烟测试（S3 门禁）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 一条命令跑通骨架
+        run: python skeleton/run_skeleton.py
+
+  unit-test:
+    name: L1 单元测试（S4 门禁）
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: 安装测试依赖
+        run: python -m pip install --upgrade pip pytest pytest-cov
+      - name: 运行单元测试并检查覆盖率
+        run: |
+          python -m pytest tests -q \
+            --cov=skeleton \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+  traceability:
+    name: RTM 需求追溯门禁（S1 / S5 / S6）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 校验需求双向追溯完整性
+        run: python tools/trace_matrix.py
+
+  scope:
+    name: 改动范围门禁（受控变更）
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 校验改动是否越界
+        run: |
+          python tools/scope_check.py \
+            --base origin/${{ github.base_ref }} \
+            --scope .scope-declaration.json
+        continue-on-error: true   # 未声明范围时不阻断，仅提示

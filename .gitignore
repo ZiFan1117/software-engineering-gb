@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+venv/
+.venv/
+env/
+
+# 测试与覆盖率产物
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 密钥与凭据 —— 严禁入库（见 docs/04-配置与版本/配置管理与版本化.md）
+*.pem
+*.key
+*.p12
+.env
+.env.*
+secrets/
+credentials.json
+*_rsa
+*_ed25519
+
+# 构建产物
+*.exe
+*.dll
+*.zip
+*.tar.gz

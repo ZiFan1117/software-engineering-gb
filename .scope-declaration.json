@@ -1,0 +1,22 @@
+# 变更范围声明
+#
+# 用途：tools/scope_check.py 读取本文件，判断一次变更是否越界。
+# 这是「受控变更」的机器化闸门——防止静默改框架、防止顺手重构、防止越界改动。
+#
+# 每次提 PR 时按实际情况修改 allowed 列表。
+# 触及 skeleton/module_system.py、skeleton/modules.py、tools/、.github/workflows/
+# 等敏感路径时，必须走 R5 框架变更评审并更新变更申请与影响分析。
+
+{
+  "allowed": [
+    "skeleton/",
+    "tests/",
+    "tools/",
+    "docs/",
+    "templates/",
+    ".github/"
+  ],
+  "scope_note": "示例范围声明：全仓库允许。真实 PR 应缩小到本次实际改动的范围。",
+  "change_request": "FC-2026-001",
+  "impact_analysis": "示例：无框架契约变更"
+}
