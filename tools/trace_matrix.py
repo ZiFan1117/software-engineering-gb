@@ -59,10 +59,17 @@ VALID_PRIORITIES = {"P0", "P1", "P2"}
 
 
 def split_multi(value: str) -> List[str]:
-    """拆分多值单元格：支持逗号、分号、顿号分隔。"""
+    """拆分多值单元格。
+
+    分隔符约定：**分号 ;**（主） / 逗号 , 、顿号 、（兼容）。
+    注意：多值字段若用逗号分隔，**必须给整个单元格加双引号**，
+    否则裸逗号会被 CSV 解析器当作列分隔符，导致整行右移一列。
+    本工具会对字段数不匹配的行直接报错（见 check_matrix 的结构完整性校验），
+    避免这种错位被静默放过。
+    """
     if not value:
         return []
-    parts = re.split(r"[,，;；、]+", value.strip())
+    parts = re.split(r"[;；,，、]+", value.strip())
     return [p.strip() for p in parts if p.strip()]
 
 
@@ -139,6 +146,37 @@ def check_matrix(
         return result
 
     with open(matrix_path, "r", encoding="utf-8-sig", newline="") as fh:
+        # --- 结构完整性校验：字段数必须与列数一致 ---
+        #
+        # 这是最重要的一道防线。若某单元格的多值字段用了裸逗号（未加引号），
+        # CSV 解析器会把它当作列分隔符，导致**整行右移一列**：
+        # 值会串到错误的列上，校验结果看似"通过"，实则数据已经错位。
+        # 门禁静默放过 = 门禁失效，所以必须在此直接报错。
+        raw_rows = list(csv.reader(fh))
+        if not raw_rows:
+            result.issues.append(Issue("ERROR", "-", "追溯矩阵文件为空"))
+            return result
+        header = raw_rows[0]
+        expected_cols = len(header)
+        misaligned = [
+            (line_no, len(row))
+            for line_no, row in enumerate(raw_rows[1:], start=2)
+            if row and len(row) != expected_cols
+        ]
+        for line_no, actual in misaligned:
+            result.issues.append(
+                Issue(
+                    "ERROR",
+                    "-",
+                    f"第 {line_no} 行字段数为 {actual}，应为 {expected_cols} 列"
+                    "——整行可能因裸逗号错位。多值字段请用分号分隔，"
+                    "或给整个单元格加双引号",
+                )
+            )
+        if misaligned:
+            return result
+
+        fh.seek(0)
         reader = csv.DictReader(fh)
         header = reader.fieldnames or []
         missing = [c for c in REQUIRED_COLUMNS if c not in header]
@@ -283,7 +321,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--srs",
         default=os.path.join("docs", "demo", "软件需求规格说明.md"),
-        help="SRS 文档路径（用于一致性校验，可省略）",
+        help="SRS 文档路径（用于一致性校验；传空字符串表示跳过该项校验）",
+    )
+    parser.add_argument(
+        "--no-srs",
+        action="store_true",
+        help="跳过 SRS 一致性校验（等价于 --srs 传空）",
     )
     parser.add_argument("--repo-root", default=".", help="仓库根目录")
     parser.add_argument(
@@ -293,7 +336,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     repo_root = os.path.abspath(args.repo_root)
     matrix_path = os.path.join(repo_root, args.matrix)
-    srs_path = os.path.join(repo_root, args.srs) if args.srs else ""
+    if args.no_srs or not args.srs:
+        srs_path = ""
+    else:
+        srs_path = os.path.join(repo_root, args.srs)
 
     result = check_matrix(
         matrix_path=matrix_path,
