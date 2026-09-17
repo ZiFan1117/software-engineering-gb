@@ -204,6 +204,20 @@ class TestRegistry:
         with pytest.raises(ContractError, match="分层倒置"):
             registry.validate()
 
+    def test_跨层跳跃被检出(self) -> None:
+        registry = ModuleRegistry()
+        # M01 表现层 直连 M40 数据访问层 —— 中间隔着业务层，属跨层跳跃
+        registry.register(make_module("M40"))
+        registry.register(make_module("M01", depends_on=frozenset({"M40"})))
+        with pytest.raises(ContractError, match="跨层跳跃"):
+            registry.validate()
+
+    def test_相邻层依赖不算跨层跳跃(self) -> None:
+        registry = ModuleRegistry()
+        registry.register(make_module("M40"))
+        registry.register(make_module("M20", depends_on=frozenset({"M40"})))
+        registry.validate()  # 业务层 → 数据访问层为相邻层，不应抛错
+
     def test_循环依赖被检出(self) -> None:
         registry = ModuleRegistry()
         registry.register(make_module("M20", depends_on=frozenset({"M21"})))

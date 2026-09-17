@@ -210,6 +210,16 @@ class ModuleRegistry:
                         f"分层倒置：{module.module_id}（{module.layer}）依赖 "
                         f"{dep}（{dep_module.layer}）——低层不得依赖高层"
                     )
+                    continue
+
+                # 跨层跳跃：除相邻层外不得直连（表现层不得直连数据访问层等）。
+                # 依据 templates/03-设计类/02-模块清单与模块号登记表.md「依赖方向铁律」。
+                if layer_index[dep_module.layer] - layer_index[module.layer] > 1:
+                    problems.append(
+                        f"跨层跳跃：{module.module_id}（{module.layer}）直连 "
+                        f"{dep}（{dep_module.layer}）——必须经由中间层转发，"
+                        "禁止跨层跳跃"
+                    )
 
         # 3) 环检测
         cycles = self.find_cycles()
