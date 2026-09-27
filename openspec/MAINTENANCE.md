@@ -38,6 +38,8 @@
 | 8 | **原子化编程**是本项目的强制约定：单意图原子性／一个原子一个文件夹（契约＋实现＋测试同夹）／`deps == import` 且无环／生成物不许手编／编码 UTF-8 无 BOM | `world-core/docs/S0-立项/WC-ATOM-001-v0.1.md`；机核工具 `world-core/tools/module_graph.py`（在建） |
 | 9 | **书只留一本合订本**：正件与合订本在 `world-core/docs/理论/`；**来源散件已退场**（`1-理论与哲学`／`2-依据`／`3-备选路线`／`4-计划`／`00-总纲.md`），旧引用的解析根＝**本仓 git 历史**（退场前提交 `bf2eae7` 之前的树） | `openspec/BOOK/README.md`；`openspec/schemas/README.md` §〇 |
 | 10 | **仓库只有一个**：`github.com/ZiFan1117/worldcore`（private）是唯一活仓；`agent-native-os` **已归档**（只读，不再维护） | 本件与 `openspec/BOOK/冲突总账.md` 的轮次台账 |
+| 11 | **BRIDGE 的生成链在仓内**：`openspec/tools/gen_bridge_md.py` ＋ 输入 `openspec/specmap.json`（**仓内这份为准**，仓外 `D:\Code\_specmap\` 那份只作历史）。改规格后**必须重跑生成器**，不许手改 `BRIDGE.md` | 判据④；`openspec/tools/gen_bridge_md.py` 头部注明 |
+| 12 | **原子化编程**（同规则 8）：机核落点在 `cover-*` tasks **第 12 组**；`module_graph.py` 必须**纳入版本控制**（"闸在控制之外"等于没有闸） | `WC-ATOM-001` §四 |
 
 ---
 

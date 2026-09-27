@@ -1,0 +1,2957 @@
+{
+ "generated": "2026-09-27",
+ "caps": [
+  {
+   "cap": "channel-identity",
+   "file": "openspec\\specs\\channel-identity\\spec.md",
+   "purpose": "规定\"谁在说话由系统给出，不由请求自称\"这一层对外可核的行为。身份如果可以由请求方自己声明， 门禁、审计与归责三件事同时失效，因此这一条是 `管` 的前置条件。",
+   "reqs": [
+    {
+     "title": "身份取自内核而非请求自称",
+     "line": 9,
+     "text": [
+      "> **改的是哪一类问题**：② 措辞写窄（实现有、规格无）兼 ③ 证据错位。",
+      "> **不是**\"这一层能力有没有\"的问题——能力在（写入侧身份确实不取自请求），是**表述与断言的强度对不上**。",
+      ">",
+      "> `audit.md` **C1**：规格写「采用内核给出的身份、自称被忽略」，证据实为「拒绝且不落笔」；",
+      "> `audit.md` **C2**：规格写「从内核提供的连接元数据中取得身份」，而实现**不取任何连接凭证**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 拒绝侧：`world-core/tests/contract.rs:668-670` 逐字",
+      ">    `let e = serve_once(&mut w, &listener, &expect).expect_err(\"冒充必须被拒\");`／",
+      ">    `assert!(e.contains(\"Impersonation\"), \"实得: {e}\");`／",
+      ">    `assert_eq!(w.ledger().last_seq(), before, \"冒充被拒后不得落笔\");`",
+      "> ② 身份取自映射侧：`world-core/tests/contract.rs:653-657` 逐字",
+      ">    `assert_eq!( ev[\"actor\"], json!(\"world://agent/1\"), \"actor 必须取自内核身份映射，而不是请求\" );`",
+      "> ③ **\"不取连接元数据\"这一句今天没有任何断言**——实现侧只有自述：`world-core/src/channel.rs:256-257` 逐字",
+      ">    「① 身份已由**套接字文件的权限**保证：只有 expect.uid 连得上（见 bind()）。/ 因此这里不需要（也无法用）peer_cred——它在本工具链上仍是不稳定 API。」",
+      "> ④ \"未被身份映射登记的套接字被默认拒绝\"今天也没有断言——实现侧为 `world-core/src/main.rs:604-615` 的 `None` 分支",
+      ">    （报 `ext.world.Channel.NotConfigured`、`rc=2`）。",
+      "> ⇒ ③④ 需补断言（列进 tasks）。",
+      "通道 SHALL 使请求方身份由**套接字绑定**决定：每个监听套接字在创建时绑定到一个身份，",
+      "只有该身份能连上；系统 SHALL NOT 从连接元数据、对端凭证或请求正文取得身份。",
+      "请求正文里自称的身份与套接字绑定的身份不一致时，系统 SHALL 拒绝该请求且 SHALL NOT 落笔。",
+      "未被身份映射登记的套接字 SHALL 被默认拒绝，而不是降级为匿名。"
+     ],
+     "scenarios": [
+      {
+       "title": "请求自称的身份不生效",
+       "line": 35,
+       "when": "一个请求在正文里声明一个与内核给出的身份不同的主体",
+       "then": "该请求被**拒绝且不落笔**，错误串含 `Impersonation`，账本 `last_seq` 在拒绝前后不变",
+       "ev": [
+        "tests/contract.rs::c14_channel_takes_identity_from_kernel_not_from_request"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "通道身份的实际保证与它的边界",
+     "line": 43,
+     "text": [
+      "> **为什么用 ADDED 而不是 MODIFIED**：本节是一条**新的 Requirement 实体**（原规格没有这一条），",
+      "> 而 `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下**逐字存在**。",
+      "> 本节**不新增能力**：它挂在既有能力 `channel-identity` 之下，只声明**该既有能力的边界**——",
+      "> 这正是把\"已知边界写成正式条文\"所必需的那一步。",
+      ">",
+      "> **改的是哪一类问题**：④ 与项目文档冲突（规格把**已知边界**写成已成立，通篇未登记）。",
+      "> 书稿已逐字登记该边界：`world-core/docs/理论/语义世界-理论书-第一版-合订.md:697` 逐字",
+      "> 「分情况的有 1 项。经通道进来的连接，身份由入口绑定给出，非最高权限的邻居冒称会被拒；最高权限的用户可以连任何套接字，这一项对它无效。」",
+      ">",
+      "> `audit.md` **C3**：实测「套接字 actor=`world://agent/1`、uid=1001、mode=600」下，",
+      "> uid 1001 连上→落笔 `agent/1`；**root 连上→同样落笔 `agent/1`**；只有 root「自称」`world://user` 才被拒",
+      "> ⇒「身份取自内核」这条检查**只抓自称、不抓谁连上**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tools/system_acceptance.sh:342-344` 逐字",
+      "> `assert_rc \"㉔ M09 正例：身份 uid 的连接可建立并落笔（rc=0）\" 0 \"$ROOT_RC\"`／",
+      "> `assert_ne \"㉕ M09 反例：**别的 uid 连不上**（内核在 connect 处拒绝）\" 0 \"$OUTB_RC\"`／",
+      "> `assert_ne \"㉖ 且失败理由不是「连接成功」（输出里不得出现 CONNECTED）\" \"CONNECTED\" \"$(printf '%s' \"$OUTB\" | tail -1)\"`。",
+      "> **⚠ 这三条断言自身的边界必须一起读**：`world-core/tools/system_acceptance.sh:314` 逐字",
+      "> `if command -v setpriv >/dev/null 2>&1 && [ \"$(id -u)\" = \"0\" ]; then`，其 `else` 分支（`:346`）逐字",
+      "> `echo \"  【未能校验】跨 uid 连接反例（缺 setpriv 或非 root）\"`",
+      "> ⇒ 缺 `setpriv` 或非 root 时这三条整段不执行。",
+      "> 「root 连上仍落笔 `agent/1`」这一失效形态**今天没有断言** ⇒ 需补断言（列进 tasks）。",
+      "通道身份 SHALL 由套接字文件的属主与权限保证：只有套接字属主能够连接，连接即代表该身份。",
+      "该系统 SHALL NOT 区分连接方是哪一进程，SHALL NOT 约束超级用户的行为。",
+      "已知边界 SHALL 被如实声明，且此边界是**能力的正式条文**而不是注意事项：",
+      "当套接字属主为 `root` 时，**任何** root 进程连接该套接字都取得该套接字的身份。",
+      "该边界由\"套接字不可被他人写\"这一层承担，**不由连接受理层承担**；",
+      "故\"身份取自内核\"这一说法 SHALL NOT 被读成\"任何越权连接都会被识别出来\"。"
+     ],
+     "scenarios": [
+      {
+       "title": "别的 uid 连不上（权限即身份）",
+       "line": 76,
+       "when": "在一个\"祖先目录也不可被他人写\"的位置建套接字（0600 + chown 到配置 uid），",
+       "then": "连接被内核拒绝（非零退出），且输出里不出现 `CONNECTED`",
+       "ev": [
+        "world-core/tools/system_acceptance.sh",
+        "world-core/check.sh"
+       ]
+      },
+      {
+       "title": "未核实机制时的如实登记",
+       "line": 84,
+       "when": "运行环境缺 `setpriv` 或当前不是 root，使跨 uid 反例无法执行",
+       "then": "该步打印「未能校验」，**不得**记为通过，也**不得**使整体退出码变绿",
+       "ev": [
+        "world-core/tools/system_acceptance.sh"
+       ]
+      },
+      {
+       "title": "超级用户连接受理层不设防（边界固定）",
+       "line": 90,
+       "when": "由套接字属主以外的 root 进程连接该套接字",
+       "then": "连接成立并取得该套接字的身份——本断言证明的是**边界**而不是实现缺陷；",
+       "ev": [
+        "world-core/src/channel.rs"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "cap": "envelope-validation",
+   "file": "openspec\\specs\\envelope-validation\\spec.md",
+   "purpose": "规定\"一件事写下来只有一种形式\"这一层对外可核的行为：信封的必填字段被逐字段强制、 三类话之外一律被拒、法律（本体与策略）损坏时拒绝启动而不是带病运行。 这一能力服务\"只固定意思的形式\"这条边界——它校验形状，不校验含义。",
+   "reqs": [
+    {
+     "title": "信封的必填字段被逐字段强制",
+     "line": 10,
+     "text": [
+      "> **改的是哪一类问题**：① 措辞写宽（要求强于断言）。**不是**\"能力有没有\"的问题。",
+      ">",
+      "> `audit.md` **E6**：八个必填字段里，`world` 那一轮的「报出字段名」**恒真**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs:120-123` 逐字",
+      "> `assert!( msg.contains(\"MissingField\") && msg.contains(field), \"删除 \\`{field}\\` 应被拒且指明字段，实得: {msg}\" );`",
+      "> 而错误前缀自带 `world` 二字——`world-core/src/ontology.rs:32` 逐字",
+      "> `\"ext.world.Ontology.MissingField: {at} 缺少必填字段 \\`{field}\\`\"`",
+      "> ⇒ `field == \"world\"` 时 `msg.contains(\"world\")` 由前缀满足，该轮**不证明**字段名被报出。",
+      "> 其余 7 个字段不受影响。⇒ 需补断言（列进 tasks）。",
+      "系统 SHALL 对每一条写入事件逐字段校验信封必填项 `world` / `kind` / `id` / `seq` / `at` /",
+      "`actor` / `flags` / `body`；任一字段缺失时 SHALL 拒绝该事件。",
+      "系统 SHALL 另外明确声明该断言的边界：错误信息 **SHALL** 报出缺失字段名这一要求，",
+      "今天只对 `kind` / `id` / `seq` / `at` / `actor` / `flags` / `body` **七个字段**成立；",
+      "`world` 一轮由错误码前缀 `ext.world.` 满足了\"含该字段名\"的判据，",
+      "SHALL NOT 被读成\"`world` 缺失也被指名报出\"。"
+     ],
+     "scenarios": [
+      {
+       "title": "八个必填字段逐字段被拦",
+       "line": 31,
+       "when": "依次构造 8 条事件，每条分别删掉一个必填字段",
+       "then": "每条都被校验拒绝",
+       "ev": [
+        "tests/contract.rs::c02_every_required_envelope_field_is_enforced"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "三类话之外一律被拒",
+     "line": 39,
+     "text": [
+      "> **改的是哪一类问题**：③ 证据错位（引错了出厂步骤）兼 ① 措辞写宽（缺\"状态未被改动\"的断言）。",
+      "> **不是**\"能力有没有\"的问题——三类话之外确实被拒且不落笔。",
+      ">",
+      "> `audit.md` **E2**：被引证据的证据行写着「`check.sh` 步骤 ③」，而那一步**根本不跑 `t5`**",
+      "> （`world-core/check.sh:98` 逐字 `cargo test --locked --test acceptance -- t1_ t2_ t7_`，只选三个函数）。",
+      "> `audit.md` **E5**：`t5` 没有断言本 Scenario 的第二句「状态未被改动」。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/acceptance.rs:158-159` 逐字",
+      "> `let e1 = w.commit(\"bogus\", \"world://user\", json!({})).unwrap_err();`／",
+      "> `assert!(e1.contains(\"UnknownKind\"), \"实得: {e1}\");`",
+      "> 与 `:187` 逐字 `assert_eq!(w.ledger().last_seq(), 1, \"被拒的事件绝不允许落笔\");`",
+      "> ——**这断言的是\"不落笔\"，不是\"状态未被改动\"**。同文件 `:87-92` 有\"状态未变\"的既有写法可照抄。",
+      "系统 SHALL 只接受本体声明的三个家族（变更 / 请求与结果 / 通告）；出现未知家族时 SHALL 拒绝，",
+      "SHALL NOT 猜测其含义，SHALL NOT 落笔该事件，且 SHALL NOT 改动世界状态。"
+     ],
+     "scenarios": [
+      {
+       "title": "不认识的事件家族被拒",
+       "line": 57,
+       "when": "以本体未声明的 `kind` 提交事件",
+       "then": "提交失败，错误串含 `UnknownKind`，且不落笔该事件（账本 `last_seq` 不前进）",
+       "ev": [
+        "tests/acceptance.rs::t5_law_rejects_and_does_not_write"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "法律损坏或指向别处时拒绝启动",
+     "line": 66,
+     "text": [
+      "> **改的是哪一类问题**：① 措辞写宽（要求强于断言）。",
+      ">",
+      "> `audit.md` **E3**：本条的措辞比证据宽三处，**三处实现都拒，只是没有载体**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**，逐条给出：",
+      "> ① **策略文件缺失**：`world-core/tests/contract.rs::c03` 的五类（`:154` 坏 JSON、`:159-164` 缺 `policy`、",
+      ">    `:166-171` 能力表为空、`:173-178` 白名单为空、`:180-185` 缺 `writes`）里**没有「缺失」**，全仓无载体；",
+      "> ② **本体字段形状非法**：`world-core/tests/contract.rs:224-227` 只测缺文件、`:229-242` 只测家族为空；",
+      "> ③ **本体软链**：`world-core/tests/contract.rs::c09` 只测**策略**软链。",
+      "> ⇒ 三处均需补断言（列进 tasks）。",
+      "本体与门禁策略 SHALL 在世界打开时装载并校验；文件缺失、家族为空、能力表为空、白名单为空、",
+      "`writes` 段缺失时 SHALL 拒绝启动；法律文件是**符号链接**时 SHALL 拒绝启动，",
+      "以免\"检查的\"与\"真正读的\"不是同一个文件。",
+      "系统 SHALL 明确声明该要求的覆盖边界：本规格 SHALL NOT 声称\"不存在静默接受一个畸形策略的路径\"",
+      "——**未知键与多余键一律被忽略**是设计选择，不是畸形。"
+     ],
+     "scenarios": [
+      {
+       "title": "坏本体拒绝启动",
+       "line": 86,
+       "when": "本体文件内容损坏",
+       "then": "打开失败",
+       "ev": [
+        "tests/acceptance.rs::t6_bad_ontology_refuses_to_start"
+       ]
+      },
+      {
+       "title": "本体缺失与家族为空被拒",
+       "line": 92,
+       "when": "本体文件不存在，或 `families` 为空",
+       "then": "装载失败（`ReadFail` / `NoFamilies`）",
+       "ev": [
+        "tests/contract.rs::c04_ontology_load_rejects_missing_file_and_empty_families"
+       ]
+      },
+      {
+       "title": "策略的每一类畸形形状都被拒",
+       "line": 98,
+       "when": "以 5 类畸形形状分别装载门禁策略（坏 JSON／缺 `policy`／能力表为空／白名单为空／缺 `writes`）",
+       "then": "每一类都被拒；**对照**：合法策略必须能加载",
+       "ev": [
+        "tests/contract.rs::c03_policy_load_rejects_every_malformed_shape"
+       ]
+      },
+      {
+       "title": "策略为符号链接时拒绝启动，而真实文件不被误拒",
+       "line": 108,
+       "when": "以指向别处的软链作为策略路径打开世界；对照组用真实文件",
+       "then": "软链被拒且错误信息含\"符号链接\"；真实文件正常打开",
+       "ev": [
+        "tests/contract.rs::c09_symlinked_law_is_refused"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "事件身份在进程内唯一",
+     "line": 115,
+     "text": [
+      "> **改的是哪一类问题**：① 措辞写宽后的**范围收窄**——原文已有「同一进程内」限定，",
+      "> 本条**只补\"跨重启不保证\"这半边**，不改结论强度。`audit.md` 未单列此条。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs:245-248` 逐字",
+      "> 「`new_id()` = 纳秒 + 进程内计数器；计数器每次启动从 0 开始，/ 故\"跨重启唯一\"依赖纳秒不重复——本测试覆盖**同进程内**的唯一性。」",
+      "> 断言本体在 `:251-256`：2000 次 `new_event` 收进 `BTreeSet` 后断言无重复。",
+      "系统 SHALL 保证同一进程内分配的事件 `id` 不重复。",
+      "系统 SHALL NOT 声称跨进程或跨重启的 `id` 唯一性由本机制保证。"
+     ],
+     "scenarios": [
+      {
+       "title": "连续提交的事件 id 各不相同",
+       "line": 127,
+       "when": "在同一进程内连续提交多条事件",
+       "then": "所有事件的 `id` 互不相同",
+       "ev": [
+        "tests/contract.rs::c05_event_ids_are_unique_within_a_process"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "错误携带机器可读的错误码",
+     "line": 133,
+     "text": [
+      "> **改的是哪一类问题**：③ 证据错位（最重的一处：Scenario 说\"四类路径\"，证据里**没有一类是账本**）",
+      "> 兼 ① 措辞写宽（法律类存在**无码出口**）。",
+      ">",
+      "> `audit.md` **E1**：`openspec/specs/envelope-validation/spec.md:78` 写「触发**法律、门禁、账本、读模型**四类失败路径」；",
+      "> 而 `c15` 的七条码来源逐条为 `world-core/tests/contract.rs:714`（本体坏 JSON）、",
+      "> `:718`（门禁未声明能力）、`:728`（门禁未授权写入）、`:738`（门禁不可逆加摩擦）、",
+      "> `:748`（法律违反信纸）、`:758`（通道坏请求）、`:767`（读模型坏账本）",
+      "> —— **没有一条账本路径**。全仓唯一的账本码断言在 `world-core/tests/cli.rs:155` 逐字",
+      "> `err.contains(\"ext.world.Ledger.NoChain\"),`，而 `world-core/check.sh` **从不跑 `--test cli`**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs:770-776` 逐字",
+      "> `for c in &codes { assert!(has_code(c), \"错误缺少 \\`ext.world.<域>.<原因>\\` 前缀：{c}\"); }`",
+      "> 与 `assert!(unique.len() >= 6, \"错误码区分度不足，只拿到 {unique:?}\");`；",
+      "> 反例侧 `:779` 逐字 `assert_eq!(code_of(\"门禁拒绝：能力未声明\"), None);`",
+      "> ——**没有账本类别**。⇒ 需补断言（列进 tasks）。",
+      "系统 SHALL 在失败路径上给出机器可读的错误码（如 `ext.world.*`），使调用方按码判定，",
+      "SHALL NOT 要求调用方去匹配中文散文措辞。",
+      "系统 SHALL 明确声明本条的范围边界：**并非所有失败出口今天都带码**；",
+      "已知的无码出口 SHALL 被逐条登记，SHALL NOT 被\"凡失败路径都带码\"这类全称句遮住。"
+     ],
+     "scenarios": [
+      {
+       "title": "各类失败路径的错误码可枚举",
+       "line": 157,
+       "when": "触发布局类（本体形状）、门禁类、法律类、通道类、读模型类失败路径",
+       "then": "每条错误都带稳定的错误码 `ext.world.<域>.<原因>`，且错误码区分度 ≥ 6",
+       "ev": [
+        "tests/contract.rs::c15_errors_carry_machine_readable_codes"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "错误码契约的已知边界",
+     "line": 165,
+     "text": [
+      "> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。",
+      "> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。",
+      "> 本节**不新增能力**：它挂在既有能力 `envelope-validation` 之下，只声明**该既有能力的边界**。",
+      ">",
+      "> **改的是哪一类问题**：④ 与项目文档冲突（规格把\"已知无码\"的出口包在了全称句里）。",
+      ">",
+      "> `audit.md` **E1** 后半：实测法律类存在无码出口。项目文档**已自认**此项。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 静态墙三条断言逐条标「⚠ **无码**」：`world-core/docs/S2-设计/WC-IC-001-v0.1.md:350`（符号链接）、",
+      ">    `:351`（mode 位）、`:352`（属主断言）；",
+      "> ② 策略版本不符出口也是散文：`world-core/src/gate.rs:113-117` 逐字",
+      ">    `if version != 1 { return Err(format!( \"门禁策略版本不支持：期望 1，实得 {version}（法律版本不符即拒绝启动）\" )); }`",
+      "> ③ **上述四处今天都没有\"它不带码\"的断言** ⇒ 需补断言（列进 tasks）。",
+      "系统 SHALL 逐条登记**已知的无码失败出口**，使\"凡失败路径都带码\"这一全称句不成立：",
+      "- 静态墙的三条断言：拒绝符号链接、拒绝 group/other 可写（文件与目录）、属主断言未通过；",
+      "- 门禁策略版本不支持（`policy != 1`）。",
+      "上述出口报的是中文散文，**不带 `ext.world.` 前缀**。",
+      "系统 SHALL NOT 把本能力的覆盖声明写成\"所有失败路径都已带码\"。"
+     ],
+     "scenarios": [
+      {
+       "title": "静态墙三条断言无错误码（边界固定）",
+       "line": 190,
+       "when": "以符号链接作为法律路径、或以对 group/other 可写的文件作为法律路径打开世界",
+       "then": "拒绝启动，但错误串**不含** `ext.world.` 码——本断言证明的是**边界**而不是实现缺陷",
+       "ev": [
+        "world-core/src/guard.rs::assert_not_other_writable"
+       ]
+      },
+      {
+       "title": "策略版本不符出口无错误码（边界固定）",
+       "line": 198,
+       "when": "以 `policy` 版本号不为 1 的策略打开世界",
+       "then": "拒绝启动，错误串为散文，**不含** `ext.world.` 码",
+       "ev": [
+        "world-core/src/gate.rs"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "cap": "gate-enforcement",
+   "file": "openspec\\specs\\gate-enforcement\\spec.md",
+   "purpose": "规定\"谁可以做什么\"这一层对外可核的行为：每一个写动作都要过门禁、被拒的动作不能靠另一类话偷渡、 拒绝本身也要留下说清理由的流水。 **摩擦应当挂在动作的不可逆等级上；今天的实现挂在执行者的身份上**——书第五章 5.5 对这一格判红， 今天的实测差异与边界见 `openspec/changes/cover-unimplemented-capabilities/`（该能力今天的缺口都在那里在册），以及本 change 的 `audit.md` G1／G2 两条。这一能力服务 `管`， 判据是\"一个越界声明能否被拦下，并留下一条人能读懂的流水\"。",
+   "reqs": [
+    {
+     "title": "每一个写动作都过门禁",
+     "line": 12,
+     "text": [
+      "> **改的是哪一类问题**：③ 证据错位（引错了出厂步骤）。",
+      ">",
+      "> `audit.md` **G6** 后半：`openspec/specs/gate-enforcement/spec.md:19` 写「`check.sh` 步骤 ③」，",
+      "> 而 `world-core/check.sh:98` 逐字 `cargo test --locked --test acceptance -- t1_ t2_ t7_`",
+      "> ⇒ 步骤 ③ 只选跑 `t1_`/`t2_`/`t7_` 三个函数，**`t9` 不在其中**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/acceptance.rs::t9_gate_rejects_undeclared_capability_and_records_notice`",
+      "> **今天不在 `world-core/check.sh` 的任何一步内被选跑**——`:98` 只选 `t1_ t2_ t7_`、",
+      "> `:103` 只跑 `--test contract` ⇒ 仅在全量 `cargo test` 时执行。",
+      "> 这就是原证据行\"步骤 ③\"的错处：它把一个**不在该步执行**的测试挂在了该步上。",
+      "系统 SHALL 在落笔之前对每一条写入做门禁裁决；未在策略中声明的能力 SHALL 被拒绝，",
+      "且拒绝 SHALL 作为一条通告落账，而不是仅返回错误。"
+     ],
+     "scenarios": [
+      {
+       "title": "未声明的能力被拒且留下流水",
+       "line": 28,
+       "when": "以未在策略中声明的能力提交一条 `act`",
+       "then": "提交被拒，账本中新增一条说明该次拒绝的通告",
+       "ev": [
+        "tests/acceptance.rs::t9_gate_rejects_undeclared_capability_and_records_notice"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "`act` 的效果不能靠 `change` 偷渡",
+     "line": 35,
+     "text": [
+      "> **改的是哪一类问题**：③ 证据错位（证据行未指名出厂步骤，无法核对是否被跑）。",
+      ">",
+      "> `audit.md` 未单列此条；本条改动**只为与上一条的引用口径统一**。",
+      "> `world-core/check.sh:103` 逐字 `cargo test --locked --test contract`，`c01` 在其中。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs::c01_change_is_gated_and_cannot_smuggle_an_act`",
+      "> 位于 `--test contract` 全套之内，由 `world-core/check.sh` 第 ③b 步（`:103`）执行。",
+      "系统 SHALL 对 `change` 同样执行写权限裁决；当某一主体无权执行某动作时，",
+      "它 SHALL NOT 能通过提交一条 `change` 达到同等效果。"
+     ],
+     "scenarios": [
+      {
+       "title": "越权者用 change 达成静音效果被拒",
+       "line": 48,
+       "when": "主人先成功写入一条 `change`；随后一个不在白名单的主体提交一条效果相同（静音）",
+       "then": "第二次提交被拒（错误含\"门禁拒绝写入\"），状态仍为原值，",
+       "ev": [
+        "tests/contract.rs::c01_change_is_gated_and_cannot_smuggle_an_act"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "不可逆动作只允许白名单主体并加摩擦",
+     "line": 57,
+     "text": [
+      "> **改的是哪一类问题**：④ 与项目文档冲突（**P0 必做项**：把书稿**判红**的东西写成了绿）",
+      "> 兼 ① 措辞写宽。",
+      ">",
+      "> `audit.md` **G1**：书稿 `world-core/docs/理论/语义世界-理论书-第一版-合订.md:717` 逐字",
+      "> 「更硬的问题在摩擦的落点上。摩擦本该挂在动作的不可逆等级上：可逆处放手，不可逆处加摩擦。今天它挂在执行者的身份上。」",
+      "> —— **判红**；而原规格写「系统 SHALL 对声明为不可逆的能力追加摩擦」。",
+      "> `audit.md` **G2**：出厂配置下「只允许白名单主体」与「加摩擦」**不可能同时为真**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 实现侧：`world-core/src/gate.rs:287-293` 逐字",
+      ">    `Some(c) if !c.reversible => { if self .irreversible_actors .iter() .any(|a| pattern_matches(a, actor)) { Decision::Allow }`",
+      ">    ⇒ **白名单内 ⇒ `Allow`（不加摩擦、不落流水）**；`:294-303` 的 `else` 分支才 `Decision::AwaitApproval`。",
+      "> ② 出厂配置：`world-core/policy.json:32` 逐字 `  \"irreversible_actors\": [\"world://user\"],`（唯一成员）；",
+      ">    同件 `:28` 逐字 `    \"world://user\": [\"world://*\"],` ⇒ 该主体同时可写任意对象；",
+      ">    `:38` 逐字 `    \"allow\": [\"world://user\", \"world://core\", \"world://agent/*\"]`。",
+      "> ③ 断言侧：`world-core/tests/acceptance.rs::t10_gate_adds_friction_for_irreversible_capability`",
+      ">    与 `world-core/tests/contract.rs::c11_irreversible_is_owner_only_and_the_refusal_does_not_lie`",
+      ">    断言的是**白名单外主体**拿到 `AwaitApproval`；",
+      ">    **没有一条断言\"白名单主体执行不可逆动作时会发生什么\"** ⇒ 需补断言（列进 tasks）。",
+      "对声明为不可逆（`reversible: false`）的能力，系统 SHALL 执行以下口径，且该口径 SHALL 被如实声明：",
+      "- 主体**在** `irreversible_actors` 白名单内 ⇒ **放行，且不追加摩擦、不产生 `gate.*` 通告**；",
+      "- 主体**不在** `irreversible_actors` 白名单内 ⇒ `AwaitApproval`（加摩擦），",
+      "拒因 SHALL 明说 v1 **没有审批通道**、不要等批准。",
+      "摩擦的落点是**执行者的身份**，不是动作的不可逆等级。系统 SHALL NOT 被表述为",
+      "\"对不可逆动作本身加摩擦\"——出厂配置下这句话不成立：",
+      "按 `world-core/policy.json:32`，不可逆白名单只含 `world://user` 一个成员，",
+      "而该成员同时被 `world-core/policy.json:28` 授权写任意主体",
+      "⇒ **唯一能做不可逆动作的主体，恰是唯一完全免检的主体**。"
+     ],
+     "scenarios": [
+      {
+       "title": "不可逆能力触发摩擦",
+       "line": 91,
+       "when": "一个**不在** `irreversible_actors` 内的主体提交一个不可逆能力",
+       "then": "门禁加摩擦路径被触发，落一条 `gate.awaiting-approval` 通告，理由明说 v1 无审批通道",
+       "ev": [
+        "tests/acceptance.rs::t10_gate_adds_friction_for_irreversible_capability"
+       ]
+      },
+      {
+       "title": "拒绝流水必须说清它拒绝了什么",
+       "line": 99,
+       "when": "一个**不在允许名单**的主体提交带保留前缀的通告",
+       "then": "被拒，且门禁写下的通告里含被拒内容的指纹字段",
+       "ev": [
+        "tests/contract.rs::c23_notice_with_reserved_prefix_is_refused_for_outsiders"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "门禁配置在被管者不可写的域",
+     "line": 115,
+     "text": [
+      "> **改的是哪一类问题**：① 措辞写宽（要求强于断言：写\"属主与权限\"，实现只看 mode 位，",
+      "> 且属主断言**默认不跑**）。",
+      ">",
+      "> `audit.md` **G5**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① `world-core/src/guard.rs:31` 逐字",
+      ">    `//! - 本模块只看 **mode 位**，不看**属主**。若被管者恰好就是文件属主，mode 再严也没用。`",
+      "> ② 属主断言默认不跑：`world-core/docs/S2-设计/WC-IC-001-v0.1.md:355` 逐字",
+      ">    「③ **只在部署方显式传 `--owner-uid` 时才运行**，且只在 `check` 子命令的 `World::open` **之后**执行（`src/main.rs:111-122`）——不传即不运行（`DEBT-02`：属主断言是工具、非自动）」。",
+      "> ③ `world-core/tests/contract.rs::c10_owner_assertion_detects_wrong_owner` 断言的是",
+      ">    **显式调用**该断言时它会报错，**不**断言\"启动时会自动检查属主\"。",
+      "系统 SHALL 在启动时检查**法律与账本文件的权限 mode 位及其所在目录的权限**；",
+      "当法律可被 group/other 写、或账本可被 group/other 写（含其所在目录）时 SHALL 拒绝启动。",
+      "系统 SHALL NOT 声称启动时会自动检查**属主**：属主断言是**部署方自证工具**，",
+      "只在显式传入 `--owner-uid` 时运行，不传即不运行。"
+     ],
+     "scenarios": [
+      {
+       "title": "法律可被他人写时拒绝启动",
+       "line": 136,
+       "when": "本体文件的权限使他人可写",
+       "then": "世界拒绝启动",
+       "ev": [
+        "tests/acceptance.rs::t11_world_refuses_to_start_when_law_is_writable_by_others"
+       ]
+      },
+      {
+       "title": "账本可被他人写时拒绝启动",
+       "line": 142,
+       "when": "账本文件的权限使他人可写",
+       "then": "世界拒绝启动",
+       "ev": [
+        "tests/acceptance.rs::t12_world_refuses_start_when_ledger_is_writable_by_others"
+       ]
+      },
+      {
+       "title": "属主断言能识别错误属主",
+       "line": 148,
+       "when": "显式以与预期不符的属主运行属主断言",
+       "then": "断言报错而不是放行",
+       "ev": [
+        "tests/contract.rs::c10_owner_assertion_detects_wrong_owner"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "运行中的世界不重读策略",
+     "line": 156,
+     "text": [
+      "> **改的是哪一类问题**：③ 证据错位（证据行未给路径，且该测试不在所标步骤内）。",
+      "> 本条**内容不改**，只修引用口径。",
+      ">",
+      "> `audit.md` 未单列此条；`world-core/policy.json:8` 逐字",
+      "> `    \"策略在启动时一次读入内存，运行中不重读：磁盘上改了要重启才生效（消除『运行中改规则』的窗口）\",`",
+      "> 与本条是同一件事。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/acceptance.rs::t13_running_world_does_not_reread_policy`",
+      "> ——同样**不在** `world-core/check.sh` 的步骤 ③ 内（`:98` 只选 `t1_ t2_ t7_`）。",
+      "系统 SHALL 在启动时装载一次策略；运行期间 SHALL NOT 重新读取策略文件，",
+      "使\"这一次裁决依据的是哪一版法律\"是确定的。"
+     ],
+     "scenarios": [
+      {
+       "title": "运行中改动策略文件不影响本次运行",
+       "line": 171,
+       "when": "世界运行期间改动策略文件，再提交一个该改动本应影响的动作",
+       "then": "裁决结果与启动时装载的策略一致",
+       "ev": [
+        "tests/acceptance.rs::t13_running_world_does_not_reread_policy"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "闸读不到风险等级，且载体可逆与世界可逆无互校",
+     "line": 178,
+     "text": [
+      "> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格通篇不提此事）。",
+      "> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。",
+      "> 本节**不新增能力**：它挂在既有能力 `gate-enforcement` 之下，只声明**该既有能力的边界**。",
+      "> 本 change **不新增任何互校机制**，只把\"无互校\"这一事实写成条文。",
+      ">",
+      "> **改的是哪一类问题**：④ 与项目文档冲突（书稿判红的三条依据里，**两条规格完全沉默**）。",
+      ">",
+      "> `audit.md` **G3**：书稿 `world-core/docs/理论/语义世界-理论书-第一版-合订.md:723` 逐字",
+      "> 「这一格今天判红。红的依据落在三条上：闸读不到风险等级；摩擦挂在执行者的身份上，而那个人同时可写任意对象；",
+      "> 载体可不可逆与世界可不可逆这两处之间没有互校。」",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 风险等级：`world-core/src/gate.rs:44-48` 逐字",
+      ">    `#[derive(Debug, Clone, PartialEq, Eq)]`／`pub struct Capability {`／",
+      ">    `    /// 该动作是否可逆（可逆 ⇒ 免检但留痕）。`／`    pub reversible: bool,`／`}`",
+      ">    —— **只有 `reversible` 一个字段**；`risk` 只被 `world-core/src/carrier/capd.rs:186` 读。",
+      ">    `openspec/specs/` 下 `risk`／`风险` **零命中**，`world-core/src/gate.rs` 零命中。",
+      "> ② 互校：`world-core/docs/理论/语义世界-理论书-第一版-合订.md:745` 逐字",
+      ">    「**红**。`cap.d/ledger.compact.json` 第 6 行写 `\"undo\": \"before-each\"`，`policy.json` 第 20 行写 `\"reversible\": false`；",
+      ">    载体撤销撤的是文件系统字节（`src/carrier/mod.rs` 第 30–34 行），与世界状态无关，而没有任何一处把两件事分开核对（2026-09-27 读配置与源码）」",
+      "> ③ **两条今天都没有断言** ⇒ 需补断言（列进 tasks）。",
+      "门禁 SHALL 只按 `reversible` 布尔值与 `irreversible_actors` 白名单裁决；",
+      "风险等级（`risk`）SHALL NOT 参与\"准不准做\"的判定，只由载体侧执行清单解析器读取。",
+      "载体可逆与世界可逆 SHALL 被分开判定，SHALL NOT 互相冒充：",
+      "载体撤销撤的是文件系统上的字节（工程兜底），世界可逆说的是世界状态退不退得回来；",
+      "两者之间**在 v1 没有任何一致性检查**，此边界 SHALL 被如实声明，",
+      "不得被读成\"两处已互校\"，也不得被读成\"留了撤销点的能力在世界里也可逆\"。"
+     ],
+     "scenarios": [
+      {
+       "title": "风险等级不参与门禁裁决",
+       "line": 210,
+       "when": "同一能力在载体执行清单里标 `risk: high`、在门禁策略里标 `reversible: true`",
+       "then": "门禁按 `reversible: true` 放行，`risk` 不改变结论",
+       "ev": [
+        "world-core/src/gate.rs"
+       ]
+      },
+      {
+       "title": "载体可逆不等于世界可逆",
+       "line": 216,
+       "when": "一项能力在载体侧留了撤销点（`undo: before-each`），而世界侧标 `reversible: false`",
+       "then": "门禁按\"世界不可逆\"处置，载体撤销点**不**被当作世界可逆的依据",
+       "ev": [
+        "world-core/src/carrier/mod.rs"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "通告的闸，以及门禁不可绕过的部分实现边界",
+     "line": 224,
+     "text": [
+      "> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。",
+      "> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。",
+      "> 本节**不新增能力**：它挂在既有能力 `gate-enforcement` 之下，只声明**该既有能力的边界**。",
+      ">",
+      "> **改的是哪一类问题**：② 措辞写窄（实现有、规格无）兼 ④ 与项目文档冲突（部分实现的边界规格未写）。",
+      ">",
+      "> `audit.md` **G6**：`world-core/src/lib.rs` 逐字登记的两句话在规格里**没有 Requirement 级条目**；",
+      "> 而 SRS 记的\"部分实现\"边界规格未写。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 通告的闸：`world-core/tests/contract.rs::c23_notice_with_reserved_prefix_is_refused_for_outsiders`",
+      ">    （保留前缀被拒 + 伪造通告不落笔，`:1113-1118`）与",
+      ">    `world-core/tests/contract.rs::c23_notice_from_unlisted_actor_is_refused`",
+      ">    （不在册主体被拒 `:1133-1134` + 在册主体写同样形状必须通过 `:1137-1142`）。",
+      ">    实现侧 `world-core/src/lib.rs:270` 逐字",
+      ">    `/// 此前 \\`notice\\` 落在 \\`adjudicate\\` 的 \\`_ => Ok(())\\` 分支里——**任何主体可以写任何通告**。`",
+      ">    与 `:280` 逐字 `/// 也就是说：\"世界拒绝过这件事\"这句话，**任何人都能替世界说**。`",
+      "> ② 部分实现边界：`world-core/docs/S1-需求/WC-SRS-001-v0.1.md:83` 逐字",
+      ">    「| `REQ-F-015` | 门禁不可绕过 | P0 | 部分实现（见 WC-CON01-001：进程内 + 静态墙已跨 uid 实测；祖先链遍历、通道层与 Landlock 自缚未做） |」",
+      ">    ⇒ 该边界**规格里没有落点**。",
+      "> ③ 「祖先链遍历未做」这一项**不可被断言**（\"未做\"本身没有观测面）；其载体是流程侧登记。",
+      "通告 SHALL 过闸，两条纪律各自可单独判真假：",
+      "① 带保留前缀（`gate.`）的通告类型 SHALL 只许内核自己写，外部提交一律拒；",
+      "② 非保留前缀的通告，其 `actor` SHALL 已在主体白名单内。",
+      "门禁不可绕过 SHALL 只声明**已实测的范围**：进程内唯一写入口与静态墙（mode 位）已在跨 uid 形态下实测；",
+      "**祖先链遍历、通道层与 Landlock 自缚在 v1 未做**，此边界 SHALL 被如实声明，",
+      "SHALL NOT 被读成\"门禁在所有路径上不可绕过\"。",
+      "已知的不对称 SHALL 被登记：非保留前缀的通告**不检查 `writes` 授权表**、只检查主体白名单。"
+     ],
+     "scenarios": [
+      {
+       "title": "保留前缀通告只许内核自己写",
+       "line": 258,
+       "when": "一个外部主体提交 `type` 以 `gate.` 开头的通告",
+       "then": "被拒，错误串含 `ext.world.Gate.NoticeNotAllowed`，且伪造通告不落笔",
+       "ev": [
+        "tests/contract.rs::c23_notice_with_reserved_prefix_is_refused_for_outsiders"
+       ]
+      },
+      {
+       "title": "不在册主体不得写普通通告，在册主体必须能写",
+       "line": 264,
+       "when": "一个不在白名单的主体提交普通通告；对照组由在册主体提交同样形状的通告",
+       "then": "前者被拒（`ext.world.Gate.NoticeRejected`），后者通过",
+       "ev": [
+        "tests/contract.rs::c23_notice_from_unlisted_actor_is_refused"
+       ]
+      },
+      {
+       "title": "门禁不可绕过的未做部分被如实声明",
+       "line": 270,
+       "when": "查阅本能力的覆盖声明",
+       "then": "祖先链遍历、通道层与 Landlock 自缚三项标为**未做**",
+       "ev": [
+        "world-core/docs/S1-需求/WC-SRS-001-v0.1.md"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "cap": "ledger-integrity",
+   "file": "openspec\\specs\\ledger-integrity\\spec.md",
+   "purpose": "规定\"一本账\"对外可核的行为：所有事实落在同一处、只往后加、不回头改；同一本账同时只有一个写者； 历史可被检出被改过，且如实声明检出的边界在哪里。这一能力服务 `存`，是\"可复盘\"的底座—— 它不主张结果正确，只主张\"当时写的是什么\"可以核。",
+   "reqs": [
+    {
+     "title": "事件按序落账并可跨进程读回",
+     "line": 10,
+     "text": [
+      "> **改的是哪一类问题**：③ 证据错位（证据层级错位：规格写\"新进程\"，测试是**同进程** drop + reopen）",
+      "> 兼 ① 措辞写宽（`t1` 的\"逐字段一致\"没有被断言）。",
+      ">",
+      "> `audit.md` **L4**：原 `spec.md:23` 写「以新进程打开」，而 `world-core/tests/acceptance.rs:85-104`",
+      "> 实为同进程 drop 后 reopen。`audit.md` **L5**：`t1` 的\"逐字段一致\"没有被断言。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① `t2` 的实际形态：`world-core/tests/acceptance.rs:85-104` 的 `t2_events_survive_restart`",
+      ">    在一个 `#[test]` 函数内的 `{ ... }` 作用域里 drop 写者、再 reopen——**不是新进程**。",
+      "> ② 真正合格的\"跨进程\"证据：`world-core/tools/s1_sys_probe2.sh:379-383` 逐字",
+      ">    `# ══ TC-070 · REQ-F-022 账本可重放（重启不丢）═════════════════════════`／",
+      ">    `echo; echo \"── TC-070 · REQ-F-022 重启后事件全在且顺序不变 ──\"`／",
+      ">    `assert_eq \"① 两次**独立进程**读回的事件序列**逐字节相同**\" \"$R1\" \"$R2\"`（由 `world-core/check.sh:145` 执行）。",
+      "> ③ `t1` 实际断言（`world-core/tests/acceptance.rs:69-80`）：`assert_eq!(evs.len(), 3, \"应有 3 条事件\")`、",
+      ">    `assert_eq!(ev[\"seq\"], json!(i as u64 + 1), \"seq 必须从 1 连续递增\")`、",
+      ">    `assert_eq!(ev[\"world\"], json!(1), \"信封必须带词表版本\")`、",
+      ">    `assert_eq!(evs[0][\"kind\"], json!(\"change\"))`、`assert_eq!(evs[0][\"body\"][\"before\"], json!(false), ...)`、",
+      ">    `assert_eq!(evs[2][\"kind\"], json!(\"notice\"))`",
+      ">    ⇒ **`actor`／`id`／`at`／`flags`／`body.subject`／`body.path`／`body.after` 一个都没比** ⇒ 需补断言（列进 tasks）。",
+      "系统 SHALL 把每一条语义事件按 `seq` 升序追加进同一本账，且该账 SHALL 以纯文本 JSON Lines 落盘，",
+      "使事件在写入进程退出后仍然可读。",
+      "**跨进程**读回 SHALL 由**独立进程**的证据承担，",
+      "SHALL NOT 以\"同进程内 drop 后 reopen\"充当跨进程证据。"
+     ],
+     "scenarios": [
+      {
+       "title": "追加后按序读回",
+       "line": 38,
+       "when": "打开世界并连续提交 3 条 `change`",
+       "then": "按序读回得到 3 条事件，`seq` 从 1 连续递增，信封带词表版本，各条 `kind` 与 `body.before` 正确",
+       "ev": [
+        "tests/acceptance.rs::t1_append_then_read_back",
+        "world-core/check.sh"
+       ]
+      },
+      {
+       "title": "事件在新进程里仍存在",
+       "line": 47,
+       "when": "写入若干事件后结束写入方，再打开同一本账",
+       "then": "先前写入的事件全部可读回，条数与内容不变",
+       "ev": [
+        "tests/acceptance.rs::t2_events_survive_restart",
+        "world-core/check.sh"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "同一本账同时只有一个写者",
+     "line": 56,
+     "text": [
+      "> **改的是哪一类问题**：① 措辞写宽（原措辞超出实现前提，且反向失效未登记）。",
+      ">",
+      "> `audit.md` **L2**：原 `spec.md:29-30` 写无条件；实现**锁只记 pid 号**，",
+      "> 存活判据是 `/proc/<pid>` 是否存在。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 锁只写 pid：`world-core/src/ledger.rs:175` 逐字 `let _ = writeln!(f, \"{}\", std::process::id());`",
+      "> ② 存活判据：`world-core/src/ledger.rs:182-184` 逐字",
+      ">    `let alive = pid .map(|p| Path::new(&format!(\"/proc/{p}\")).exists()) .unwrap_or(false);`",
+      "> ③ 断言侧：`world-core/tests/contract.rs::c08_stale_lock_is_reclaimed`、",
+      ">    `world-core/tests/contract.rs::c07_second_writer_is_refused`（由 `world-core/check.sh` 第 ③b 步执行）。",
+      "> ④ **反向失效（pid 号被复用时不回收）今天没有断言** ⇒ 需补断言（列进 tasks）。",
+      "系统 SHALL 拒绝第二个写者打开同一本账，且拒绝理由 SHALL 说明这是\"单写者\"约束；",
+      "持锁进程正常退出后锁 SHALL 被释放；持有者已不存在的陈旧锁 SHALL 被自动回收。",
+      "已知前提 SHALL 被如实声明：锁文件**只记录持有者的 pid 号**，其\"是否存活\"的判据是",
+      "`/proc/<pid>` 是否存在 ⇒ 本机制的正确性**依赖**：同机、同一 PID 命名空间、`/proc` 可读。",
+      "在共享存储或独立 PID 命名空间下，存活写者的锁会被当作陈旧锁回收，从而出现两个写者；",
+      "反之 pid 号被复用时持有者已不存在却不会被回收（假锁死）。",
+      "此边界 SHALL NOT 被读成\"锁在所有形态下成立\"。"
+     ],
+     "scenarios": [
+      {
+       "title": "第二个写者被拒且理由说清单写者",
+       "line": 80,
+       "when": "已经有一个写者打开了某本账，再用同一本体与策略打开同一本账",
+       "then": "打开失败，错误串包含 `Ledger.Locked` 与\"单写者\"",
+       "ev": [
+        "tests/contract.rs::c07_second_writer_is_refused",
+        "world-core/check.sh"
+       ]
+      },
+      {
+       "title": "锁随第一个写者退出而释放",
+       "line": 86,
+       "when": "释放第一个写者（Drop）后再次打开同一本账",
+       "then": "打开成功",
+       "ev": [
+        "tests/contract.rs::c07_second_writer_is_refused"
+       ]
+      },
+      {
+       "title": "陈旧锁被回收且锁文件记录新持有者",
+       "line": 92,
+       "when": "锁文件内容是一个不存在的 pid（伪造崩溃遗留），再打开该账本",
+       "then": "打开成功，`last_seq` 为 0，且锁文件内容被改写为当前进程 pid",
+       "ev": [
+        "tests/contract.rs::c08_stale_lock_is_reclaimed"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "残缺的尾部被丢弃，`seq` 空洞拒绝启动",
+     "line": 98,
+     "text": [
+      "> **改的是哪一类问题**：④ 与项目文档冲突（规格把一个更宽的、会**静默物理删除完整事件**的行为",
+      "> 写成了较窄的\"丢弃解析失败的最后一行\"）。",
+      ">",
+      "> `audit.md` **L3**：实现按**最后一个 `\\n`** 截断（直接 `set_len` 落盘），**不看能否解析**；",
+      "> 一条**完整合法 JSON 但缺末尾换行**的行会被静默物理删除并复用 `seq`。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 截断判据：`world-core/src/ledger.rs:276-279` 逐字",
+      ">    `let keep = match raw.iter().rposition(|b| *b == b'\\n') { Some(pos) => pos + 1, // 保留到最后一个换行（含） None => 0, // 一个换行都没有 ⇒ 整个文件都是半行 };`",
+      "> ② 落盘删除：`world-core/src/ledger.rs:280-289`（`set_len(keep)`）。",
+      "> ③ 这条边界由实现**自己如实写过**：`world-core/src/ledger.rs:385` 逐字",
+      ">    `/// ② 若粘连处含此前已 ack 的事件，启动时\"截到最后一个 \\n\"会**静默删掉**它们；`",
+      "> ④ 断言侧：`world-core/tests/acceptance.rs::t3_partial_line_is_discarded` 正面背书\"半行被丢弃\"，",
+      ">    **但没有断言\"完整合法 JSON 缺末尾换行也会被删\"** ⇒ 需补断言（列进 tasks）。",
+      "系统 SHALL 在启动读账本时把文件**截到最后一个换行符**（只追加模型下唯一可能残缺的位置），",
+      "且当 `seq` 出现空洞时 SHALL 拒绝启动，而不是静默接受。",
+      "**边界 SHALL 被如实声明**：本判据是\"**截到最后一个换行**\"，**不是**\"丢弃解析失败的最后一行\"。",
+      "一条内容完整、合法的 JSON 事件，只要其末尾换行缺失，就会被一并截掉并在下次写入时被物理删除、",
+      "其 `seq` 被复用。此边界 SHALL NOT 被读成\"只丢残缺的半行\"。"
+     ],
+     "scenarios": [
+      {
+       "title": "半行被丢弃",
+       "line": 122,
+       "when": "账本最后一行是残缺的 JSON（或末尾换行缺失）",
+       "then": "该行被截掉，其余事件正常读回",
+       "ev": [
+        "tests/acceptance.rs::t3_partial_line_is_discarded"
+       ]
+      },
+      {
+       "title": "`seq` 有空洞时拒绝启动",
+       "line": 130,
+       "when": "账本中存在 `seq` 不连续的事件",
+       "then": "打开失败并报出 `SeqGap`",
+       "ev": [
+        "tests/acceptance.rs::t4_seq_gap_refuses_to_start"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "账本文件恒以行边界收尾",
+     "line": 138,
+     "text": [
+      "> **改的是哪一类问题**：③ 证据错位（出厂脚本同名两处，证据行只写 `check.sh` 未给路径）。",
+      ">",
+      "> `audit.md` **L8** 后半：原 `spec.md:19/25/36` 只写 `check.sh`，而仓里**有两个同名脚本**，",
+      "> 根 `check.sh` **完全不碰 world-core**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs::c22_file_always_ends_on_a_line_boundary`",
+      "> 位于 `--test contract` 全套之内，由 `world-core/check.sh` 第 ③b 步（`:103`）执行。",
+      "> 仓根 `check.sh` 全文 49 行只跑 `agentd` 的 `go build` / `go vet` / `go test`（`:28-40`），",
+      "> **没有一行涉及 `world-core`**。",
+      "系统 SHALL 保证写出的账本文件始终以换行符结束，",
+      "使\"每行一条事件\"这一分帧约定在任何时刻都成立。"
+     ],
+     "scenarios": [
+      {
+       "title": "每次写入后文件都以换行收尾",
+       "line": 153,
+       "when": "任意次提交之后检查账本文件的最后一个字节",
+       "then": "最后一个字节是换行符，不存在\"半行挂在末尾\"的中间态",
+       "ev": [
+        "tests/contract.rs::c22_file_always_ends_on_a_line_boundary"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "摘要链检出局部篡改，并如实声明其边界",
+     "line": 160,
+     "text": [
+      "> **改的是哪一类问题**：④ 与项目文档冲突（**P0 必做项**：把已知【高】级缺陷写成已成立行为）。",
+      ">",
+      "> `audit.md` **L1**：原 `spec.md:111` 把「v1 兼容」写成已成立，而项目自己把这条路径登记为",
+      "> **【高】级自杀缺陷**——`world-core/docs/S0-立项/WC-SCMP-001-v0.1.md:2537` 逐字",
+      "> 「### K-3【高】在 v1（无链）账本上做一次正常 `append` 会把世界锁死 —— 升级路径自杀」。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 「无链账本仍能打开」这一句的**全部**依据是 `world-core/tests/contract.rs:1026` 逐字",
+      ">    `assert_eq!(w3.ledger().last_seq(), 1, \"无链账本仍应能打开（v1 兼容）\");`",
+      ">    —— 它只断言了**打开**这一步，**没有断言打开之后能不能正常写入**。",
+      "> ② K-3 的后果链由文档逐字给出：`WC-SCMP-001-v0.1.md:2541` 逐字",
+      ">    「**后果（EV-11b）**：无链账本 → `check` 警告但 `READY`（**设计意图是兼容**）→ 一次合法 `append` 成功 → 下次打开 `Ledger.MixedChain … 拒绝使用`。」",
+      ">    同件 `:2542` 逐字「**触发场景不是攻击，是升级**：任何历史账本在升级后的第一次提交都会命中。」",
+      "> ③ **这条路径今天没有任何自动化断言** ⇒ 需补断言（列进 tasks）——",
+      ">    `MixedChain` 在仓库内只出现在 `world-core/tests/contract.rs:845`（注释）与 `:879`（`c17` 函数级）；",
+      ">    启动路径的拒绝由 `world-core/src/lib.rs:105` 逐字 `ledger.load_chain()?;` 触发，**无函数级断言**。",
+      "系统 SHALL 为每条写出的事件带上摘要链，并把链的核验接在**启动路径**上：",
+      "账本被局部改写、重排或插入时 SHALL 拒绝启动。",
+      "系统 SHALL 明确声明第一条边界：无密钥的链**不能**检出\"整文件重写并重算链\"，",
+      "此边界 SHALL 被测试固定，不得被表述为\"防篡改\"。",
+      "系统 SHALL 另外明确声明第二条边界：**无链（v1）账本不具备平滑升级路径**。",
+      "`append` **无条件**把 `chain` 插进事件，而 `load_chain` 对无链账本返回 `false` 后",
+      "**不改变写入行为** ⇒ 无链账本上做**一次合法 `append`** 即产生\"部分有链、部分没有\"的账本，",
+      "下次打开判 `MixedChain` 并拒绝使用。此边界 SHALL NOT 被表述为\"v1 兼容\"或\"可平滑升级\"。"
+     ],
+     "scenarios": [
+      {
+       "title": "改写、重排、插入中间事件均被检出",
+       "line": 190,
+       "when": "对一条合法链分别做三种操作：改中间某条的内容、交换相邻两条、按攻击者算好的链插入一条",
+       "then": "三种情形都报 `ChainMismatch`",
+       "ev": [
+        "tests/contract.rs::c16_chain_detects_local_tampering"
+       ]
+      },
+      {
+       "title": "无链与混用被显式区分，不得静默通过",
+       "line": 196,
+       "when": "对一份完全无链的账本、以及一份部分带链的账本做核验",
+       "then": "无链报 `NoChain` 并说明\"不可检出\"；混用报 `MixedChain` 并说明\"比无链更危险\"",
+       "ev": [
+        "tests/contract.rs::c17_chain_distinguishes_absent_and_mixed"
+       ]
+      },
+      {
+       "title": "篡改一行即拒绝启动",
+       "line": 202,
+       "when": "直接改写账本中间一行的 `body.after` 而保留原 `chain`，再打开世界",
+       "then": "打开失败，错误串包含 `ChainMismatch`，且理由提到\"唯一真相\"",
+       "ev": [
+        "tests/contract.rs::c20_startup_refuses_a_tampered_ledger"
+       ]
+      },
+      {
+       "title": "整本重写按设计检不出（边界固定）",
+       "line": 208,
+       "when": "攻击者改写一条事件的值，并把链整条重算（知道算法与创世种子）",
+       "then": "核验**通过**——这是无密钥链的极限，本断言证明的是边界而不是实现缺陷；",
+       "ev": [
+        "tests/contract.rs::c18_chain_cannot_detect_a_full_rewrite"
+       ]
+      },
+      {
+       "title": "链状态位如实反映账本现实",
+       "line": 215,
+       "when": "分别对\"新写入的带链账本\"\"空账本\"\"手工造的无链账本\"读取链状态",
+       "then": "依次为 true / false / false，且**无链账本可以被打开**",
+       "ev": [
+        "tests/contract.rs::c21_is_chained_reflects_reality"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "回滚是追加补偿事件，不是改写历史",
+     "line": 224,
+     "text": [
+      "> **改的是哪一类问题**：① 措辞写宽（原措辞把\"系统提供回滚操作\"读成了能力，",
+      "> 而系统里**没有回滚操作**）。",
+      ">",
+      "> `audit.md` **L7**：原 `spec.md:116/120` 口径与 SRS 不一致。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/acceptance.rs:563-569` 逐字",
+      "> `// ② 回滚：追加一条**补偿事件**（旧值/新值互换）`／",
+      "> `w.commit( \"change\", \"world://user\", event::change_body(subj, \"muted\", json!(true), json!(false)), )`",
+      "> ⇒ **回滚动作由测试自己再提交一条互换的 `change` 完成**，不是系统提供的操作。",
+      "> SRS 的口径更准：`world-core/docs/S1-需求/WC-SRS-001-v0.1.md:257` 逐字",
+      "> 「| `REQ-F-014` | 回滚 = 追加补偿事件 | P1 | 不得修改或删除历史；**回滚通过追加一条普通 `change` 完成** |…」",
+      "系统 SHALL 以\"追加一条补偿事件\"的方式实现回滚，",
+      "SHALL NOT 修改或删除已经写下的事件。",
+      "系统 SHALL NOT 声称提供\"回滚操作\"或\"回滚子命令\"：v1 没有回滚 API，",
+      "回滚由调用方**再提交一条普通 `change`** 完成。"
+     ],
+     "scenarios": [
+      {
+       "title": "回滚后历史里两条都在",
+       "line": 244,
+       "when": "提交一条 `change` 后对其执行回滚（即再提交一条互换新旧值的 `change`）",
+       "then": "账本中同时存在原事件与补偿事件，没有任何一条被改写或删除，且状态回到原处",
+       "ev": [
+        "tests/acceptance.rs::t17_rollback_is_an_appended_compensating_event"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "无链账本的升级路径边界",
+     "line": 253,
+     "text": [
+      "> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。",
+      "> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。",
+      "> 本节**不新增能力**：它挂在既有能力 `ledger-integrity` 之下，只声明**该既有能力的边界**——",
+      "> 照本能力对摘要链\"整本重写按设计检不出\"那条的既有写法，**把边界本身写成 Requirement/Scenario**。",
+      ">",
+      "> **改的是哪一类问题**：④ 与项目文档冲突（**P0 必做项**）。这就是 `audit.md` **L1** 与 **L6**。",
+      ">",
+      "> 缺陷原文：`world-core/docs/S0-立项/WC-SCMP-001-v0.1.md:2537` 逐字",
+      "> 「### K-3【高】在 v1（无链）账本上做一次正常 `append` 会把世界锁死 —— 升级路径自杀」；",
+      "> `:2544` 给出最小补丁逐字「**最小补丁**：`append` 必须尊重 `self.chained`——`false` 时",
+      "> **要么继续写无链事件**（保持\"整本无链\"这个稳定态），**要么启动时即拒写并给 migrate 指引**；",
+      "> 两者择一，**不能继续写链**。」",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① **今天没有任何自动化断言**：`MixedChain` 在仓库内只出现在",
+      ">    `world-core/tests/contract.rs:845`（注释）与 `:879`（`c17` 函数级）；",
+      ">    启动路径的拒绝由 `world-core/src/lib.rs:105` 逐字 `ledger.load_chain()?;` 触发，",
+      ">    系统级证据只有手工留档（`world-core/docs/理论/专家评审/复跑-九项保证-2026-09-27-VM.md:130-140`）。",
+      "> ② 实现侧：`world-core/src/ledger.rs:506` 逐字 `self.chained = true;`（只在有链时置位），",
+      ">    而 `world-core/src/ledger.rs:518-519` 逐字 `pub fn is_chained(&self) -> bool { self.chained }`",
+      ">    ⇒ 该状态位**只用于显示**，未参与 `append` 的写入决策。",
+      "> ⇒ **本 Requirement 的全部断言今天都不存在** ⇒ 需补断言（列进 tasks）。",
+      "系统 SHALL 保证：在**无链（v1）账本**上做一次合法 `append` 之后，",
+      "该账本 SHALL 仍可被打开——即\"整本无链\"是一个**稳定态**，",
+      "或者启动时即拒写并给出迁移指引。",
+      "系统 SHALL NOT 使\"无链账本 → 一次合法 `append` → 下次打开被 `MixedChain` 拒绝\"成为可能。",
+      "在此之前，系统 SHALL 在规格里**不声称**无链账本可平滑升级：",
+      "\"v1 兼容\"这一说法 SHALL 被限定为\"**只读兼容**\"。",
+      "此边界 SHALL 被测试固定，SHALL NOT 被表述为实现缺陷或注意事项。"
+     ],
+     "scenarios": [
+      {
+       "title": "无链账本上一次合法 append 后仍可打开（升级路径不自锁）",
+       "line": 287,
+       "when": "对一份无链（v1）账本做一次合法 `append`，再重新打开该账本",
+       "then": "打开成功，`last_seq` 为 2，且账本未变成\"部分有链、部分没有\"",
+       "ev": []
+      },
+      {
+       "title": "v1 兼容只到只读为止（边界固定）",
+       "line": 296,
+       "when": "在修复落地之前，对一份无链账本做一次合法 `append` 后再打开",
+       "then": "打开失败并报 `MixedChain` —— 本断言证明的是**边界的真实形状**，不是实现缺陷；",
+       "ev": [
+        "world-core/docs/S0-立项/WC-SCMP-001-v0.1.md"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "承诺与证据的绑定强度",
+     "line": 304,
+     "text": [
+      "> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。",
+      "> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。",
+      "> 本节**不新增能力**：它挂在既有能力 `ledger-integrity` 之下，只声明**该既有能力的边界**。",
+      ">",
+      "> **改的是哪一类问题**：① 措辞写宽（基线自己的验证口径只到\"名字存在性\"这一级，",
+      "> 规格未声明这一点）。",
+      ">",
+      "> `audit.md` **L9**：`fc-2026-001` 的 `tasks.md:16/17/22`、`design.md:121` 逐字把核对写成",
+      "> 「证据行指向真实存在的测试名」「6 份规格 / 40 条证据 / 0 条未命中」。",
+      "> **名字存在 ≠ 断言的真是那件事**：本轮六路审计抓到的正是这个差值",
+      "> （机械命中 40/40，而语义相符远低于此）。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：**没有断言**——这正是本条要声明的边界。",
+      "> 现行的机核只到存在性一级，且 `openspec/**` 不在受控清单里：",
+      "> `world-core/tools/doc_integrity.py` 全文检索 `openspec` **零命中**。",
+      "本规格的每一条 Scenario 末尾的证据行 SHALL 指向**真实存在**的测试函数。",
+      "系统 SHALL 明确声明的边界：**证据行只到\"测试名存在\"这一级**，",
+      "它 SHALL NOT 被读成\"该测试断言的正是本 Scenario 那句话\"。",
+      "后者的判定 SHALL 由评审承担并留下签字，SHALL NOT 由机械门禁冒充。"
+     ],
+     "scenarios": [
+      {
+       "title": "证据行的存在性可机核、内容相符性不可机核",
+       "line": 328,
+       "when": "核对某条 Scenario 的证据行所指向的测试函数是否存在",
+       "then": "可机械判定；而当该测试函数的断言与 Scenario 说的不是同一件事时，",
+       "ev": [
+        "world-core/tools/doc_integrity.py"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "cap": "projections",
+   "file": "openspec\\specs\\projections\\spec.md",
+   "purpose": "规定\"同一份账，各按自己要用的方式读\"这一层对外可核的行为：语言投影与视觉投影必须同源、 同源核对必须接在出厂命令上、词表变更必须能被检出、投影只能省略不能添加。 **同源核对只证\"同源\"，证不了\"两份记录说的是同一件事\"**——书第五章（合订本 `:659`）逐字：这一格的**当日结果**是\"绿而无效\"， 而**按\"能不能证明两份记录说的是同一件事\"来判，这一格是红的**；书同时把\"当日结果与结论色压在一列\"**点名为缺陷**（合订本 `:1819` M-12）。 书的**通过条件**是「**判定能看内容，且两份由不同一方生成**」（合订本 `:736`）；**今天只做到\"头部四项一致\"**（`world-core/src/project/mod.rs:79`）， 即书判红的那一半。今天的实测边界见 `openspec/changes/cover-unimplemented-capabilities/` 与本 change 的 `audit.md` P1／P2 两条。 这一能力服务 `显`。",
+   "reqs": [
+    {
+     "title": "两份读法同源且可当场核对",
+     "line": 14,
+     "text": [
+      "> **改的是哪一类问题**：④ 与项目文档冲突（**P0 必做项**：把项目自评为\"绿而无效／红\"的能力",
+      "> 写成了\"已成立\"）兼 ① 措辞写宽（规格写\"首行逐字一致\"，证据不比对任何内容）。",
+      ">",
+      "> `audit.md` **P1**：原 `spec.md:18` 的 THEN 是「两份投影首行逐字一致（仅 `projection=` 不同）」，",
+      "> 而被引证据只断言 `rc==0` ＋ stdout 含「同源」「✅」；且两份投影**共用同一个 `state` 与 `vocab`**",
+      "> ⇒ `assert_same_source` 的三个不等分支在 `project check` 里**结构上不可达**。",
+      "> `audit.md` **P2**：原 `spec.md:10-13` 只写正向义务、一字不提边界。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 被引证据的全部内容：`world-core/tests/cli.rs:236-241` 逐字",
+      ">    `let (code, out, _) = run(&as_refs(&c));`／`assert_eq!(code, 0, \"同源核对应通过\");`／",
+      ">    `assert!( out.contains(\"同源\") && out.contains(\"✅\"), \"应报告同源一致；stdout={out}\" );`",
+      ">    ⇒ **它没有比对任何两份文本的内容**。",
+      "> ② \"自己渲染两份、自己比\"逐字：`world-core/src/main.rs:408-410` 逐字",
+      ">    `let a = language::render(&state, world, vocab);`／`let b = visual::render(&state, world, vocab);`／",
+      ">    `match project::assert_same_source(&a, &b) {` —— 两份投影由**同一个 `state`、同一个 `vocab`** 渲染。",
+      "> ③ 三个不等分支：`world-core/src/project/mod.rs:126-131`（`ha.world != hb.world`）、",
+      ">    `:132-138`（`ha.vocab != hb.vocab`）、`:139-145`（`ha.last_seq != hb.last_seq || ha.state != hb.state`）。",
+      "> ④ 项目文档判词：`world-core/docs/理论/语义世界-理论书-第一版-合订.md:736` 逐字",
+      ">    「**绿而无效**。命令跑得通（`world-core project check`），只比头部四项（`src/project/mod.rs` 第 124 行），",
+      ">    两份还是它自己渲染的（`src/main.rs` 第 394–397 行，2026-09-27 读）。按\"能不能证明\"判，这一格是红的」。",
+      ">    台账 `world-core/docs/理论/WC-PREFACE-LOG-001-v0.5.md:421` 逐字",
+      ">    「**绿而无效**（**只比头部四项、不比内容；且它是自己渲染两份再自己比，从未比过两份由不同一方独立生成的投影**——括注已按 §八 的更正改一致，M-25）」。",
+      "系统 SHALL 提供语言投影（给程序读）与视觉投影（给人看）两份读法；",
+      "两者 SHALL 由**同一读模型与同一词表**派生；",
+      "系统 SHALL 提供一条出厂命令当场核对两者首行的**头部四项**一致",
+      "（`world` / `vocab` / `last_seq` / `state` 指纹）。",
+      "系统 SHALL NOT 把该命令表述为\"能证明两份记录说的是同一件事\"。"
+     ],
+     "scenarios": [
+      {
+       "title": "`project check` 报同源",
+       "line": 47,
+       "when": "在出厂状态下运行 `world-core project check`",
+       "then": "退出码为 0，stdout 含「同源」与「✅」",
+       "ev": [
+        "tests/cli.rs::cli05_project_check_reports_same_source"
+       ]
+      },
+      {
+       "title": "换词表能被检出",
+       "line": 59,
+       "when": "在词表变更后比对两份投影",
+       "then": "同源核对能报出不同源（错误串含\"词表不同\"）",
+       "ev": [
+        "tests/acceptance.rs::t16_two_projections_are_same_source_and_vocab_change_is_detected"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "语言投影与读模型逐项相等",
+     "line": 67,
+     "text": [
+      "> **改的是哪一类问题**：① 措辞写宽／自相张力（主句要求\"完全相等\"，括注说\"只能省略\"，互相不容；",
+      "> 且与 SRS 的 P0 条目口径不一）。",
+      ">",
+      "> `audit.md` **P5**：原 `spec.md:29-30` 主句\"完全相等\"与括注\"只能省略\"互相不容；",
+      "> SRS 的口径是**包含关系 P ⊆ S**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/acceptance.rs::t14` 断言的是**集合相等**",
+      "> （解析出来的集合与 `entries()` 比对），故本规格取\"完全相等\"这一侧；",
+      "> SRS 的 `P ⊆ S` 口径见 `world-core/docs/S1-需求/WC-SRS-001-v0.1.md:92` 逐字",
+      "> 「| `REQ-F-024` | 投影不新增事实（只减不增） | P0 | 已实现（集成层：t14②/t15② 断言\"解析回来与读模型逐项相等\"，相等 ⇒ 不增；系统级判据 TC-042 待实现） |」",
+      "> ⇒ **相等强于包含**，两处不冲突；本 change 把\"相等\"写死，并删除会读成\"允许省略\"的括注。",
+      "语言投影 SHALL 由读模型派生；把投影逐行解析出的三元组集合与读模型逐项比对，",
+      "两者 SHALL **完全相等**（既不得添加状态源里没有的事实，也不得省略状态源里已有的事实）。"
+     ],
+     "scenarios": [
+      {
+       "title": "投影与读模型逐项相等",
+       "line": 84,
+       "when": "把语言投影逐行解析为 `(主体, 路径, 值)` 三元组，与读模型 `entries()` 比对",
+       "then": "两个集合完全相等",
+       "ev": [
+        "tests/acceptance.rs::t14_language_projection_matches_read_model"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "视觉投影的排版是可审计契约",
+     "line": 90,
+     "text": [
+      "> **改的是哪一类问题**：① 措辞写宽（只写了 2 条排版规则，审计器实际执行 11 条契约）。",
+      ">",
+      "> `audit.md` **P6**：原 `spec.md:40-41` 只列「2 空格主体行 / 6 空格字段行」两条。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tools/visual_layout_audit.py:17-29` 逐条列出契约 1–11，",
+      "> 逐字为 `| 1 | 首行是同源头 | 严格匹配 ...`／`| 2 | 第 2 行是标题 | 逐字 世界状态（视觉投影）`／",
+      "> `| 3 | 分隔线 | 第 3 行**只由** U+2500 组成，且长度 **= 44**`／`| 4 | 摘要行 | ...`／",
+      "> `| 5 | 收尾分隔线 | 非空状态第 5 行同为 44 个 U+2500；**空状态只有 4 行**（无收尾线）`／",
+      "> `| 6 | 主体行 | **恰好 2 个空格** ＋ world://…`／",
+      "> `| 7 | 字段行 | **恰好 6 个空格** ＋ 路径 = JSON值，且值必须能被 json.loads`／",
+      "> `| 8 | 次序 | **任何字段行不得出现在首个主体行之前**`／",
+      "> `| 9 | 封闭性 | 全部行**必须被分类**（未分类行数 = 0）`／`| 10 | 无裸控制字符 | ...`／",
+      "> `| 11 | 行尾 | 文件以 **LF** 结尾且**无 CR**`。",
+      "视觉投影 SHALL 采用**固定排版契约**（不只是缩进两条），该契约 SHALL 至少包含下列 11 条，",
+      "且该契约 SHALL 有**独立于渲染实现本身**的审计器逐条检验：",
+      "1. 首行是同源头，严格匹配 `^#world-core projection=visual world=<int> vocab=<tok> last_seq=<int> state=<tok>$`（无多余空格）；",
+      "2. 第 2 行是标题，逐字 `世界状态（视觉投影）`；",
+      "3. 分隔线只由 `U+2500` 组成且长度 **= 44**；",
+      "4. 摘要行格式固定；空状态时为固定的一句话；",
+      "5. 收尾分隔线同为 44 个 `U+2500`，**空状态只有 4 行**（无收尾线）；",
+      "6. 主体行为**恰好 2 个空格** ＋ `world://…`；",
+      "7. 字段行为**恰好 6 个空格** ＋ `路径 = JSON值`，且值必须能被 `json.loads`；",
+      "8. **任何字段行不得出现在首个主体行之前**；",
+      "9. 全部行**必须被分类**（未分类行数 = 0）；",
+      "10. 正文不得含裸控制字符；含换行的值必须被转义；",
+      "11. 文件以 **LF** 结尾且无 CR。"
+     ],
+     "scenarios": [
+      {
+       "title": "排版审计对变异必报红、对期望样本必常绿",
+       "line": 121,
+       "when": "用独立审计器检验 3 份字节级期望样本，并施加 12 个变异",
+       "then": "3 份样本全部通过，12 个变异全部报红",
+       "ev": [
+        "world-core/tools/visual_layout_audit.py --self-test",
+        "world-core/check.sh"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "出厂同源命令的判据边界",
+     "line": 127,
+     "text": [
+      "> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。",
+      "> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。",
+      "> 本节**不新增能力**：它挂在既有能力 `projections` 之下，只声明**该既有能力的边界**——",
+      "> 照 `ledger-integrity` 对摘要链 `c18`「整本重写按设计检不出（边界固定）」那条的既有写法，",
+      "> **把边界本身写成 Requirement/Scenario，而不是注意事项**。",
+      ">",
+      "> **改的是哪一类问题**：④ 与项目文档冲突（**P0 必做项**）。这就是 `audit.md` 的 **P1** 与 **P2**。",
+      ">",
+      "> 项目文档判词：",
+      "> ① `world-core/docs/理论/语义世界-理论书-第一版-合订.md:736` 逐字",
+      ">    「**绿而无效**。命令跑得通（`world-core project check`），只比头部四项（`src/project/mod.rs` 第 124 行），",
+      ">    两份还是它自己渲染的（`src/main.rs` 第 394–397 行，2026-09-27 读）。按\"能不能证明\"判，这一格是红的」；",
+      "> ② `world-core/docs/理论/语义世界-理论书-第一版-合订.md:2312` 逐字（引框架 5.2 行）",
+      ">    「| 5.2 | 两份记录的一致性核对：只比头部四项，且是自己渲染自己比（**红**） | 实测台账（`src/project/mod.rs` 第 124 行；`src/main.rs` 第 394–397 行） |」；",
+      "> ③ 台账 `world-core/docs/理论/WC-PREFACE-LOG-001-v0.5.md:421`（`B-4` 行）逐字",
+      ">    「**绿而无效**（**只比头部四项、不比内容；且它是自己渲染两份再自己比，从未比过两份由不同一方独立生成的投影**——括注已按 §八 的更正改一致，M-25）」；",
+      "> ④ RTM 记该用例尚未实现：`world-core/docs/S1-需求/WC-RTM-001.csv` 第 21 行逐字",
+      ">    「…该用例尚未实现；IF-003a 的编号载体（WC-IC-001）不属本次执行员所有 ⇒ ⚠ 待人工裁定落点。」",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 命令实际做的事：`world-core/src/main.rs:408-410`（两份投影共用同一个 `state` 与 `vocab`）；",
+      "> ② 判据只有四项：`world-core/src/project/mod.rs:124-145`（`assert_same_source`），",
+      ">    其文档注 `:121-123` 逐字「只比较\"身份\"三项（`world` / `vocab` / `last_seq` + `state` 指纹），/ **不比较排版**」；",
+      "> ③ **\"该命令恒绿\"这一事实今天没有断言**（它是一条负面结论） ⇒ 需补断言（列进 tasks）。",
+      "出厂同源命令 `world-core project check` 的判据边界 SHALL 被如实声明为**正式条文**：",
+      "① 该命令**自己渲染两份再自己比**——两份投影由**同一个读模型、同一个词表**派生",
+      "⇒ `assert_same_source` 的三个不等分支在该命令路径上**结构上不可达**，对任何输入只会报绿；",
+      "② 它**只比较头部四项**（`world` / `vocab` / `last_seq` / `state` 指纹），**不比较内容**；",
+      "③ 它**从未比过两份由不同一方独立生成的投影**。",
+      "系统 SHALL NOT 把该命令表述为\"能证明两份记录说的是同一件事\"。",
+      "跨来源比对（两份由不同一方独立生成）SHALL 被列为**尚未实现**，",
+      "其落点 SHALL 由人裁定，SHALL NOT 由本 change 自造编号。"
+     ],
+     "scenarios": [
+      {
+       "title": "出厂命令的判据只有头部四项（边界固定）",
+       "line": 165,
+       "when": "让两份投影在**内容**上不一致（例如一方少渲一半主体）、而头部四项相同",
+       "then": "`project check` **仍然报绿** —— 本断言证明的是**边界**而不是实现缺陷；",
+       "ev": [
+        "world-core/src/project/mod.rs"
+       ]
+      },
+      {
+       "title": "该命令的三个不等分支在命令路径上不可达（边界固定）",
+       "line": 173,
+       "when": "检查 `world-core/src/main.rs` 的 `project check` 分支如何构造两份投影",
+       "then": "两份投影取自**同一个 `state` 与同一个 `vocab`** ⇒ 命令路径上不可能出现\"世界版本不同／",
+       "ev": [
+        "world-core/src/main.rs"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "视觉投影与读模型逐项相等",
+     "line": 182,
+     "text": [
+      "> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。",
+      "> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。",
+      "> 本节**不新增能力**：它挂在既有能力 `projections` 之下，把**已实现、已测、SRS 已有判据**",
+      "> 的行为补进规格——这是\"实现有、规格无\"的补落点，不是新增能力。",
+      ">",
+      "> **改的是哪一类问题**：② 措辞写窄（实现有、已测、SRS 有判据，规格里**没有任何条目**）。",
+      ">",
+      "> `audit.md` **P4**：原 `spec.md:29` 只限定「语言投影 SHALL 由读模型派生」；",
+      "> 而 `world-core/tests/acceptance.rs:674-679` 的 `t15` **实断言视觉投影逐项相等**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/acceptance.rs:674-679` 逐字",
+      "> `let parsed = visual::parse(&text).unwrap();`／",
+      "> `let expected: Vec<(String, String, serde_json::Value)> = state .entries() .map(|(s, p, v)| (s.to_string(), p.to_string(), v.clone())) .collect();`／",
+      "> `assert_eq!(parsed, expected, \"视觉投影与读模型必须逐项一致\");`",
+      "> —— 与 SRS `REQ-F-019` 判据④同款（`world-core/docs/S1-需求/WC-SRS-001-v0.1.md:87`）。",
+      "> **⚠ 该断言的验证面独立性有限**：它用**同一模块**的 `visual::parse()` 解析自己渲染的文本；",
+      "> 独立验证面是 `world-core/tools/visual_layout_audit.py`（不 import 任何 Rust 代码）。",
+      "视觉投影 SHALL 由读模型派生；把视觉投影解析出的 `(主体, 路径, 值)` 三元组集合与读模型逐项比对，",
+      "两者 SHALL **完全相等**（视觉投影只能改变画法，不得增删世界状态里的事实）。"
+     ],
+     "scenarios": [
+      {
+       "title": "视觉投影与读模型逐项相等",
+       "line": 205,
+       "when": "把视觉投影解析为 `(主体, 路径, 值)` 三元组，与读模型 `entries()` 比对",
+       "then": "两个集合完全相等",
+       "ev": [
+        "tests/acceptance.rs::t15_visual_projection_is_human_readable_yet_auditable"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "cap": "read-model",
+   "file": "openspec\\specs\\read-model\\spec.md",
+   "purpose": "规定\"读法可以有若干份，但说法只有一份\"这一层对外可核的行为：读模型必须能由账本百分之百重算、 检查点只是缓存可以随时丢弃。**它不是\"唯一\"的自动化检验面**——另有**摘要链**一条独立检验 （`world-core/tests/contract.rs` 的 `c19`／`c20`／`c21`，由 `check.sh` 整跑 `--test contract` 执行）。 ⚠ **不把\"投影同源\"算作这一层的检验面**：它**只证同源、证不了同一件事**（见 `projections` 能力，书第五章判它红）。 ⚠ **措辞出处**：「**唯一**自动化检验」这句原出自**流程侧** `WC-SQAP-001-v0.1.md:536`，**不是书的原话** （书里检索 `一个真相`／`检验面` 均 0 命中）；本能力的更正依据是 `fc-2026-002-spec-revisions` 里**待并入**的条文。",
+   "reqs": [
+    {
+     "title": "读模型是可丢弃的缓存",
+     "line": 13,
+     "text": [
+      "> **改的是哪一类问题**：④ 与项目文档冲突（把\"账本内容损坏 ⇒ 拒绝产出\"这条**全称**写法",
+      "> 收窄到实测的三类）兼 ① 措辞写宽。",
+      ">",
+      "> `audit.md` **R2**：原 `spec.md:22-23` 用全称量词，而**末尾半行是静默丢弃**的，",
+      "> 且 `t3_partial_line_is_discarded` 正面背书该行为。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/acceptance.rs::t8_read_model_refuses_broken_ledger`",
+      "> 只断言**三类**：`:298-299`（seq 从 2 开始 ⇒ 含\"不连续\"）、`:316-317`（旧值说谎 ⇒ 含\"旧值不符\"）、",
+      "> `:321-322`（未知家族 ⇒ 含\"未知事件家族\"）。它**不覆盖**：解析失败的行、末尾半行、摘要链不符。",
+      "> 实现侧：`world-core/src/ledger.rs:276-279` 在折叠**之前**就把文件截到最后一个 `\\n`",
+      "> ⇒ 读模型**根本没有机会**看到那次截断。另 `world-core/src/main.rs:389-395` 逐字",
+      "> `let state = match w.read_model() { Ok(s) => s, Err(e) => { eprintln!(\"[FAIL] 读模型拒绝折叠：{e}\"); return ExitCode::from(2); } };`",
+      "> ⇒ CLI 侧确实把拒绝转成 `rc=2`。",
+      "\"现在是什么样\" SHALL 由账本重算得出，SHALL NOT 作为与账本并行的第二份原件存在。",
+      "删掉读模型（及其持久形态）之后 SHALL 能从账本重算出完全一致的结果。",
+      "系统 SHALL NOT 声称\"账本内容损坏一律拒绝产出\"这一全称命题。",
+      "已实测的拒绝面 SHALL 被逐类写明：① 序号断裂、② 旧值说谎（`change` 的 `before` 与当前值不符）、",
+      "③ 未知事件家族。",
+      "**边界 SHALL 被如实声明**：末尾半行在进入折叠**之前**就已被账本层截掉",
+      "（`world-core/src/ledger.rs:276-289`），故它**不是**读模型的拒绝面；",
+      "读模型对\"解析失败的行\"不承担拒绝责任。"
+     ],
+     "scenarios": [
+      {
+       "title": "删掉读模型后重算结果一致",
+       "line": 39,
+       "when": "记录当前读模型，删除其持久形态，再由账本重算",
+       "then": "重算结果与删除前逐项一致",
+       "ev": [
+        "tests/acceptance.rs::t7_read_model_is_disposable_and_reproducible"
+       ]
+      },
+      {
+       "title": "坏账本不得产出\"看起来正常\"的读模型",
+       "line": 50,
+       "when": "账本内容损坏（序号断裂／旧值说谎／未知事件家族）",
+       "then": "读模型拒绝产出，而不是给出部分结果",
+       "ev": [
+        "tests/acceptance.rs::t8_read_model_refuses_broken_ledger"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "增量折叠等价于全量折叠",
+     "line": 57,
+     "text": [
+      "> **改的是哪一类问题**：③ 证据错位（`t8`/`c06` 用 `State::fold` 直喂向量，",
+      "> 使 `SeqGap` 检查在生产路径上不可达）。`audit.md` **R10** 判它**不是缺陷**（防线冗余），",
+      "> 但读者会误以为是端到端验证 ⇒ 本条**只补注边界**，**不改结论强度**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs::c06_incremental_apply_equals_full_fold`",
+      "> （由 `world-core/check.sh` 第 ③b 步执行）；边界侧 `world-core/src/ledger.rs:304` 逐字",
+      "> `if seq != last + 1 {` —— 账本层**更早**拦截缺号。",
+      "系统 SHALL 保证\"逐条增量应用\"与\"从头全量折叠\"得到同一个结果，",
+      "否则读模型就成了一本会漂移的第二本账。"
+     ],
+     "scenarios": [
+      {
+       "title": "增量与全量结果相同",
+       "line": 70,
+       "when": "对同一批事件分别做增量应用与全量折叠",
+       "then": "两者结果相同",
+       "ev": [
+        "tests/contract.rs::c06_incremental_apply_equals_full_fold",
+        "world-core/check.sh"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "检查点是缓存，可丢弃且必须自洽",
+     "line": 78,
+     "text": [
+      "> **改的是哪一类问题**：① 措辞写宽（\"自洽\"在规格里**无定义**、在断言里**无落点**）",
+      "> 兼 ③ 证据错位（补上\"核验只查两项\"与\"CLI 走未核验续算路径\"这两个事实）。",
+      ">",
+      "> `audit.md` **R3**：原 `spec.md:37` 标题承诺\"自洽\"，正文与两条 Scenario 零定义；",
+      "> `checkpoint.rs` 的 `verify` **只查 `base_seq` 与 `digest`**。",
+      "> `audit.md` **R4**：`world-core/src/main.rs:534-542` 的 `resume` 直接走",
+      "> `read_model_with_checkpoint`，其内部快路径是 `resume_unverified`。",
+      "> `audit.md` **R5**：`Checkpoint::FORMAT` 的版本不符分支存在但**零断言**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 核验范围：`world-core/src/checkpoint.rs:122-127` 逐字",
+      ">    `pub fn verify(&self, ledger_events: &[Value]) -> Result<(), String> { let prefix: Vec<Value> = ledger_events .iter() .filter(|e| e.get(\"seq\").and_then(Value::as_u64).unwrap_or(0) <= self.base_seq) .cloned() .collect();`",
+      ">    ⇒ 判据就是\"前 `base_seq` 条重算后的指纹是否等于快照自称的 `digest`\"，**无更多\"自洽\"定义**。",
+      "> ② 未核验路径：`world-core/src/checkpoint.rs:171-174` 逐字",
+      ">    `match checkpoint { None => State::fold(ledger_events), Some(cp) => cp.resume_unverified(ledger_events), }`",
+      ">    —— **`Some` 分支走的是 `resume_unverified`，不调 `verify`**。",
+      "> ③ CLI 侧确有一道**事后**比对：`world-core/src/main.rs:556-562` 逐字",
+      ">    `if fast.to_json() != full.to_json() { eprintln!( \"ext.world.Checkpoint.ResumeMismatch: 从快照续算与全量重算结果不一致——缓存成了第二真相，拒绝使用\" ); return ExitCode::from(2); }`",
+      ">    ⇒ **比对发生在\"用完快照之后\"**，不是使用前核验；它与 `world-core/src/checkpoint.rs:122` 的",
+      ">    `verify` 是两条不同判据。",
+      "> ④ 版本分支：`world-core/src/checkpoint.rs:94-99` 逐字",
+      ">    `if fmt != Self::FORMAT { return Err(format!( \"ext.world.Checkpoint.BadFormat: 期望 {}，实得 {fmt}\", Self::FORMAT )); }`",
+      ">    —— 该分支**没有任何测试触发** ⇒ 需补断言（列进 tasks）。",
+      "> ⑤ 断言侧：`world-core/tests/contract.rs::c12_checkpoint_is_a_cache_and_disposable` 与",
+      ">    `world-core/tests/contract.rs::c13_bad_checkpoints_are_refused`。",
+      "检查点 SHALL 只作为重放的加速形态存在；它 SHALL 可被丢弃而不影响正确性；",
+      "坏检查点 SHALL 被拒绝而不是被静默采用。",
+      "系统 SHALL 明确声明\"自洽\"的可判定含义，SHALL NOT 留作未定义词：",
+      "检查点的**核验**判据只有两项——① 快照自称的 `base_seq` 能对上账本前若干条；",
+      "② 用账本重算前 `base_seq` 条得到的指纹等于快照自称的 `digest`。",
+      "系统 SHALL 另外声明：CLI 的 `checkpoint resume` 走的是**未核验**续算路径，",
+      "其\"缓存未成为第二真相\"由**事后**的\"续算 ≡ 全量\"逐字节比对承担",
+      "（不一致即 `ResumeMismatch` 拒用），**不是**由使用前的 `verify` 承担。",
+      "检查点格式版本不符时 SHALL 拒绝使用；该约束 SHALL 有断言。"
+     ],
+     "scenarios": [
+      {
+       "title": "检查点可丢弃",
+       "line": 119,
+       "when": "生成检查点后再丢弃它，由账本重新重放",
+       "then": "结果与使用检查点时一致",
+       "ev": [
+        "tests/contract.rs::c12_checkpoint_is_a_cache_and_disposable"
+       ]
+      },
+      {
+       "title": "坏检查点被拒",
+       "line": 125,
+       "when": "检查点内容被破坏",
+       "then": "被拒绝",
+       "ev": [
+        "tests/contract.rs::c13_bad_checkpoints_are_refused"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "读模型是\"一个真相\"的检验面之一",
+     "line": 133,
+     "text": [
+      "> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。",
+      "> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。",
+      "> 本节**不新增能力**：它挂在既有能力 `read-model` 之下，只声明**该既有能力的边界**。",
+      ">",
+      "> **改的是哪一类问题**：④ 与项目文档冲突（Purpose 自称\"唯一自动化检验所在\"，与同仓文档冲突）",
+      "> 兼 ④（三份受控文档仍写「v1 CLI 从不读快照」，与已接线的实现冲突）。",
+      ">",
+      "> `audit.md` **R7**：原 `spec.md:4-5` 的 Purpose 写「这一能力是\"一个真相\"这条纪律的",
+      "> **唯一**自动化检验所在」，而同仓另有两条独立检验。",
+      "> `audit.md` **R1**：三份受控文档仍断言不存在检查点路径，而 `world-core/src/main.rs` 已把它接进生产 CLI。",
+      "> `audit.md` **R9**：证据链无机械门禁。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① 摘要链核验是另一条独立检验：`world-core/tests/contract.rs::c19_written_ledger_carries_a_verifiable_chain`、",
+      ">    `world-core/tests/contract.rs::c20_startup_refuses_a_tampered_ledger`、",
+      ">    `world-core/tests/contract.rs::c21_is_chained_reflects_reality`、",
+      ">    `world-core/tests/cli.rs::cli02_after_append_check_reports_chained`。",
+      "> ② 投影同源核验是第三条：`world-core/tests/acceptance.rs::t16_two_projections_are_same_source_and_vocab_change_is_detected`。",
+      "> ③ 检查点 CLI **已接线**：`world-core/src/main.rs:28-30` 逐字",
+      ">    `  checkpoint write <path>    从账本重算状态并写一份检查点（缓存，非真相）`／",
+      ">    `  checkpoint verify <path>   核验检查点与账本一致（不一致即拒用）`／",
+      ">    `  checkpoint resume <path>   从检查点续算，并与全量重算逐字节比对`；",
+      ">    分发处 `world-core/src/main.rs:153` 逐字",
+      ">    `        \"checkpoint\" => cmd_checkpoint(&ontology, &ledger, &policy, &rest),`",
+      ">    ⇒ 与 `world-core/docs/S4-实现/WC-UT-001-v0.1.md:54` 逐字",
+      ">    「**且 v1 运行时/CLI 从不读快照**（`src/lib.rs` 只有 `pub mod checkpoint;`；`main.rs::cmd_state` 走 `World::read_model()` 全量折叠；`read_model_with_checkpoint` 调用者全在 `tests/` 内）」",
+      ">    **正面冲突**；同族冲突另见 `world-core/docs/S1-需求/WC-SRS-001-v0.1.md:921` 逐字",
+      ">    「**操作对象（唯一可核观测面）**：v1 的 CLI **不暴露检查点路径**」。",
+      "> ④ **\"用法串里列出三条 checkpoint 子命令\"今天没有断言** ⇒ 需补断言（列进 tasks）。",
+      "读模型 SHALL 是可丢弃的缓存，\"现在是什么样\"由账本重算得出。",
+      "本能力 SHALL NOT 被表述为\"一个真相\"这条纪律的**唯一**自动化检验面：",
+      "同仓另有至少两条独立检验——摘要链核验（`c19`/`c20`/`c21`/`cli02`）与投影同源核对（`t16`）。",
+      "系统 SHALL 声明检查点路径**已接入生产 CLI**（`checkpoint write|verify|resume`），",
+      "SHALL NOT 被表述为\"v1 CLI 从不读快照\"。",
+      "证据链的机械门禁 SHALL 声明其覆盖边界：`world-core/tools/doc_integrity.py` 的受控清单里",
+      "`openspec/**` **零命中**，故\"改一个测试名，规格不会变红\"。",
+      "该缺口 SHALL 由 `spec_bridge.py` 的对应检查承担，SHALL NOT 被读成\"证据链已被机核\"。"
+     ],
+     "scenarios": [
+      {
+       "title": "检查点路径已接入生产 CLI",
+       "line": 177,
+       "when": "查阅 CLI 的用法串与分发分支",
+       "then": "其中列出 `checkpoint write` / `checkpoint verify` / `checkpoint resume` 三条子命令，",
+       "ev": [
+        "world-core/src/main.rs",
+        "world-core/src/main.rs"
+       ]
+      },
+      {
+       "title": "证据链的机械门禁不覆盖 openspec",
+       "line": 186,
+       "when": "改动 `openspec/specs/` 下某条 Scenario 的证据行所指的测试名",
+       "then": "现有的受控文档一致性脚本**不会变红**（`openspec` 在其受控清单里零命中）",
+       "ev": [
+        "world-core/tools/doc_integrity.py"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "带检查点路径的性能目标不在本基线的承诺范围内",
+     "line": 193,
+     "text": [
+      "> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。",
+      "> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。",
+      "> 本节**不新增能力**：它挂在既有能力 `read-model` 之下，只声明**该既有能力的范围外声明**。",
+      ">",
+      "> **改的是哪一类问题**：④ 与项目文档冲突（性能目标被 SRS 记\"未实现\"，规格沉默 ⇒ 会被读成已成立）。",
+      ">",
+      "> `audit.md` **R8**：`REQ-N-008`（带检查点路径的性能目标）**无任何断言**。",
+      ">",
+      "> **证据是哪条测试的哪个断言**：",
+      "> ① `world-core/tests/perf.rs` 三个用例**全部 `#[ignore]`**——`:175-177` 逐字",
+      ">    `#[test]`／`#[ignore = \"L3 度量：用 cargo test --release --test perf -- --ignored --nocapture 显式运行\"]`／",
+      ">    `fn qg05_full_replay_of_100k_events() {`，另有 `:219`、`:284` 同样标 `#[ignore]`；",
+      ">    且**无一条测\"带检查点续算\"**。",
+      "> ② SRS 状态：`world-core/docs/S1-需求/WC-SRS-001-v0.1.md:112` 逐字",
+      ">    「| `REQ-N-008` | 带检查点路径的性能目标（QG-13） | P2 | 未实现（性能读数未取：v1 CLI 不暴露检查点路径，样本 ≥ 20 次的 P95 无法在 S1 取；…",
+      "> ③ RTM 同记：`world-core/docs/S1-需求/WC-RTM-001.csv` 第 40 行状态列为「未实现」。",
+      "> ⇒ **本条今天没有断言**（\"未实现\"本身不可被断言） ⇒ 需补断言（列进 tasks）。",
+      "系统 SHALL 明确声明**范围外**事项，SHALL NOT 被读成已成立：",
+      "带检查点路径的性能目标（`REQ-N-008`：走检查点续算 ≤ 全量重算的 1/2，样本 ≥ 20 次取 P95）",
+      "在本基线内**未实现、无断言**；`world-core/tests/perf.rs` 的全部用例默认 `#[ignore]`，",
+      "只在显式度量时运行。"
+     ],
+     "scenarios": [
+      {
+       "title": "性能目标不在本基线的承诺范围内",
+       "line": 218,
+       "when": "查阅本能力的覆盖声明",
+       "then": "写明 `REQ-N-008` 未实现、无断言，且 `world-core/tests/perf.rs` 三条用例默认不跑",
+       "ev": [
+        "world-core/docs/S1-需求/WC-SRS-001-v0.1.md"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "srs": [
+  {
+   "id": "REQ-F-001",
+   "title": "语义事件是唯一真相",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-002",
+   "title": "事件信封字段完备且带版本",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-003",
+   "title": "账本只追加且为纯文本",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-004",
+   "title": "序号单一递增，缺号拒启",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-005",
+   "title": "崩溃尾迹（半行）启动时丢弃",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-006",
+   "title": "唯一写入口",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-007",
+   "title": "法律在前、落笔在后",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-008",
+   "title": "三个事件家族及其信纸字段",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-009",
+   "title": "change 必带旧值",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-010",
+   "title": "状态是账本的投影",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-011",
+   "title": "读模型可删掉重算且逐字节一致",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-012",
+   "title": "读模型不写盘、不改账本",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-013",
+   "title": "读模型拒绝坏账本",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-014",
+   "title": "回滚 = 追加补偿事件",
+   "pri": "P1",
+   "status": "green",
+   "raw": "已实现（t17：状态回退 + 账本只增不减 + 可重算）"
+  },
+  {
+   "id": "REQ-F-015",
+   "title": "门禁不可绕过",
+   "pri": "P0",
+   "status": "half",
+   "raw": "部分实现（见 WC-CON01-001：进程内 + 静态墙已跨 uid 实测；祖先链遍历、通道层与 Landlock 自缚未做）"
+  },
+  {
+   "id": "REQ-F-016",
+   "title": "能力声明即请求，进门前查门禁",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现（t9：拒绝 + 不落笔 + notice 流水）"
+  },
+  {
+   "id": "REQ-F-017",
+   "title": "不可逆动作加摩擦，可逆免检留痕",
+   "pri": "P1",
+   "status": "green",
+   "raw": "已实现（TC-015＝tests/acceptance.rs::t10_gate_adds_friction_for_irreversible_capability，:400／:412／:413／:426 四处断言（行号订正（2026-09-27，承 R1 二轮席 独立评审席 的独立变异实测）：此前写 :414，实测 412 与 414 之间只有 :413 一处断言）；TC-028＝src/gate.rs::unit::* 4 项）。订正留痕（2026-09-27，承 R1 席 独立评审席 的缺格发现）：本条此前只写\"两类动作行为不同且都可审计\"，未写任何反例，且所述\"分级表\"在库内只以源码注释存在（无表、无反假断言）⇒ 现改为锚在 TC-015 四处现有断言上，不再引用那张不存在的表"
+  },
+  {
+   "id": "REQ-F-018",
+   "title": "语言投影（结构化出口）",
+   "pri": "P1",
+   "status": "green",
+   "raw": "已实现（t14：逐行 JSON，解析回来与读模型逐项相等）"
+  },
+  {
+   "id": "REQ-F-019",
+   "title": "视觉投影（渲染出口）",
+   "pri": "P1",
+   "status": "green",
+   "raw": "已实现（t15：渲染出口，排版可被审计脚本提取）。⚠ 覆盖范围：本条实现覆盖的是\"渲染出口存在且可审计\"；\"网页\"形态未实现，见 §6 未决项 14"
+  },
+  {
+   "id": "REQ-F-020",
+   "title": "两个投影同源",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现（t16：同源头 + 换词表/落后一方均被检出）"
+  },
+  {
+   "id": "REQ-F-021",
+   "title": "检查点/快照可重建",
+   "pri": "P2",
+   "status": "green",
+   "raw": "已实现（2026-09-27 状态订正：本条此前记 未实现，与本节 TC-019 的 已实现 及 WC-RTM-001.csv 的 REQ-F-021 行（第 22 行）的 已实现 自相矛盾——三处已按同一事实对齐，见 §八）"
+  },
+  {
+   "id": "REQ-F-022",
+   "title": "账本可重放（重启不丢）",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-F-023",
+   "title": "投递、应答与收件人",
+   "pri": "P1",
+   "status": "half",
+   "raw": "部分实现（通道身份 + 一行应答已实现并实测 c14；to 的投递与请求应答配对字段未实现）"
+  },
+  {
+   "id": "REQ-F-024",
+   "title": "投影不新增事实（只减不增）",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现（集成层：t14②/t15② 断言\"解析回来与读模型逐项相等\"，相等 ⇒ 不增；系统级判据 TC-042 待实现）"
+  },
+  {
+   "id": "REQ-F-025",
+   "title": "主体身份可核",
+   "pri": "P0",
+   "status": "half",
+   "raw": "部分实现（通道路径已实现并实测 c14；CLI 路径的身份不可核）"
+  },
+  {
+   "id": "REQ-F-026",
+   "title": "通道资源边界",
+   "pri": "P1",
+   "status": "red",
+   "raw": "未实现（四个边界一个都没有；四个数值为【候选】，须人工确认后 TC-045 方可实现）"
+  },
+  {
+   "id": "REQ-F-027",
+   "title": "家族演进与向前兼容",
+   "pri": "P1",
+   "status": "red",
+   "raw": "未实现（仅\"版本不符即拒收\"已实现并由 TC-040 断言③覆盖；演进与向前兼容的判据无实现、无用例）"
+  },
+  {
+   "id": "REQ-F-028",
+   "title": "取值形状（字段类型口径）",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现（类型口径已实现并逐条可实测；字符集/长度上界未定，见 §6 未决项 12）"
+  },
+  {
+   "id": "REQ-F-029",
+   "title": "未知旗标必须忽略（与\"未知家族拒绝\"对偶）",
+   "pri": "P1",
+   "status": "red",
+   "raw": "未实现（此前零需求、零用例；实现只有一行注释。反例(b)的阻塞原因 = 本体 flags 为空数组这一实测边界，不是\"用例编号不存在\"；TC-048 载于 tools/s1_sys_probe.sh（载体订正（2026-09-27，承 R1 二轮席 独立评审席 的实测）：此前误写 tools/system_acceptance.sh，该文件全文只含 TC-037–TC-040），本轮已落笔并实测，见 §五 处置表）"
+  },
+  {
+   "id": "REQ-F-030",
+   "title": "本体：极小核心 + 命名空间扩展",
+   "pri": "P1",
+   "status": "half",
+   "raw": "部分实现（结构事实上如此且判据 ① 可实测；判据 ②③ 无实现、无用例）"
+  },
+  {
+   "id": "REQ-F-031",
+   "title": "trace（信封因果字段）保留为需求",
+   "pri": "P1",
+   "status": "half",
+   "raw": "部分实现 —— 判据 (1) 已实测成立；判据 (2)(3)(4)(5) 依赖透传，三层的可核事实为：Ontology::validate 只遍历必填字段（src/ontology.rs:157/:160/:192）、Ledger 对整条事件整值序列化（src/ledger.rs::append）、门禁与读模型不读 trace（grep -rn '\"trace\"' src/ tests/ 零命中，见 §七）⇒ 三层都不会拦它；⚠ 但\"带 trace 落笔\"当前没有公开入口——World::commit 的签名只有 kind/actor/body（src/lib.rs:133），CLI append 亦然（src/main.rs:255/:279）⇒ 判据 (2)(3) 的端到端可执行验证面当前缺失，标 【待验证】；判据 (6) 为已声明的 v1 不担保项。承担用例拆为三段（改挂留痕，202"
+  },
+  {
+   "id": "REQ-N-001",
+   "title": "语言无关（纯文本）",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现（审计脚本 tools/plain_text_audit.py，正反例自证 + CI 执行）。⚠ 模块归属缺口：本条在 WC-RTM-001.csv 的 REQ-N-001 行（第 24 行）与 WC-HLD-001 中只登记 M02（账本），而\"词表必须纯文本\"应由 M01（本体） 承担 ⇒ 该子项在模块层无人认领（须在 RTM 的设计模块号列补 M01，该文件不属本次改动范围；见 §6 未决项 10）"
+  },
+  {
+   "id": "REQ-N-002",
+   "title": "零外部依赖纪律",
+   "pri": "P1",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-N-003",
+   "title": "启动即校验本体",
+   "pri": "P0",
+   "status": "green",
+   "raw": "已实现"
+  },
+  {
+   "id": "REQ-N-004",
+   "title": "私有化部署形态",
+   "pri": "P1",
+   "status": "green",
+   "raw": "已实现（入口脚本 world-core/check.sh 已入库并实测跑通，见 TC-022；2026-09-27 订正）"
+  },
+  {
+   "id": "REQ-N-005",
+   "title": "可度量的质量目标",
+   "pri": "P0",
+   "status": "red",
+   "raw": "未实现（数值待人工，见 §6）"
+  },
+  {
+   "id": "REQ-N-006",
+   "title": "投影质量目标（同源率 / 事实可回溯率）",
+   "pri": "P1",
+   "status": "red",
+   "raw": "未实现（数值待人工，见 §6 未决项 8）"
+  },
+  {
+   "id": "REQ-N-007",
+   "title": "代码覆盖率目标（QG-07）",
+   "pri": "P1",
+   "status": "red",
+   "raw": "未实现（生效条件未触发：本版未取到第一次真实读数；关闭时点 R3 前，已在 §六 未决项 16 登记）"
+  },
+  {
+   "id": "REQ-N-008",
+   "title": "带检查点路径的性能目标（QG-13）",
+   "pri": "P2",
+   "status": "red",
+   "raw": "未实现（性能读数未取：v1 CLI 不暴露检查点路径，样本 ≥ 20 次的 P95 无法在 S1 取；前置硬条件已实测成立；关闭时点 S5 前，已在 §六 未决项 17 登记）"
+  }
+ ],
+ "chapters": [
+  {
+   "chap": "序",
+   "file": "语义世界-序.md",
+   "secs": [
+    {
+     "num": "序.1",
+     "title": "一、缺的是\"说法\"这一层",
+     "line": 3
+    },
+    {
+     "num": "序.2",
+     "title": "二、为什么这一层不能由参与方自己承担",
+     "line": 18
+    },
+    {
+     "num": "序.3",
+     "title": "三、主张：这一层由世界承担",
+     "line": 30
+    },
+    {
+     "num": "序.4",
+     "title": "四、这一层给的是什么",
+     "line": 42
+    },
+    {
+     "num": "序.5",
+     "title": "五、一句话",
+     "line": 54
+    }
+   ]
+  },
+  {
+   "chap": "一",
+   "file": "语义世界-第一章-缺的是什么.md",
+   "secs": [
+    {
+     "num": "1.1",
+     "title": "同一件事，三方不是一个意思",
+     "line": 5
+    },
+    {
+     "num": "1.2",
+     "title": "三方的\"意思\"是从哪来的",
+     "line": 17
+    },
+    {
+     "num": "1.3",
+     "title": "承载缺口：意思没有一处由大家共同依赖的地方",
+     "line": 29
+    },
+    {
+     "num": "1.4",
+     "title": "判定缺口：起了分歧，没有一处能裁",
+     "line": 39
+    },
+    {
+     "num": "1.5",
+     "title": "这两个缺口今天造成什么",
+     "line": 47
+    },
+    {
+     "num": "1.6",
+     "title": "已经统一的那一部分",
+     "line": 61
+    },
+    {
+     "num": "1.7",
+     "title": "别人的做法为什么不够",
+     "line": 78
+    }
+   ]
+  },
+  {
+   "chap": "三",
+   "file": "语义世界-第三章-为什么必须由共同的一层承担.md",
+   "secs": [
+    {
+     "num": "3.1",
+     "title": "多方同时在场时，意思只能由共同依赖的那一层承担",
+     "line": 5
+    },
+    {
+     "num": "3.2",
+     "title": "什么情况下这一层不必要",
+     "line": 37
+    },
+    {
+     "num": "3.3",
+     "title": "这一条今天有几分分量",
+     "line": 63
+    }
+   ]
+  },
+  {
+   "chap": "二",
+   "file": "语义世界-第二章-那一层是什么.md",
+   "secs": [
+    {
+     "num": "2.1",
+     "title": "那个位置",
+     "line": 5
+    },
+    {
+     "num": "2.2",
+     "title": "它为什么不能是库、协议、应用",
+     "line": 27
+    },
+    {
+     "num": "2.3",
+     "title": "三个名字",
+     "line": 47
+    },
+    {
+     "num": "2.4",
+     "title": "只有一种写法",
+     "line": 69
+    },
+    {
+     "num": "2.5",
+     "title": "一本账",
+     "line": 91
+    },
+    {
+     "num": "2.6",
+     "title": "读法可以有若干份",
+     "line": 113
+    },
+    {
+     "num": "2.7",
+     "title": "极小核心",
+     "line": 129
+    },
+    {
+     "num": "2.8",
+     "title": "它只固定意思的形式",
+     "line": 147
+    },
+    {
+     "num": "2.9",
+     "title": "一个说法要回答的七个问题",
+     "line": 165
+    },
+    {
+     "num": "2.10",
+     "title": "能装的话有三类",
+     "line": 197
+    },
+    {
+     "num": "2.11",
+     "title": "说了要送到",
+     "line": 219
+    }
+   ]
+  },
+  {
+   "chap": "五",
+   "file": "语义世界-第五章-今天做到几分.md",
+   "secs": [
+    {
+     "num": "5.1",
+     "title": "先说它做不到什么",
+     "line": 5
+    },
+    {
+     "num": "5.2",
+     "title": "两份记录对不对得上",
+     "line": 21
+    },
+    {
+     "num": "5.3",
+     "title": "没声明过的东西照样落账",
+     "line": 37
+    },
+    {
+     "num": "5.4",
+     "title": "系统还能强制到什么程度",
+     "line": 55
+    },
+    {
+     "num": "5.5",
+     "title": "可不可逆，两份配置对不上",
+     "line": 79
+    },
+    {
+     "num": "5.6",
+     "title": "每条结论对应的检验，今天跑是红是绿",
+     "line": 99
+    }
+   ]
+  },
+  {
+   "chap": "六",
+   "file": "语义世界-第六章-还没定的.md",
+   "secs": [
+    {
+     "num": "6.1",
+     "title": "\"同一件事\"还没有判定程序",
+     "line": 5
+    },
+    {
+     "num": "6.2",
+     "title": "判定的人不能是写它的人",
+     "line": 33
+    },
+    {
+     "num": "6.3",
+     "title": "这套名字的规矩还没有定",
+     "line": 59
+    },
+    {
+     "num": "6.4",
+     "title": "两件事的先后由谁定",
+     "line": 85
+    },
+    {
+     "num": "6.5",
+     "title": "每一格都有人读得到吗",
+     "line": 109
+    },
+    {
+     "num": "6.6",
+     "title": "三件是否充分",
+     "line": 127
+    },
+    {
+     "num": "6.7",
+     "title": "\"该不该干\"没有判据",
+     "line": 159
+    },
+    {
+     "num": "6.8",
+     "title": "这批\"还没定\"的事记在哪一格",
+     "line": 181
+    }
+   ]
+  },
+  {
+   "chap": "四",
+   "file": "语义世界-第四章-它怎么落到机器上.md",
+   "secs": [
+    {
+     "num": "4.1",
+     "title": "只有一个地方能写",
+     "line": 5
+    },
+    {
+     "num": "4.2",
+     "title": "谁被允许做什么",
+     "line": 23
+    },
+    {
+     "num": "4.3",
+     "title": "谁在说话由系统给出",
+     "line": 45
+    },
+    {
+     "num": "4.4",
+     "title": "读的那一份",
+     "line": 67
+    },
+    {
+     "num": "4.5",
+     "title": "外面发生的事怎么写成一条消息",
+     "line": 91
+    },
+    {
+     "num": "4.6",
+     "title": "怎么把话送到",
+     "line": 113
+    }
+   ]
+  }
+ ],
+ "judges": [
+  {
+   "sec": "5.1",
+   "conclusion": "能消灭\"查无此申请\"",
+   "check": "唯一写入路径加只追加账本，能否答出\"谁在何时改了哪个字段、前值是什么、因为哪一条\"",
+   "pass": "一条记录能答全这四项",
+   "result": "绿。写入口是编译期事实，带一段必须编译失败的用例（2026-09-27 读 world-core/src/lib.rs 第 39–63、143–213 行）；账本相关实测均可检出（2026-09-27，VM）",
+   "color": "green",
+   "line": 105
+  },
+  {
+   "sec": "5.1",
+   "conclusion": "消灭不了\"查无此后果\"",
+   "check": "世界外面产生的效果，能否被世界里再写一条记录撤回",
+   "pass": "有一本记外面效果的账，加一张对账表",
+   "result": "红。没有第二本账，也没有对账表；补偿记录撤不掉世界外面的效果",
+   "color": "red",
+   "line": 106
+  },
+  {
+   "sec": "5.1",
+   "conclusion": "消灭不了\"查无此人可担此责\"",
+   "check": "出事之后能否指出一个可担责的人",
+   "pass": "有归责与损失机制",
+   "result": "红。没有归责与损失机制；判定的人不能是写它的人，而第二个执行者不会出现",
+   "color": "red",
+   "line": 107
+  },
+  {
+   "sec": "5.2",
+   "conclusion": "两份记录对不对得上",
+   "check": "给两条来自不同读法的记录，机械判定它们是不是同一件事",
+   "pass": "判定能看内容，且两份由不同一方生成",
+   "result": "绿而无效。命令跑得通（world-core project check），只比头部四项（src/project/mod.rs 第 124 行），两份还是它自己渲染的（src/main.rs 第 394–397 行，2026-09-27 读）。按\"能不能证明\"判，这一格是红的",
+   "color": "amber",
+   "line": 108
+  },
+  {
+   "sec": "5.2",
+   "conclusion": "读的那一份每个格子都有人读得到",
+   "check": "每个已声明的字段至少有一份读法可读，缺格就报错",
+   "pass": "缺格即报错",
+   "result": "红。未实现",
+   "color": "red",
+   "line": 109
+  },
+  {
+   "sec": "5.3",
+   "conclusion": "没声明过的东西照样落账",
+   "check": "写入一个未声明的实体与一个未声明的字段",
+   "pass": "写入被拒",
+   "result": "红。rc=0，账本落笔，state --json 把它算进去（2026-09-27，VM）；concepts 在 world-core/src/ 零命中（2026-09-27 复核）",
+   "color": "red",
+   "line": 110
+  },
+  {
+   "sec": "5.3",
+   "conclusion": "说法改过一次之后，旧账还读不读得懂",
+   "check": "同一份账本跨越一次说法变更被读取，旧记录仍可判读",
+   "pass": "旧记录仍可判读",
+   "result": "未跑，判红。这一条要先有跨版本读取的实现",
+   "color": "red",
+   "line": 111
+  },
+  {
+   "sec": "5.4",
+   "conclusion": "强制力到哪里为止",
+   "check": "在被管者与管理者同机不同用户、世界以最高权限运行的形态下，逐条核九项保证",
+   "pass": "九项逐条有结论",
+   "result": "部分红。九项中拦得住 3 项、拦不住但看得见 2 项、拦不住 3 项、分情况 1 项（2026-09-27，VM；被管者 uid 1001；九项本轮已复跑，两遍结果一致，唯一变化是 #6 目录 mode 由\"此前是\"转为\"拦得住\"）",
+   "color": "half",
+   "line": 112
+  },
+  {
+   "sec": "5.4",
+   "conclusion": "谁能否掉这件事",
+   "check": "从\"我想做一件事\"到\"它发生\"，指出否决点在谁手里",
+   "pass": "能答出否决权在谁手里",
+   "result": "已答。否决权落在能改那份出厂清单文件的人手里；而那份文件被同一个用户改写后不留痕（2026-09-27，VM）",
+   "color": "red",
+   "line": 113
+  },
+  {
+   "sec": "5.4",
+   "conclusion": "能不能带着全部历史离开并独立复算",
+   "check": "带走全部账本，在别处独立复算出同一份状态",
+   "pass": "离开之后仍能独立复算",
+   "result": "未做，判红",
+   "color": "red",
+   "line": 114
+  },
+  {
+   "sec": "5.4",
+   "conclusion": "命令行入口的缺省身份是不是写在明处",
+   "check": "不写身份就敲一条命令，看用法提示里能不能读出自己用的是哪个身份",
+   "pass": "append 的第 4 个位置参数与它的缺省值都写在用法提示里",
+   "result": "绿。用法提示里 world://user 出现 2 处、可选参数 [actor] 出现 1 处（world-core/src/main.rs 第 20、22、45 行，2026-09-27 后读）；append 缺参数时 stderr 三行点明缺省身份（同文件第 332–337 行）。同行的另一半仍是红的：那个缺省主体是全权主体，可写任意对象（policy.json 第 28 行），\"不写身份＝最高授权\"这件事没有变",
+   "color": "green",
+   "line": 115
+  },
+  {
+   "sec": "5.5",
+   "conclusion": "可不可逆，两份配置对不上",
+   "check": "出厂配置之间的一致性：同一项能力的两个轴讲不讲得通，摩擦挂在哪个变量上",
+   "pass": "两处互校存在，且摩擦挂在动作的不可逆等级上",
+   "result": "红。闸读不到风险等级（src/gate.rs 第 44–48 行）；摩擦挂在执行者身份上（policy.json 第 32 行的 irreversible_actors，名单里只有 world://user），而那个人同时可写任意对象（同文件第 28 行）；两处无互校（2026-09-27 读配置与源码）",
+   "color": "red",
+   "line": 116
+  },
+  {
+   "sec": "5.5",
+   "conclusion": "载体上的撤销点被当成了世界可逆",
+   "check": "执行清单里留了撤销点的能力，世界里是不是也可逆",
+   "pass": "两个轴各自有结论，且互不冒充",
+   "result": "红。cap.d/ledger.compact.json 第 6 行写 \"undo\": \"before-each\"，policy.json 第 20 行写 \"reversible\": false；载体撤销撤的是文件系统字节（src/carrier/mod.rs 第 30–34 行），与世界状态无关，而没有任何一处把两件事分开核对（2026-09-27 读配置与源码）",
+   "color": "red",
+   "line": 117
+  },
+  {
+   "sec": "5.6附表",
+   "conclusion": "用现有说法表达三个陌生领域的真实任务",
+   "check": "新增的能力名 = 0",
+   "pass": "",
+   "result": "未跑，判红",
+   "color": "red",
+   "line": 123
+  },
+  {
+   "sec": "5.6附表",
+   "conclusion": "逐条说明各标准解决了哪一层、这里多解决了哪一层",
+   "check": "逐对象分列",
+   "pass": "",
+   "result": "半绿。表已覆盖十余个对象，未逐对象分列",
+   "color": "half",
+   "line": 124
+  },
+  {
+   "sec": "5.6附表",
+   "conclusion": "给出今天的接入与对齐成本，并预设宣布失败的数值",
+   "check": "数值已采集，阈值已写",
+   "pass": "",
+   "result": "未采集，判红。这条另有一个特点：在\"不干\"的世界里它同样满分，因为它判的是造出来的东西好不好",
+   "color": "red",
+   "line": 125
+  },
+  {
+   "sec": "5.6附表",
+   "conclusion": "给出\"从事情发生到它出现在读法上\"的延迟上界",
+   "check": "有上界",
+   "pass": "",
+   "result": "未跑，判红",
+   "color": "red",
+   "line": 126
+  }
+ ],
+ "tests": {
+  "tests/acceptance.rs": [
+   "tmpdir",
+   "ontology",
+   "policy",
+   "t1_append_then_read_back",
+   "t2_events_survive_restart",
+   "t3_partial_line_is_discarded",
+   "t4_seq_gap_refuses_to_start",
+   "t5_law_rejects_and_does_not_write",
+   "t6_bad_ontology_refuses_to_start",
+   "t7_read_model_is_disposable_and_reproducible",
+   "t8_read_model_refuses_broken_ledger",
+   "s1_digest",
+   "t9_gate_rejects_undeclared_capability_and_records_notice",
+   "t10_gate_adds_friction_for_irreversible_capability",
+   "t11_world_refuses_to_start_when_law_is_writable_by_others",
+   "t12_world_refuses_start_when_ledger_is_writable_by_others",
+   "t13_running_world_does_not_reread_policy",
+   "t17_rollback_is_an_appended_compensating_event",
+   "seed_world",
+   "t14_language_projection_matches_read_model",
+   "t15_visual_projection_is_human_readable_yet_auditable",
+   "t16_two_projections_are_same_source_and_vocab_change_is_detected"
+  ],
+  "tests/cli.rs": [
+   "tmpdir",
+   "manifest",
+   "run",
+   "check_args",
+   "as_refs",
+   "cli01_check_reports_ready_and_chain_status",
+   "cli02_after_append_check_reports_chained",
+   "cli03_require_chain_refuses_chainless_ledger",
+   "cli04_usage_error_exits_one",
+   "cli07_usage_string_discloses_default_actor",
+   "cli05_project_check_reports_same_source",
+   "cli06_require_chain_allows_empty_but_refuses_chainless_data"
+  ],
+  "tests/contract.rs": [
+   "tmpdir",
+   "ontology",
+   "policy",
+   "write_policy",
+   "valid_policy_json",
+   "c01_change_is_gated_and_cannot_smuggle_an_act",
+   "c02_every_required_envelope_field_is_enforced",
+   "c03_policy_load_rejects_every_malformed_shape",
+   "c04_ontology_load_rejects_missing_file_and_empty_families",
+   "c05_event_ids_are_unique_within_a_process",
+   "c06_incremental_apply_equals_full_fold",
+   "c07_second_writer_is_refused",
+   "c08_stale_lock_is_reclaimed",
+   "c09_symlinked_law_is_refused",
+   "c10_owner_assertion_detects_wrong_owner",
+   "c11_irreversible_is_owner_only_and_the_refusal_does_not_lie",
+   "c12_checkpoint_is_a_cache_and_disposable",
+   "c13_bad_checkpoints_are_refused",
+   "c14_channel_takes_identity_from_kernel_not_from_request",
+   "libc_uid",
+   "c15_errors_carry_machine_readable_codes",
+   "chained",
+   "three_events",
+   "c16_chain_detects_local_tampering",
+   "c17_chain_distinguishes_absent_and_mixed",
+   "c18_chain_cannot_detect_a_full_rewrite",
+   "c19_written_ledger_carries_a_verifiable_chain",
+   "c20_startup_refuses_a_tampered_ledger",
+   "c21_is_chained_reflects_reality",
+   "c22_file_always_ends_on_a_line_boundary",
+   "c23_notice_with_reserved_prefix_is_refused_for_outsiders",
+   "c23_notice_from_unlisted_actor_is_refused",
+   "c23_gate_notice_says_what_it_refused"
+  ],
+  "tests/perf.rs": [
+   "env_usize",
+   "ontology",
+   "policy",
+   "sandbox",
+   "synthesize",
+   "percentile",
+   "ms",
+   "report",
+   "qg05_full_replay_of_100k_events",
+   "qg02_crash_recovery_with_a_torn_tail",
+   "qg01_append_10k_without_loss_or_duplication"
+  ]
+ },
+ "req_map": {
+  "事件按序落账并可跨进程读回": [
+   "REQ-F-003",
+   "REQ-F-022"
+  ],
+  "同一本账同时只有一个写者": [],
+  "残缺的尾部被丢弃，`seq` 空洞拒绝启动": [
+   "REQ-F-005",
+   "REQ-F-004"
+  ],
+  "账本文件恒以行边界收尾": [
+   "REQ-F-003"
+  ],
+  "摘要链检出局部篡改，并如实声明其边界": [],
+  "回滚是追加补偿事件，不是改写历史": [
+   "REQ-F-014"
+  ],
+  "信封的必填字段被逐字段强制": [
+   "REQ-F-002",
+   "REQ-F-008"
+  ],
+  "三类话之外一律被拒": [
+   "REQ-F-008",
+   "REQ-F-027"
+  ],
+  "法律损坏或指向别处时拒绝启动": [
+   "REQ-F-007",
+   "REQ-N-003"
+  ],
+  "事件身份在进程内唯一": [],
+  "错误携带机器可读的错误码": [],
+  "每一个写动作都过门禁": [
+   "REQ-F-016",
+   "REQ-F-015"
+  ],
+  "`act` 的效果不能靠 `change` 偷渡": [
+   "REQ-F-015",
+   "REQ-F-016"
+  ],
+  "不可逆动作只允许白名单主体并加摩擦": [
+   "REQ-F-017"
+  ],
+  "门禁配置在被管者不可写的域": [
+   "REQ-F-015"
+  ],
+  "运行中的世界不重读策略": [],
+  "读模型是可丢弃的缓存": [
+   "REQ-F-010",
+   "REQ-F-011",
+   "REQ-F-012"
+  ],
+  "增量折叠等价于全量折叠": [
+   "REQ-F-011"
+  ],
+  "检查点是缓存，可丢弃且必须自洽": [
+   "REQ-F-021"
+  ],
+  "两份读法同源且可当场核对": [
+   "REQ-F-020"
+  ],
+  "语言投影与读模型逐项相等": [
+   "REQ-F-018",
+   "REQ-F-024"
+  ],
+  "视觉投影的排版是可审计契约": [
+   "REQ-F-019"
+  ],
+  "身份取自内核而非请求自称": [
+   "REQ-F-025"
+  ]
+ },
+ "cap_book": {
+  "ledger-integrity": [
+   "2.5",
+   "4.1",
+   "5.1"
+  ],
+  "envelope-validation": [
+   "2.4",
+   "2.7",
+   "2.8",
+   "2.10",
+   "4.5"
+  ],
+  "gate-enforcement": [
+   "4.2",
+   "5.4",
+   "5.5"
+  ],
+  "read-model": [
+   "2.6",
+   "4.4"
+  ],
+  "projections": [
+   "2.6",
+   "4.4",
+   "5.2"
+  ],
+  "channel-identity": [
+   "2.11",
+   "4.3"
+  ]
+ },
+ "book_gaps": [
+  {
+   "num": "4.6",
+   "title": "怎么把话送到",
+   "why": "投递与订阅推送在规格里零落点",
+   "srs": [
+    "REQ-F-023"
+   ],
+   "book": "第四章 4.6"
+  },
+  {
+   "num": "2.11",
+   "title": "说了要送到",
+   "why": "\"送到\"这一层的规格缺失",
+   "srs": [
+    "REQ-F-023"
+   ],
+   "book": "第二章 2.11"
+  },
+  {
+   "num": "5.1",
+   "title": "先说它做不到什么",
+   "why": "世界外面的效果账、归责机制无规格（能力上限，不是缺陷）",
+   "srs": [],
+   "book": "第五章 5.1"
+  },
+  {
+   "num": "5.3",
+   "title": "没声明过的东西照样落账",
+   "why": "本体 concepts 实体层：规格已写、实现零读取",
+   "srs": [
+    "REQ-F-030"
+   ],
+   "book": "第五章 5.3"
+  },
+  {
+   "num": "5.5",
+   "title": "可不可逆，两份配置对不上",
+   "why": "可逆性判定与两处互校无规格",
+   "srs": [
+    "REQ-F-017"
+   ],
+   "book": "第五章 5.5"
+  },
+  {
+   "num": "2.9",
+   "title": "一个说法要回答的七个问题",
+   "why": "\"什么单位\"这一格今天没有位置可填",
+   "srs": [
+    "REQ-F-028"
+   ],
+   "book": "第二章 2.9"
+  }
+ ],
+ "findings": [
+  {
+   "cap": "envelope-validation",
+   "sev": "严重",
+   "n": "E1",
+   "title": "错误码那条的 Scenario 与证据错位：说「四类路径」，证据里没有一条账本路径",
+   "detail": "spec:78 写「触发法律、门禁、账本、读模型四类失败路径」；c15 的 7 条码来源（contract.rs:714/718/728/738/748/758/767）无一条账本路径——全仓唯一账本码断言在 tests/cli.rs:155，而 check.sh 从不跑 cli.rs。且实测法律类存在无码出口：--policy pol-v2.json check → rc=2，报错是散文（gate.rs:115）。项目文档已自认：WC-IC-001:350-352「⚠ 无码」。"
+  },
+  {
+   "cap": "envelope-validation",
+   "sev": "严重",
+   "n": "E2",
+   "title": "t5 的证据行写「check.sh 步骤 ③」，而那一步根本不跑 t5",
+   "detail": "check.sh:98 只跑 --test acceptance -- t1_ t2_ t7_（原样复跑：3 passed / 14 filtered out）；--list 确认 t5 存在但被过滤。⇒ 这条要求的唯一证据在出厂单入口里从不运行。对照 c02 标注的步骤 ③b 是真的（跑整个 contract，25 passed）。"
+  },
+  {
+   "cap": "envelope-validation",
+   "sev": "重要",
+   "n": "E3",
+   "title": "「法律损坏或指向别处就拒启」比证据宽三处（实现都拒，只是没有载体）",
+   "detail": "① 策略文件缺失：c03 五类里没有「缺失」，全仓无载体——实测 rc=2；② 本体字段形状非法：c04 只测缺文件与空 families——实测删 envelope 段 rc=2（Ontology.NoEnvelope）；③ 本体软链：c09 只测策略（WC-HLD-001:1070 自认），实测本体软链 rc=2。"
+  },
+  {
+   "cap": "envelope-validation",
+   "sev": "重要",
+   "n": "E4",
+   "title": "「不存在静默接受一个畸形策略的路径」这句不成立",
+   "detail": "spec:52-53 是全称；而同一用例 contract.rs:207 正面断言「多余键应被忽略，而不是拒载」，gate.rs:129-133 明说未知键一律忽略。另 Policy::load 有 12 条拒载出口，只断言了 5 条。"
+  },
+  {
+   "cap": "envelope-validation",
+   "sev": "一般",
+   "n": "E5",
+   "title": "t5 没有断言 Scenario 的第二句「状态未被改动」",
+   "detail": "spec:30 要求状态未被改动；t5 全函数无 read_model()（对照 contract.rs:87-92 项目知道怎么写这条断言）。"
+  },
+  {
+   "cap": "envelope-validation",
+   "sev": "一般",
+   "n": "E6",
+   "title": "c02 里 world 字段那一轮的「报出字段名」恒真",
+   "detail": "contract.rs:121 断言 msg.contains(\"MissingField\") && msg.contains(field)，而 ontology.rs:32 的前缀自带 ext.world. ⇒ field==\"world\" 时必真。其余 7 个字段不受影响。"
+  },
+  {
+   "cap": "envelope-validation",
+   "sev": "提示",
+   "n": "E7",
+   "title": "三条证据对 umask 敏感；另有两处静默跳过",
+   "detail": "umask 000 下 c03/c04/c09 全红（rc=101），红因与主题无关（fixture mode 随 umask，报「权限为 666，对 group/other 可写」）。静默跳过两处：#![cfg(not(unix))] 使 c09 在非 Unix 上「0 项 + rc=0」；guard.rs:69-70 取不到目录属性即跳过整条目录检查。"
+  },
+  {
+   "cap": "envelope-validation",
+   "sev": "提示",
+   "n": "E8",
+   "title": "归档 tasks.md 给本能力列了 6 项，实物只有 5 条",
+   "detail": "tasks.md:6 把「行边界」列在 envelope-validation 下，而它实际在 openspec/specs/ledger-integrity/spec.md:67。"
+  },
+  {
+   "cap": "ledger-integrity",
+   "sev": "严重",
+   "n": "L1",
+   "title": "规格把「v1 无链账本仍可打开」写成已成立，而项目自己把这条路径登记为【高】级自杀缺陷",
+   "detail": "spec:111 与 contract.rs:1026 把「v1 兼容」写成已成立行为；WC-SCMP-001:2537「### K-3【高】在 v1（无链）账本上做一次正常 append 会把世界锁死 —— 升级路径自杀」。且归档 change 的七项排除清单从未点名 K-3（全 change 检索 K-3/K-4/K-5/SCMP = 0 命中），而 proposal.md:16-17 自称「把不成立、已知残余风险如实登记在规格里」。"
+  },
+  {
+   "cap": "ledger-integrity",
+   "sev": "严重",
+   "n": "L2",
+   "title": "单写者那条的措辞超出实现前提：锁只记 pid 号",
+   "detail": "spec:29-30 写无条件；实现 ledger.rs:175 只写 std::process::id()，存活判据是 /proc/<pid> 存在（:182-184）⇒ 前提＝同机＋同 PID 命名空间＋/proc 可读。共享存储或独立 PID 命名空间下，存活写者的锁会被当陈旧锁回收（出现两个写者）。反向已实测：pid 号被复用时持有者已不存在却不回收（假锁死，rc=2）。"
+  },
+  {
+   "cap": "ledger-integrity",
+   "sev": "重要",
+   "n": "L3",
+   "title": "「解析失败的最后一行被丢弃」与实际判据不是一回事，且完整事件会被静默物理删除",
+   "detail": "实现按最后一个 \\n 截断（ledger.rs:276-289，直接 set_len 落盘），不看能否解析。实测：只去掉末尾换行（该行仍是完整合法 JSON）⇒ check 报「条数=1」、rc=0，还打印「✅ 有摘要链」；随后一次 append 把该行物理删除并复用 seq。ledger.rs:385 自述「启动『截到最后一个 \\n』会静默删掉它们」——摘链那条边界要求如实声明，这条没有。"
+  },
+  {
+   "cap": "ledger-integrity",
+   "sev": "重要",
+   "n": "L4",
+   "title": "t2 证据层级错位：规格写「新进程」，测试是同进程 drop + reopen",
+   "detail": "spec:23 写「以新进程打开」；acceptance.rs:88-104 实为同进程 drop 后 reopen。全仓只有 cli.rs:20/39 起新进程。真正合格的证据（TC-070，tools/s1_sys_probe2.sh:379-384「两次独立进程读回的事件序列逐字节相同」）没被引用。"
+  },
+  {
+   "cap": "ledger-integrity",
+   "sev": "重要",
+   "n": "L5",
+   "title": "t1 的「逐字段一致」没有被断言",
+   "detail": "acceptance.rs:68-80 只比 len/seq/world/kind/body.before；actor、id、at、flags、body.subject、body.path、body.after 一个都没比。"
+  },
+  {
+   "cap": "ledger-integrity",
+   "sev": "一般",
+   "n": "L6",
+   "title": "MixedChain 在启动路径被拒，没有任何自动化断言",
+   "detail": "lib.rs:105 load_chain()? 会拒，但仓库内 MixedChain 只出现在 contract.rs:845（注释）/879（c17 函数级）与两处 tools 注释；系统级证据只在 docs/理论/专家评审/复跑-九项保证-2026-09-27-VM.md:130-140 手工留档。与 L1 同一条路径。"
+  },
+  {
+   "cap": "ledger-integrity",
+   "sev": "一般",
+   "n": "L7",
+   "title": "R6 把「系统实现回滚」写成能力，而系统里没有回滚操作",
+   "detail": "spec:116/120；src/ 全目录无回滚 API 或子命令（rollback_after_failed_write 是 I/O 回滚；carrier/mod.rs:32-34 明说载体撤销「不是世界状态」）；t17 由测试自己再提交一条互换 change（acceptance.rs:563-569）。SRS:257 的口径更准：「回滚通过追加一条普通 change 完成」。"
+  },
+  {
+   "cap": "ledger-integrity",
+   "sev": "一般",
+   "n": "L8",
+   "title": "两处低危：注释误述文档现状、check.sh 未给路径",
+   "detail": "contract.rs:1039-1040 说「纯粹的 I/O 失败注入…本项目尚无工具」，而 WC-TP-001:79 已写「部分闭合（2026-09-27）…U20–U22 实测三条分支」（实跑 3 passed rc=0），且这是 R4 在写失败下最强的证据、规格未引；spec:19/25/36 只写 check.sh，而仓里有两个同名脚本（根 check.sh 完全不碰 world-core）。"
+  },
+  {
+   "cap": "ledger-integrity",
+   "sev": "严重",
+   "n": "L9",
+   "title": "基线自己的验证口径只有「名字存在性」——这就是 2–6 类问题从未被核过的原因",
+   "detail": "tasks.md:16/17/22、design.md:121 逐字把核对写成「证据行指向真实存在的测试名」「6 份规格 / 40 条证据 / 0 条未命中」。名字存在 ≠ 断言的真是那件事。本轮六路审计抓到的正是这个差值：机械命中 40/40，而语义相符远低于此。"
+  },
+  {
+   "cap": "channel-identity",
+   "sev": "严重",
+   "n": "C1",
+   "title": "规格写「采用内核身份、忽略自称」，证据断言的却是「拒绝」",
+   "detail": "spec:16「世界采用内核给出的身份，请求正文里的自称被忽略」；contract.rs:668-670 实为 expect_err + contains(\"Impersonation\") + last_seq 不变（即拒绝且不落笔）。SRS:266/268/383、RTM:29/31 三处都写「拒绝且不落笔」⇒ 规格与证据、文档三方差一层意思。"
+  },
+  {
+   "cap": "channel-identity",
+   "sev": "严重",
+   "n": "C2",
+   "title": "「从内核提供的连接元数据中取得身份」不成立：实现不取任何连接凭证",
+   "detail": "spec:11 写「连接元数据」；channel.rs:256-257 自述「不需要（也无法用）peer_cred」，身份＝套接字文件的属主/权限（channel.rs:187-200）。WC-LLD-001:140、SRS:268、WC-FMT-001:1023 三处文档口径与此一致，唯独规格写成了连接元数据。"
+  },
+  {
+   "cap": "channel-identity",
+   "sev": "严重",
+   "n": "C3",
+   "title": "「身份取自内核」对 root 不成立，而这条边界规格通篇未登记",
+   "detail": "实测（套接字 actor=world://agent/1、uid=1001、mode=600）：uid 1001 连上→落笔 agent/1；root 连上→同样落笔 agent/1。只有 root「自称」world://user 才被拒 ⇒ 该检查只抓自称、不抓谁连上。书第五章:69 已登记「最高权限的用户可以连任何套接字，这一项对它无效」。"
+  },
+  {
+   "cap": "channel-identity",
+   "sev": "重要",
+   "n": "C4",
+   "title": "被引证据绕过了它要验证的机制本身",
+   "detail": "contract.rs:642 用 std UnixListener::bind，没走 channel::bind（main.rs:578-581 自述这一绕过）；真正执行该机制的是 tools/system_acceptance.sh:301-351（㉒–㉖），由 check.sh 步骤⑦执行——而规格引的是步骤③b。"
+  },
+  {
+   "cap": "channel-identity",
+   "sev": "重要",
+   "n": "C5",
+   "title": "写窄：四项已实现行为规格零落点",
+   "detail": "① 缺省拒绝 ext.world.Channel.NotConfigured（main.rs:604-615，实测 rc=2）② 自称与映射一致时被接受 ③ 拒绝时先回一行 {\"ok\":false,...} 再报错（channel.rs:279；SRS REQ-F-023 反例① 明确要求它）④ 空 listeners 拒载（channel.rs:89-94）。"
+  },
+  {
+   "cap": "channel-identity",
+   "sev": "一般",
+   "n": "C6",
+   "title": "断言里有两处装饰性成分",
+   "detail": "contract.rs:648 判据1 的请求根本没有 actor 字段 ⇒ 证明不了「自称被忽略」；libc_uid() 读不到 /proc 时静默返回 0（:685/689/693），而 expect.uid 在 serve_once 路径上从不被读 ⇒ 注释「同 uid 连接」（:644）无断言支撑。"
+  },
+  {
+   "cap": "gate-enforcement",
+   "sev": "严重",
+   "n": "G1",
+   "title": "规格把书稿判红的「摩擦落点」反转写成绿",
+   "detail": "书稿 5.5:89 逐字「摩擦本该挂在动作的不可逆等级上…今天它挂在执行者的身份上」判红；spec:36 却写「SHALL 对声明为不可逆的能力追加摩擦」。实现 gate.rs:287-293 站书稿一边：不可逆只决定要不要看身份，加不加摩擦由身份决定。"
+  },
+  {
+   "cap": "gate-enforcement",
+   "sev": "严重",
+   "n": "G2",
+   "title": "「只允许白名单主体」与「加摩擦」在出厂配置下不可能同时为真",
+   "detail": "policy.json:32 的 irreversible_actors 只有 world://user 一个；实测该唯一成员执行 reversible:false 的 ledger.compact ⇒ APPEND_RC=0、账本只 1 行 act、gate.* 通告 0 条（换 agent/1 才 RC=2 并落 1 条 awaiting-approval）。缺陷台账 D-20 已登记此事实。"
+  },
+  {
+   "cap": "gate-enforcement",
+   "sev": "严重",
+   "n": "G3",
+   "title": "书稿判红的三条依据里，两条规格完全沉默——正是基线自己排除掉的东西",
+   "detail": "书稿 5.5:93 判「闸读不到风险等级」：openspec/specs/ 下 risk|风险 零命中、gate.rs 零命中；书稿 5.6:117 判「载体可逆与世界可逆无互校」：规格通篇不提。而本基线 design.md:114 逐字把「可逆性判定的落地（两处配置对不上，判红）」列为明确不入基线，tasks.md:41-42 却用「测试函数名误报」把它对账掉了。"
+  },
+  {
+   "cap": "gate-enforcement",
+   "sev": "重要",
+   "n": "G4",
+   "title": "一处张冠李戴：c23_gate_notice_says_what_it_refused 走的是不可逆路径",
+   "detail": "contract.rs:1152 断言的是 gate.awaiting-approval（不可逆路径，:1167），不是「保留前缀通告被拒」路径；而被引的 c23_notice_with_reserved_prefix 只查错误码、不查 refused 指纹。实测该路径流水确实带 refused=fnv1a64:a3fd5c16915cd6e1——行为是真的，但没有任何断言为它变红。"
+  },
+  {
+   "cap": "gate-enforcement",
+   "sev": "一般",
+   "n": "G5",
+   "title": "规格写宽：说「属主与权限」，实现只看 mode 位、且属主断言默认不跑",
+   "detail": "spec:54-55「启动时检查法律与账本的属主与权限」；guard.rs:30-31 逐字「本模块只看 mode 位，不看属主」、:125-126「没人传 expected_uid 时它不会运行」。"
+  },
+  {
+   "cap": "gate-enforcement",
+   "sev": "一般",
+   "n": "G6",
+   "title": "漏了「通告的闸」与「门禁不可绕过的部分实现」边界",
+   "detail": "lib.rs:270/280 逐字「任何主体可以写任何通告」「任何人都能替世界说」（D-13）无 Requirement 级条目；SRS:258 / RTM:16 记「部分实现…祖先链遍历、通道层与 Landlock 自缚未做」的边界规格未写。另 spec:19 的「check.sh 步骤 ③」引用错（check.sh:98 只跑 t1_ t2_ t7_）。"
+  },
+  {
+   "cap": "projections",
+   "sev": "严重",
+   "n": "P1",
+   "title": "「同源」那条判据与命令实际做的事不是一件事，且近乎恒真",
+   "detail": "spec:18 的 THEN 是「两份投影首行逐字一致」；证据 cli.rs:236-241 只断言 rc==0 ＋ stdout 含「同源」「✅」。而 main.rs:396/407-410 两份投影共用同一个 state 与 vocab ⇒ mod.rs:126-145 的三个不等分支在 project check 里结构上不可达，对任何输入都只会绿。"
+  },
+  {
+   "cap": "projections",
+   "sev": "严重",
+   "n": "P2",
+   "title": "规格把项目自评为「绿而无效／红」的能力写成了「已成立」",
+   "detail": "spec:10-13 只写正向义务、一字不提边界；台账 v0.5:421/431 判「绿而无效（只比头部四项、不比内容；自己渲染两份再自己比，从未比过两份由不同一方独立生成的投影）」，第四章:192 直接判红，RTM:21 记「该用例尚未实现」。"
+  },
+  {
+   "cap": "projections",
+   "sev": "重要",
+   "n": "P3",
+   "title": "被引证据 cli05 不在规格并列指出的出厂步骤上",
+   "detail": "spec:19 写「（check.sh 步骤 ④）」；但 check.sh 全文不跑 --test cli（:98 只跑 t1_ t2_ t7_、:103 只跑 contract）⇒ bash check.sh 全绿的那次运行里 cli05 一次都没执行。"
+  },
+  {
+   "cap": "projections",
+   "sev": "重要",
+   "n": "P4",
+   "title": "视觉投影「与读模型逐项相等」已实现、已测、SRS 有判据，规格里没有任何条目",
+   "detail": "spec:29 只限定「语言投影 SHALL 由读模型派生」；而 acceptance.rs:674-679 的 t15 实断言视觉投影逐项相等（SRS REQ-F-019 判据④同款）。规格 Purpose 说「只能省略不能添加」，Requirement 没落。"
+  },
+  {
+   "cap": "projections",
+   "sev": "一般",
+   "n": "P5",
+   "title": "R2 措辞自相张力，且与 SRS 的 P0 条目口径不一",
+   "detail": "spec:29-30 主句要求「完全相等」，括注说「只能省略」（互相不容）；SRS:267（REQ-F-024，P0）的口径是包含关系 P ⊆ S。同一件事三处三个强度。"
+  },
+  {
+   "cap": "projections",
+   "sev": "一般",
+   "n": "P6",
+   "title": "R3 只写 2 条排版规则，审计器实际执行 11 条契约 / 12 个变异",
+   "detail": "spec:40-41 只列「2 空格主体行 / 6 空格字段行」两条；visual_layout_audit.py:15-32 列了契约 1–11（分隔线 44 个 U+2500、摘要行格式、空状态恰 4 行、字段行不得先于主体行…），12 个变异里多个落在规格没写的契约上。"
+  },
+  {
+   "cap": "projections",
+   "sev": "提示",
+   "n": "P7",
+   "title": "两条恒真断言与过时行号",
+   "detail": "s1_sys_probe2.sh:372 用同一个命令替换比自身（恒等），标签却写「自报同源」；台账三处引 src/main.rs:394-397，而「check」分支现在在 :407-410（行号漂移）。"
+  },
+  {
+   "cap": "read-model",
+   "sev": "严重",
+   "n": "R1",
+   "title": "检查点 CLI 已接线，三份受控文档仍写「v1 CLI 从不读快照」",
+   "detail": "main.rs:28-30/153 已把 checkpoint write|verify|resume 接进生产 CLI；WC-RTM-001.csv:22、WC-SRS-001:921、WC-UT-001:54 仍断言不存在该路径。这条「零生产调用者」正是给 fsync 缺陷降级的唯一理由。"
+  },
+  {
+   "cap": "read-model",
+   "sev": "严重",
+   "n": "R2",
+   "title": "规格写宽：「账本内容损坏 ⇒ 拒绝产出」，而末尾半行是静默丢弃",
+   "detail": "spec:22-23 用全称量词；ledger.rs:276-279 明确丢弃末尾半行，t3_partial_line_is_discarded 正面背书该行为。"
+  },
+  {
+   "cap": "read-model",
+   "sev": "重要",
+   "n": "R3",
+   "title": "「检查点必须自洽」在规格里无定义、在断言里无落点",
+   "detail": "spec:37 标题承诺「自洽」，正文与两条 Scenario 零定义；checkpoint.rs 的 verify 只查 base_seq 与 digest。"
+  },
+  {
+   "cap": "read-model",
+   "sev": "重要",
+   "n": "R4",
+   "title": "CLI 直接暴露未核验续算路径，模块文档承诺「核验不通过即拒绝使用」",
+   "detail": "main.rs:534-542 → checkpoint.rs:173 resume_unverified；checkpoint.rs:14 逐字「核验不通过即拒绝使用」，:29-30 自认「不核验的路径会吃下篡改内容」。"
+  },
+  {
+   "cap": "read-model",
+   "sev": "一般",
+   "n": "R5",
+   "title": "Checkpoint::FORMAT 版本不符零断言，规格未登记版本约束",
+   "detail": "checkpoint.rs:94 的 BadFormat 分支存在但无测试；WC-SCMP-001:535 把版本约束列为缓存格式的唯一约束。"
+  },
+  {
+   "cap": "read-model",
+   "sev": "一般",
+   "n": "R6",
+   "title": "实现有、规格没有的行为至少 3 项",
+   "detail": "① 确定性=逐字节可复现（readmodel.rs:40-42）② 末尾半行丢弃不算损坏 ③ 检查点格式版本约束。"
+  },
+  {
+   "cap": "read-model",
+   "sev": "一般",
+   "n": "R7",
+   "title": "规格 Purpose 自称「唯一自动化检验所在」，与同仓文档冲突",
+   "detail": "spec:4-5；同仓另有摘要链核验（c19/c20/c21/cli02）与投影同源核对两条独立检验。"
+  },
+  {
+   "cap": "read-model",
+   "sev": "一般",
+   "n": "R8",
+   "title": "REQ-N-008（带检查点路径的性能目标）无任何断言，规格未作范围外声明",
+   "detail": "WC-RTM-001.csv:40 状态「未实现」；tests/perf.rs 三条全部 #[ignore]，无一条测带检查点续算。"
+  },
+  {
+   "cap": "read-model",
+   "sev": "提示",
+   "n": "R9",
+   "title": "证据链无机械门禁：改一个测试名，规格不会变红",
+   "detail": "tools/doc_integrity.py 的受控清单里 openspec 零命中——正是本 change 要补的 spec_bridge.py 那一条。"
+  },
+  {
+   "cap": "read-model",
+   "sev": "提示",
+   "n": "R10",
+   "title": "t8 用 State::fold 直喂向量，使 SeqGap 检查在生产路径上不可达",
+   "detail": "账本层 ledger.rs:304 更早拦截；不是缺陷，是防线冗余，但读者会误以为是端到端验证。"
+  }
+ ],
+ "gaps_missing_req": [
+  {
+   "cap": "channel-identity",
+   "req": "通道身份的实际保证与它的边界",
+   "line": 43,
+   "file": "openspec\\specs\\channel-identity\\spec.md"
+  },
+  {
+   "cap": "envelope-validation",
+   "req": "事件身份在进程内唯一",
+   "line": 115,
+   "file": "openspec\\specs\\envelope-validation\\spec.md"
+  },
+  {
+   "cap": "envelope-validation",
+   "req": "错误携带机器可读的错误码",
+   "line": 133,
+   "file": "openspec\\specs\\envelope-validation\\spec.md"
+  },
+  {
+   "cap": "envelope-validation",
+   "req": "错误码契约的已知边界",
+   "line": 165,
+   "file": "openspec\\specs\\envelope-validation\\spec.md"
+  },
+  {
+   "cap": "gate-enforcement",
+   "req": "运行中的世界不重读策略",
+   "line": 156,
+   "file": "openspec\\specs\\gate-enforcement\\spec.md"
+  },
+  {
+   "cap": "gate-enforcement",
+   "req": "闸读不到风险等级，且载体可逆与世界可逆无互校",
+   "line": 178,
+   "file": "openspec\\specs\\gate-enforcement\\spec.md"
+  },
+  {
+   "cap": "gate-enforcement",
+   "req": "通告的闸，以及门禁不可绕过的部分实现边界",
+   "line": 224,
+   "file": "openspec\\specs\\gate-enforcement\\spec.md"
+  },
+  {
+   "cap": "ledger-integrity",
+   "req": "同一本账同时只有一个写者",
+   "line": 56,
+   "file": "openspec\\specs\\ledger-integrity\\spec.md"
+  },
+  {
+   "cap": "ledger-integrity",
+   "req": "摘要链检出局部篡改，并如实声明其边界",
+   "line": 160,
+   "file": "openspec\\specs\\ledger-integrity\\spec.md"
+  },
+  {
+   "cap": "ledger-integrity",
+   "req": "无链账本的升级路径边界",
+   "line": 253,
+   "file": "openspec\\specs\\ledger-integrity\\spec.md"
+  },
+  {
+   "cap": "ledger-integrity",
+   "req": "承诺与证据的绑定强度",
+   "line": 304,
+   "file": "openspec\\specs\\ledger-integrity\\spec.md"
+  },
+  {
+   "cap": "projections",
+   "req": "出厂同源命令的判据边界",
+   "line": 127,
+   "file": "openspec\\specs\\projections\\spec.md"
+  },
+  {
+   "cap": "projections",
+   "req": "视觉投影与读模型逐项相等",
+   "line": 182,
+   "file": "openspec\\specs\\projections\\spec.md"
+  },
+  {
+   "cap": "read-model",
+   "req": "读模型是\"一个真相\"的检验面之一",
+   "line": 133,
+   "file": "openspec\\specs\\read-model\\spec.md"
+  },
+  {
+   "cap": "read-model",
+   "req": "带检查点路径的性能目标不在本基线的承诺范围内",
+   "line": 193,
+   "file": "openspec\\specs\\read-model\\spec.md"
+  }
+ ],
+ "gaps_uncovered_srs": [
+  {
+   "id": "REQ-F-023",
+   "title": "投递、应答与收件人",
+   "pri": "P1",
+   "status": "half",
+   "raw": "部分实现（通道身份 + 一行应答已实现并实测 c14；to 的投递与请求应答配对字段未实现）"
+  },
+  {
+   "id": "REQ-F-026",
+   "title": "通道资源边界",
+   "pri": "P1",
+   "status": "red",
+   "raw": "未实现（四个边界一个都没有；四个数值为【候选】，须人工确认后 TC-045 方可实现）"
+  },
+  {
+   "id": "REQ-F-029",
+   "title": "未知旗标必须忽略（与\"未知家族拒绝\"对偶）",
+   "pri": "P1",
+   "status": "red",
+   "raw": "未实现（此前零需求、零用例；实现只有一行注释。反例(b)的阻塞原因 = 本体 flags 为空数组这一实测边界，不是\"用例编号不存在\"；TC-048 载于 tools/s1_sys_probe.sh（载体订正（2026-09-27，承 R1 二轮席 独立评审席 的实测）：此前误写 tools/system_acceptance.sh，该文件全文只含 TC-037–TC-040），本轮已落笔并实测，见 §五 处置表）"
+  },
+  {
+   "id": "REQ-F-030",
+   "title": "本体：极小核心 + 命名空间扩展",
+   "pri": "P1",
+   "status": "half",
+   "raw": "部分实现（结构事实上如此且判据 ① 可实测；判据 ②③ 无实现、无用例）"
+  },
+  {
+   "id": "REQ-F-031",
+   "title": "trace（信封因果字段）保留为需求",
+   "pri": "P1",
+   "status": "half",
+   "raw": "部分实现 —— 判据 (1) 已实测成立；判据 (2)(3)(4)(5) 依赖透传，三层的可核事实为：Ontology::validate 只遍历必填字段（src/ontology.rs:157/:160/:192）、Ledger 对整条事件整值序列化（src/ledger.rs::append）、门禁与读模型不读 trace（grep -rn '\"trace\"' src/ tests/ 零命中，见 §七）⇒ 三层都不会拦它；⚠ 但\"带 trace 落笔\"当前没有公开入口——World::commit 的签名只有 kind/actor/body（src/lib.rs:133），CLI append 亦然（src/main.rs:255/:279）⇒ 判据 (2)(3) 的端到端可执行验证面当前缺失，标 【待验证】；判据 (6) 为已声明的 v1 不担保项。承担用例拆为三段（改挂留痕，202"
+  },
+  {
+   "id": "REQ-N-005",
+   "title": "可度量的质量目标",
+   "pri": "P0",
+   "status": "red",
+   "raw": "未实现（数值待人工，见 §6）"
+  },
+  {
+   "id": "REQ-N-006",
+   "title": "投影质量目标（同源率 / 事实可回溯率）",
+   "pri": "P1",
+   "status": "red",
+   "raw": "未实现（数值待人工，见 §6 未决项 8）"
+  },
+  {
+   "id": "REQ-N-007",
+   "title": "代码覆盖率目标（QG-07）",
+   "pri": "P1",
+   "status": "red",
+   "raw": "未实现（生效条件未触发：本版未取到第一次真实读数；关闭时点 R3 前，已在 §六 未决项 16 登记）"
+  },
+  {
+   "id": "REQ-N-008",
+   "title": "带检查点路径的性能目标（QG-13）",
+   "pri": "P2",
+   "status": "red",
+   "raw": "未实现（性能读数未取：v1 CLI 不暴露检查点路径，样本 ≥ 20 次的 P95 无法在 S1 取；前置硬条件已实测成立；关闭时点 S5 前，已在 §六 未决项 17 登记）"
+  }
+ ],
+ "counts": {
+  "caps": 6,
+  "reqs": 33,
+  "scns": 59,
+  "evs": 65,
+  "srs": 39,
+  "judges": 17,
+  "booksecs": 46
+ }
+}
