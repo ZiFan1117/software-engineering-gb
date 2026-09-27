@@ -56,18 +56,27 @@
 
 ## 8. 可逆性判定与两处配置互校〔无号〕
 
-- [ ] 8.1 闸读出风险等级（`gate.rs` 今天读不到，书第五章 5.5 判红）
-      **验收**：新增测试，断言按风险等级分流；删掉读取即变红
-- [ ] 8.2 载体可逆与世界可逆**互校**：两处不一致即拒启（今天无任何检查）
-      **验收**：造一份 `undo` 与 `reversible` 冲突的出厂配置 ⇒ 必须被拒
-- [ ] 8.3 摩擦落点改到动作的不可逆等级上（今天挂在执行者身份上）
-      **验收**：新增测试，断言"同一主体对不可逆动作必加摩擦"；改回按身份即变红
+- [x] 8.1 闸读出风险等级——**已落地**（2026-09-27）：`world-core/src/gate.rs:73` `pub risk: Option<CarrierRisk>,`、
+      `:443` 从载体清单装载；断言 `world-core/tests/atom_reversibility.rs::a03_gate_reads_the_risk_level_of_the_factory_config`；
+      **变异证明**：删掉 `gate.rs:443` ⇒ a03/a04/a05 变红（执行者实测的变异矩阵 m2）
+- [x] 8.2 两处**互校**、不一致即拒启——**已落地**：`gate.rs:259 fn cross_check_reversibility`，冲突返
+      `ext.world.Gate.ReversibilityMismatch` 且**不建账本**；断言 `atom_reversibility.rs::a01_conflicting_reversibility_refuses_to_start`
+      （该用例末行 `assert!(!lp.exists(), …)`）；**变异证明**：`:271-273` 冲突分支恒 `continue` ⇒ a01 变红（m1）
+      **注**：互校的判据按实现是 `risk==high || confirm==required` 导出载体侧可逆性，**`undo` 不参与**（书 §5.5「两个轴各自成立」）
+- [x] 8.3 摩擦落点改到**动作的不可逆等级**上——**已落地**：`gate.rs:574-582`（`filter(|c| !c.reversible)` ⇒ `Friction`），
+      旗标随 `act` 落账（`event.rs:34 FLAG_FRICTION`）；断言 `atom_reversibility.rs::a04`（逐字断言 `flags` 含 `gate.friction:high`）
+      与 `::a05`（白名单外的拒绝流水含等级）；**变异证明**：`:576` 换成按 `irreversible_actors` 判 ⇒ a04 变红（m3）
 
 ## 9. 声明以外的字段不许落账〔无号〕
 
-- [ ] 9.1 写入侧按 `ontology.json` 的 `concepts` 校验实体与字段（`concepts` 今天在 `src/` 零读取）
-      **验收**：写一条未声明的实体、一条未声明的字段 ⇒ 两条都必须被拒
-- [ ] 9.2 读模型侧的缺格行为（缺格即报错，今天未实现）
+- [x] 9.1 写入侧按 `concepts` 校验实体与字段——**已落地**：`world-core/src/ontology.rs:293 pub fn check_concepts`，
+      挂在 `Ontology::validate` 末尾（唯一写入口 `World::commit` 落笔前必过）；断言 `tests/atom_declared_only.rs::b01`（未声明实体 rc=2 ＋ 账本 0 行）、
+      `::b02`（未声明字段同）、`::b03`（**已声明照落**＝防恒红）、`::b05`（书 §5.3 那条 CLI 命令端到端）；
+      **变异证明**：`ontology.rs:294` 后加 `return Ok(())` ⇒ b01/b02/b05 变红而 b03/b04/b06 仍绿（m5）
+      **★ 仍在册的边界（不许被读成"合上了"）**：**裸主体**（`world://<名字>`，无实例段）**仍可落账**——
+      `ontology.rs:280-292` 自己写明"在裸主体那一半仍未成立"；`b04` 把它立成登记项（谁合上它，b04 会红）
+- [ ] 9.2 读模型侧的缺格行为（缺格即报错）——**仍未实现**（本组唯一未落地的一条）：
+      落地后另立 `REQ-F-032` 的用例（`TC-077`），**本件不代它勾**
       **验收**：新增测试，断言缺格即拒且错误可读
 
 ## 11. 书里零落点的三处（**2026-09-27 补立**，此前连规格都没有）
