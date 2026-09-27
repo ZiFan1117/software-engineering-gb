@@ -26,6 +26,16 @@ pub enum Violation {
     UnknownKind {
         kind: String,
     },
+    /// **类型不符**（这一格在，但形状不对——本体声明了它该是什么类型）。
+    ///
+    /// 与 [`Violation::MissingField`] 分开：那是"该有的格没读到"，这是"格在、形状不对"。
+    /// 两者都是**可编程判定**的类别，故按码分开、不合并成一句散文。
+    BadFieldType {
+        at: String,
+        field: String,
+        want: String,
+        got: String,
+    },
     /// **实体没声明过**（`concepts` 里没有它）——声明以外的东西不许落账。
     ///
     /// `known` = 本体里**已声明**的实体名（有序、逗号分隔）：报错要让人当场知道
@@ -63,6 +73,15 @@ impl fmt::Display for Violation {
             Violation::UnknownKind { kind } => {
                 write!(f, "ext.world.Ontology.UnknownKind: 未知家族 `{kind}`")
             }
+            Violation::BadFieldType {
+                at,
+                field,
+                want,
+                got,
+            } => write!(
+                f,
+                "ext.world.Ontology.BadFieldType: {at} 的 `{field}` 类型不符（本体声明 `{want}`，实得 `{got}`）"
+            ),
             Violation::UndeclaredEntity {
                 entity,
                 subject,
@@ -105,6 +124,12 @@ pub struct Ontology {
     world: u64,
     required: Vec<String>,
     optional: Vec<String>,
+    /// **信封每个字段的类型声明**（`envelope.fields` 段：名字 → 声明串，如 `"integer  # 词表版本…"`）。
+    ///
+    /// 为什么单独存：`required` 只说明"这一格必须在"，**不说明它该是什么类型**。
+    /// 缺了这一段，"类型不符"就无从判起——实测两处真实违规：`world` 写成字符串 `"1"`、`actor` 写成整数 `123`，
+    /// 折叠层**都收下了**（`state` rc=0）。声明串**首词**即类型（`integer`／`string`／`array`／`object`／`enum(a, b)`）。
+    env_types: BTreeMap<String, String>,
     families: BTreeMap<String, Family>,
     /// **实体与字段的声明**（`concepts` 段）：世界里有哪些实体、各有哪些字段。
     ///
@@ -143,6 +168,19 @@ impl Ontology {
             .ok_or_else(|| "ext.world.Ontology.NoEnvelope: 缺 `envelope`".to_string())?;
         let required = str_list(envelope, "required")?;
         let optional = str_list(envelope, "optional")?;
+        // 信封**字段的类型声明**（见 `env_types` 的说明）。缺 `fields` 段 ⇒ 空表 ⇒ 只判"在不在"、不判类型
+        // （**不许凭空发明一套类型系统**：本体没声明的，本判据不管）。
+        let mut env_types = BTreeMap::new();
+        if let Some(fs_obj) = envelope.get("fields").and_then(Value::as_object) {
+            for (k, val) in fs_obj {
+                if k.starts_with('_') {
+                    continue;
+                }
+                if let Some(decl) = val.as_str() {
+                    env_types.insert(k.clone(), decl.to_string());
+                }
+            }
+        }
 
         let fams = v
             .get("families")
@@ -205,6 +243,7 @@ impl Ontology {
             world,
             required,
             optional,
+            env_types,
             families,
             concepts,
             vocab_hash: vocab_hash_of(&v),
@@ -418,12 +457,106 @@ impl Ontology {
             }
         }
 
+        // **在不在／版本／家族／信纸必填**都问过了，最后问**类型对不对**（`TC-047 ⑧` 的修法）。
+        // 为什么排在既有各道**之后**（实现时先排在前面，被既有断言当场纠正）：
+        // `c02` 逐字把 `body` 设成字符串并期望 `MissingField`、`world` 写成字符串则由版本那道报 `BadVersion` ——
+        // 那两条都是**既有契约**。本判据**只接手没人管的那一处**（如 `actor`＝整数），**不抢既有码**。
+        self.validate_types(ev)?;
+
         // **最后一道**：声明以外的东西不许落账（书 §5.3）。
         // 放在形状检查之后：形状不对时先报形状（那是更基本的问题），
         // 形状对了再问"这个名字世界里有没有"——两道错的报错顺序不该靠偶然。
         self.check_concepts(kind, obj.get("body").unwrap_or(&Value::Null))?;
 
         Ok(())
+    }
+
+    /// **只判类型**：本体声明过类型的信封字段，值必须符合声明。
+    ///
+    /// 与 [`Ontology::validate`] 分开的**理由（实测逼出来的）**：读路径此前跑的是整套 `validate`，
+    /// 于是"**缺 `actor`**"这类事件被报成 `ext.world.Ontology.MissingField`（**写侧那条**），
+    /// 而读侧的契约是 [`readmodel`] 的 `ext.world.ReadModel.MissingCell`（**它自己那条**，有断言在核）。
+    /// ⇒ **补缺口（类型）不动别人的契约**：读路径只调本方法；写路径照旧跑整套 `validate`。
+    ///
+    /// 范围：只判 `self.env_types` 里**声明过**且**值在场**的字段；
+    /// `enum(...)` 不进本判据（值不在枚举里由家族查找报 `UnknownKind` 并点名那个值——那是现成契约）。
+    pub fn validate_types(&self, ev: &Value) -> Result<(), Violation> {
+        let obj = match ev.as_object() {
+            Some(o) => o,
+            None => return Ok(()), // 不是对象：交给 validate 的 NotAnObject，本方法不越界
+        };
+        for (f, decl) in &self.env_types {
+            if declared_type_word(decl).starts_with("enum(") {
+                continue;
+            }
+            if let Some(v) = obj.get(f) {
+                if !type_ok(decl, v) {
+                    return Err(Violation::BadFieldType {
+                        at: "envelope".to_string(),
+                        field: f.clone(),
+                        want: declared_type_word(decl).to_string(),
+                        got: json_type_name(v).to_string(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// **声明串的类型词**：本体里写的是 `"integer  # 词表版本；只加 flags…"` 这种形态 ⇒ 取**首词**。
+///
+/// `enum(change, act, notice)` 整体算一个词（首个空白之前即它）。
+fn declared_type_word(decl: &str) -> &str {
+    let s = decl.trim_start();
+    // `enum(a, b, c)` **里面有空白** ⇒ 不能按空白取首词（那样会截成 `enum(a,`）。
+    // 取到**配对的那个 `)`** 为止；没有 `)` 就退回"取首词"。
+    if let Some(rest) = s.strip_prefix("enum(") {
+        if let Some(i) = rest.find(')') {
+            return &s[.."enum(".len() + i + 1];
+        }
+    }
+    s.split(|c: char| c.is_whitespace()).next().unwrap_or("")
+}
+
+/// **JSON 值的类型名**（报错用；与本体声明里的词同一套写法）。
+fn json_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Number(n) => {
+            if n.is_i64() || n.is_u64() {
+                "integer"
+            } else {
+                "number"
+            }
+        }
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+/// **这一格的值符不符合本体声明的类型**。
+///
+/// 认得的类型词：`integer`／`string`／`array`／`object`／`bool`／`number`／`enum(a, b, …)`。
+/// **不认得的词一律放行**（`_ => true`）——本体没声明的类型口径，本判据不替它发明。
+fn type_ok(decl: &str, v: &Value) -> bool {
+    match declared_type_word(decl) {
+        "integer" => v.is_i64() || v.is_u64(),
+        "number" => v.is_number(),
+        "string" => v.is_string(),
+        "array" => v.is_array(),
+        "object" => v.is_object(),
+        "bool" => v.is_boolean(),
+        w if w.starts_with("enum(") => {
+            let inner = w.trim_start_matches("enum(").trim_end_matches(')');
+            match v.as_str() {
+                Some(s) => inner.split(',').any(|x| x.trim() == s),
+                None => false,
+            }
+        }
+        _ => true,
     }
 }
 

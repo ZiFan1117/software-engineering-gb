@@ -1563,6 +1563,19 @@ fn c24_known_codeless_outlets_carry_no_ext_world_prefix() {
 ///
 /// 手工造的理由：今天**没有任何生产路径**能写出无链账本（`append` 无条件加链），
 /// 而 v1 兼容路径要的正是这种历史账本。
+/// 把一批**手写**事件写成一行的 JSONL（无链、v1 形态）。
+///
+/// 为什么就地写而不复用 `write_v1_ledger`：那个助手只会造**合规**事件（走 `event::new_event`），
+/// 而 `c33` 要的正是**形状不合规**的事件——本体的类型判据就是冲它来的。
+fn write_raw_jsonl(path: &Path, events: &[Value]) {
+    let mut text = String::new();
+    for ev in events {
+        text.push_str(&serde_json::to_string(ev).unwrap());
+        text.push('\n');
+    }
+    fs::write(path, text).unwrap();
+}
+
 fn write_v1_ledger(path: &Path, n: u64) {
     let mut text = String::new();
     for seq in 1..=n {
@@ -1875,5 +1888,71 @@ fn c33_stale_lock_with_a_reused_live_pid_is_never_reclaimed() {
         w.ledger().last_seq(),
         1,
         "回收陈锁之后应当看到原有的那 1 条事件"
+    );
+}
+
+// ── c33 ── **信封字段的类型**：本体声明了类型，读路径也必须判（`TC-047 ⑧` 的修法）──────
+//
+// 为什么单列一条：`c15` 判的是"可编程判定的错误都带码"，`c24` 判的是"已知无码出口"，
+// 两条都**只管写入路径**。而账本里**已有的**事件由折叠层直接读——实测（2026-09-28，VM）
+// 把 `world` 写成字符串 `"1"`、把 `actor` 写成整数 `123`，`state` 一律 **rc=0**：
+// 声明写了类型，读的人却没判。这一条把"读路径也判类型"钉住。
+//
+// **反例（必须红）**：上面那两处真实违规形状 ⇒ 打开即拒，码为 `ext.world.Ontology.BadFieldType`，且**点名那一格**。
+// **正控（不得红）**：同一条账本，把两格改回声明类型 ⇒ 打开成功。
+#[test]
+fn c33_envelope_field_types_are_checked_on_the_read_path() {
+    let d = tmpdir("c33-types");
+    let on = ontology(); // 出厂本体（`world` 声明 integer、`actor` 声明 string）
+    let base = serde_json::json!({
+        "world": 1,
+        "kind": "change",
+        "id": "e1-0",
+        "seq": 1,
+        "at": 1_790_540_855u64,
+        "actor": "world://user",
+        "flags": [],
+        "body": { "subject": "world://notice/n", "path": "muted", "before": false, "after": true }
+    });
+
+    // 反例①：`world` 写成**字符串**（本体声明 integer）
+    let mut a = base.clone();
+    a["world"] = serde_json::json!("1");
+    // 反例②：`actor` 写成**整数**（本体声明 string）
+    let mut b = base.clone();
+    b["actor"] = serde_json::json!(123);
+
+    // `world` 那条**只要求"被拒 ＋ 带类型化码"**：它既有的版本那道会报 `BadVersion`（**既有契约，不抢**）。
+    // `actor` 那条**没有人管**（版本/家族/信纸必填都碰不到它）⇒ 必须由本判据报，且**点名那一格**。
+    for (name, ev, must_be_bad_field_type) in
+        [("world-as-string", a, false), ("actor-as-int", b, true)]
+    {
+        let lp = d.join(format!("{name}.jsonl"));
+        write_raw_jsonl(&lp, &[ev]);
+        let err = World::open_readonly(&on, &lp, &policy())
+            .err()
+            .unwrap_or_else(|| panic!("{name}：读路径必须拒绝类型不符的信封，实得打开成功"));
+        assert!(
+            err.contains("ext.world."),
+            "{name}：拒绝理由须是**类型化**错误码（不是一句泛泛的解析失败），实得：{err}"
+        );
+        if must_be_bad_field_type {
+            assert!(
+                err.contains("ext.world.Ontology.BadFieldType"),
+                "{name}：这一格**没有别的判据管**，必须由类型判据报，实得：{err}"
+            );
+            assert!(
+                err.contains("`actor`"),
+                "{name}：报错须**点名那一格** `actor`，实得：{err}"
+            );
+        }
+    }
+
+    // 正控：同样的形状、类型改回声明 ⇒ 必须打开成功（否则这条判据是"见谁拒谁"）
+    let lp_ok = d.join("ok.jsonl");
+    write_raw_jsonl(&lp_ok, &[base]);
+    assert!(
+        World::open_readonly(&on, &lp_ok, &policy()).is_ok(),
+        "正控：类型合规的同形账本必须打得开"
     );
 }

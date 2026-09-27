@@ -174,6 +174,18 @@ impl World {
         // ⚠️ 无链时"局部篡改不可检出"——调用方应打印警告（`check` 会打印链状态）。
         ledger.load_chain()?;
 
+        // **读路径也过一遍法律**（`TC-047 ⑧` 的修法）：本体声明了每个信封字段的类型，
+        // 而此前**只有写入路径**走 `validate`——账本里已有的形状不合规事件，折叠层照收。
+        // 实测两处真实违规（2026-09-28，VM）：`world` 写成字符串 `"1"`、`actor` 写成整数 `123`，
+        // `state` 一律 rc=0。⇒ 打开时对每条事件跑一次 `validate`：**不合规即拒绝打开**，
+        // 与写入路径同一套判据（不另立第二套规矩）。
+        for ev in ledger.read_from(1)? {
+            // **只跑类型判据**（`Ontology::validate_types`），**不跑整套 `validate`**：
+            // 读侧的"缺格"与"未知家族"**另有其主**（读模型的 `ReadModel.MissingCell`／`UnknownKind`，
+            // 那是既有契约、有断言在核）⇒ 这里补的是**类型**这一处缺口，不抢别人的码。
+            ontology.validate_types(&ev).map_err(|e| e.to_string())?;
+        }
+
         // 词表版本一致性（2026-09-26 补，见 WC-RV-R2-001 S-17）：
         // 信封里的 `world` 由 `event::WORLD_VERSION` 写死，而本体自带 `world` 字段。
         // 两者不一致时，构造出的事件**恒被判 BadVersion**——那是自伤性故障：
