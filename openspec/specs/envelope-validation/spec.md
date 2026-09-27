@@ -27,20 +27,17 @@ SHALL NOT 被读成"`world` 缺失也被指名报出"。
 
 ### Requirement: 信封字段的类型按本体的声明判（**读路径也判**）
 
-系统 SHALL 按本体 `envelope.fields` 的**声明**校验信封字段的**类型**：声明串的**首词即类型**
-（`integer` / `number` / `string` / `array` / `object` / `bool`；`enum(...)` 见下）。
-类型不符时 SHALL 拒绝，错误码 SHALL 为 `ext.world.Ontology.BadFieldType`，并 SHALL **点名那一格**。
+系统 SHALL 按本体 `envelope.fields` 的**声明**校验信封字段的**类型**（声明串**首词即类型**：
+`integer` / `number` / `string` / `array` / `object` / `bool`）；不符即拒，码 SHALL 为
+`ext.world.Ontology.BadFieldType`，并 SHALL **点名那一格**。
 
-系统 SHALL NOT 把本条读成"信封的形状已被查全"：**缺格**另有其主——读侧由折叠层的
-`ext.world.ReadModel.MissingCell` 承担、`seq` 由账本解析的 `ext.world.Ledger.MissingSeq` 承担；
-**枚举值**另有其主——值不在枚举里时由家族查找报 `ext.world.Ontology.UnknownKind` 并点名那个值。
-本条只判**声明过且值在场**的**信封**字段；`body` **内部**字段的类型不属本条。
+本条 SHALL NOT 被读成"形状已查全"：只判**声明过且值在场**的**信封**字段——
+**缺格**另有其主（读侧 `ext.world.ReadModel.MissingCell`、`seq` 由 `ext.world.Ledger.MissingSeq`）、
+**枚举值**另有其主（家族查找报 `ext.world.Ontology.UnknownKind` 并点名）、
+`body` **内部**字段不属本条。
 
-**两条边界 SHALL 被写明**（不写，读者会以为"声明即强制"）：
-① **不认得的声明词一律放行**——本体把某格声明成 `weird` 时该格**不判**（本判据不替本体发明类型系统）；
-② **`null` 算"在场"**——它会被判类型不符（`to: null` ⇒ 拒），与"缺省"（键不写）**不是一回事**。
-对**写入路径产出的**事件无影响（生产路径不写 `null`），但**旧账本若含 `null`，本条之后会被拒**——
-这是一处**行为变更**，如实写在这里。
+两条边界：① **不认得的声明词一律放行**（不替本体发明类型系统）；
+② **`null` 算"在场"**⇒ 判类型不符（与"键不写"不是一回事）。
 
 #### Scenario: 读路径上类型不符的信封被拒且点名那一格
 
