@@ -171,9 +171,9 @@
       cargo test --locked --test cli          ⇒ CLI_RC=0          test result: ok. 14 passed; 0 failed
       ```
 
-- [x] 6.6 步骤归属订正：核对 `openspec/specs/**` 与 6 个 delta 里对 `check.sh` 步骤号的引用是否与 `world-core/check.sh` 的 **③ 三条专属验收测试**那一步一致（★ 2026-09-28：原写 `:98`——**那是当时的行号**，行号会烂，按本仓口径改成步骤名）（③ 只跑 `t1_ t2_ t7_`）、`:103`（③b 跑整个 `--test contract`）、`:133`（⑥ 系统级验收）、`:145`（⑦ `s1_sys_probe2.sh`）一致。**验收**：逐条比对表（引用处 → 实际步骤 → 是否相符），不相符处已在 delta 里订正。
+- [x] 6.6 步骤归属订正：核对 `openspec/specs/**` 与 6 个 delta 里对 `check.sh` 步骤号的引用是否与 `world-core/check.sh` 的**步骤名**一致（★ 2026-09-28 订正**两次**：原写 `:98`／`:103`／`:133`／`:145` 四个行号——**行号会烂**，按本仓口径一律改成**步骤名**：**③ 三条专属验收测试**（只跑 `t1_ t2_ t7_`）／**③b 契约测试**／**⑥ 系统级验收**／**⑦ S1 需求验证面补建**；★ 第一次只换了 `:98` 一个、同一句里另三个留着 ⇒ 句子读断了，这是"只做一半"的编辑形态）
       **★ 已结账（2026-09-28，执行者逐条核过）**：把 `openspec/specs/**` 与各 delta 里对 `check.sh` 步骤号的引用**逐条抽出、对着真脚本核**。
-      **真脚本的实况（现取，`world-core/check.sh`）**：`:113` 步骤 **③**＝`cargo test --test acceptance -- t1_ t2_ t7_`（**只跑这三条**）；`:118` 步骤 **③b**＝`cargo test --test contract`（**整跑**）；`:144` 步骤 **⑥**＝系统级验收；`:162` 的 `visual_layout_audit.py --self-test` 落在 `:152` 步骤 **⑦** 与 `:176` 步骤 **⑧** 之间 ⇒ **属第 ⑦ 步**。
+      **真脚本的实况（★ 2026-09-28 订正：原写「（**现取**，`world-core/check.sh`）」——**"现取"是假话**：下面五个行号**全部已漂**（`③c` 等后续增补所致）；现取读数＝③ `:120`／③b `:125`／③c `:132`／⑥ `:167`／⑦ `:175`／⑧ `:199`、`visual_layout_audit` `:185`）——**以下行号一律是"写下时"的值，行号会烂，权威定位子是步骤名**）**：当时 `:113` 步骤 **③**＝`cargo test --test acceptance -- t1_ t2_ t7_`（**只跑这三条**）；当时 `:118` 步骤 **③b**＝`cargo test --test contract`（**整跑**）；当时 `:144` 步骤 **⑥**＝系统级验收；当时 `:162` 的 `visual_layout_audit.py --self-test` 落在 `:152` 步骤 **⑦** 与 `:176` 步骤 **⑧** 之间 ⇒ **属第 ⑦ 步**。
       **逐条结论**：`channel-identity:39`（⑥）✓｜`ledger-integrity:22`（`t1_`，③）✓｜`ledger-integrity:31`（`t2_`，③）✓｜`ledger-integrity:51`／`:100`（③b 整跑 contract，含 `c07`）✓｜`projections:75`（⑦）✓｜`read-model:52`（③b）✓。
       **★ 唯一一处不合格已修**：`ledger-integrity` 里原写「（`world-core/check.sh:145` 执行）」——**用行号**（行号会烂，本仓已立口径"引用写命令＋步骤名"）⇒ 已改成 **"由 `world-core/check.sh` **第 ⑥ 步**执行"**。
       **另**：`projections:30`／`read-model:30-33` 里的 ⚠ 括注**已经把"仓根另有同名 `check.sh`"这个歧义写明了**（那是 6.7 的成果，此处只确认它仍在）。
