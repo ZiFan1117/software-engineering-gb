@@ -852,6 +852,13 @@
 | `ext.world.Channel.AcceptFail` | 接受连接失败 | `:200` | 重试 |
 | `ext.world.Channel.EmptyRequest` | 收到空行 | `:214` | 调用方缺陷 |
 | `ext.world.Channel.Impersonation` | 请求自称 ≠ 内核身份 | `:226` | **安全事件**：拒绝且不落笔；调用方**不得**重试同一条 |
+| `ext.world.Channel.LineTooLong` | 单行请求/事件超过 `channel_limits.max_line_bytes` | `src/channel.rs`（`read_line_bounded`） | 缩短该行；**调大上限属配置变更** |
+| `ext.world.Channel.RateLimited` | 同一身份每秒消息数超过 `max_msgs_per_sec`（**按身份累计、跨连接**） | `src/channel.rs`（`Session`） | 降速重试 |
+| `ext.world.Channel.IdleTimeout` | 连接空闲超过 `idle_timeout_ms` 仍无完整一行 | `src/channel.rs`（`serve_stream`） | 重连；调用方超时须**大于**服务方上限（`IF-REQ-04`） |
+| `ext.world.Channel.TooManyConnections` | 同时受理的连接数超过 `max_connections`（v1 **恒为 1**） | `src/channel.rs`（`refuse_pending`） | 串行重试（**v1 顺序受理**） |
+| `ext.world.Channel.NoLimits` | 策略里**没有** `channel_limits` 块 | `src/channel.rs`（`Limits::from_policy`） | 补上四个数值；**未设界的通道拒绝受理**（**在 `bind` 之前**，不建套接字） |
+| `ext.world.Channel.BadLimits` | 四个数值缺项／非正整数 | 同上 | 修配置 |
+| `ext.world.Channel.BadConcurrency` | `max_connections` ≠ 1 | 同上 | v1 只能写 1（真并发属架构变更） |
 
 #### 3.7.5 请求应答配对（**`WC-R4-DISP-001` §「D 组」的「IF-006 契约节缺失（M09-D02/D03） 采纳」` 要求回答的两问**）
 
@@ -1239,7 +1246,7 @@
 | **支撑需求** | `REQ-N-007`（纯文本/多语言接口）、`REQ-F-006`（唯一写入口）、`REQ-F-015/016/017`（门禁不可绕过）、`REQ-F-023`（请求—应答配对，经请求号） |
 | **关联设计** | `WC-IC-001` §5.10（`M10` 模块接口契约）、`WC-IC-001` §2（接口清单）、`WC-ARCH-001-v0.1`（进程拓扑） |
 | **实现位置** | `src/carrier/capd.rs`（清单解析与校验）、`providers.rs`（执行器与执行序列）、`kernel.rs`（内核客户端与应答解析）、`recover.rs`（孤儿请求）、`run.rs`（三段式与常驻形态）、`mod.rs`（模块入口与三态结果） |
-| **状态** | **已实现**（2026-09-27）；判据落点 = `tools/carrier_acceptance.sh`（**22 项断言，含 4 条"应当失败"的反例**，VM 实测 22/22 通过） |
+| **状态** | **已实现**（2026-09-27）；判据落点 = `tools/carrier_acceptance.sh`（**项数以脚本输出为准**：既有项 ＋ 本轮新增的 `C-09`（6 项）——**本节不复述数字**） |
 
 #### 3.12.2 接口需求（**它的全部意义是"手不许有主张"**）
 
@@ -1287,6 +1294,7 @@
 | 查孤儿 | 账本文件（**只读打开**） | 孤儿列表 + 处置口径 | `LedgerReadFail`、`LedgerCorrupt` |
 | 一次调用 | 能力 / 动词 / 请求号 / 参数 + 内核套接字 | 三段结论（是否获准、意图事件、执行结果、结果事件） | `UnknownCapability`、`VerbNotAllowed`、`KernelUnreachable`、`KernelFail`、`BadRequest`、`BadReply`、`UndoUnavailable`、`ProviderFailed`、`BadParam`、`UnknownVerb`、`NoDevice`、`DeviceReadFail`、`DeviceWriteFail`、`OutOfRange`、`UndoFail`、`JobFail` |
 | 常驻 | 标准输入逐行请求 | 一行一应答 | 同上（**一次坏请求不中止后续**） |
+| **写侧翻译**（书 §4.5） | 一处**外部变化**（源／主体／字段／**前值**／新值） | 一条 `change` 信纸（**原样**交内核；判词照转述） | `NoPreviousValue`（**前值必须带上**）、`UnmappableField`（**翻不出来就报错、不许猜**）、`BoundaryOwned`／`BoundaryDirOwned`／`BoundarySymlink`／`BoundaryWritable`／`BoundaryDirWritable`／`BoundaryUnsupported`／`BoundaryUnknown`（**对被管者 uid 的写权限边界**） |
 
 #### 3.12.4 幂等性 / 超时 / 版本兼容
 
@@ -1304,7 +1312,7 @@
 
 | # | 判据 | 验证方式 |
 |---|---|---|
-| 1 | 十条接口需求（R01–R10）逐条有断言 | **`tools/carrier_acceptance.sh`**：22 项断言、0 失败（VM 实测），其中 C-02/C-03/C-04/C-06/C-07/C-08 分别对应 R03/R04/R01/R02/R06/R09 |
+| 1 | 十条接口需求（R01–R10）逐条有断言 | **`tools/carrier_acceptance.sh`**：**以脚本输出为准**（不复述数字），其中 C-02/C-03/C-04/C-06/C-07/C-08 分别对应 R03/R04/R01/R02/R06/R09；**C-09**（本轮新增）以被管者身份实测"账本写不到、规则改不了"，并含"放宽 mode 后同一动作会成功"的**反证** |
 | 2 | 单元级：清单解析、执行序列的六种拒绝路径、三态语义 | `cargo test --lib carrier`（26 项，含 `refuses_*` 六条反例） |
 | 3 | 契约：错误码前缀与契约一致性 | `cargo test --contract`（22 项）+ `error::code_of` |
 | 4 | 纯文本：清单与账本无二进制、无 NUL、逐行可解析 | `python3 tools/plain_text_audit.py ontology.json policy.json docs src tests tools cap.d` ⇒ 受审 58 份，门禁结论"通过" |
