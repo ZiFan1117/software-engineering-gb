@@ -13,7 +13,7 @@ OpenSpec 的 `validate` 只判**形态**（结构、Scenario 个数、delta 语�
 而这五条恰恰是 `opsx-swe-gb` 的文字里承诺过的。**一个从不失败的检查不是装饰，是假证。**
 本脚本就是那五条的**执行者**：任一条不成立即非零退出。
 
-五条判据（与 `specs/spec-governance/spec.md` 逐条对应）
+判据（与 `specs/spec-governance/spec.md` 逐条对应）——**条数以 `JUDGMENTS` 为准，现七条**
 -------------------------------------------------------
 ① 归档硬前置      每个 `openspec/changes/archive/*/` 必须有非空 `review.md`
 ② 证据存在性      `openspec/specs/**/spec.md` 里每条 `- **证据**：<token>` 的
@@ -25,7 +25,7 @@ OpenSpec 的 `validate` 只判**形态**（结构、Scenario 个数、delta 语�
 用法
 ----
     python3 tools/spec_bridge.py [--repo <仓库根>] [--json]
-    python3 tools/spec_bridge.py --self-test     # 为五条判据各造一个反例，反例不变红即判装饰
+    python3 tools/spec_bridge.py --self-test     # 为**每条**判据各造一个反例（条数随 `JUDGMENTS` 增长，加一条判据必须同时加一个反例），反例不变红即判装饰
 """
 
 import argparse
@@ -83,7 +83,7 @@ def resolve_src(repo, p):
     return None
 
 
-# ────────────────────────── 五条判据 ──────────────────────────
+# ────────────────────────── 判据（现七条，见 JUDGMENTS）──────────────────────────
 def j1_archive_review(repo):
     bad = []
     arch = Path(repo) / "openspec" / "changes" / "archive"
@@ -256,6 +256,16 @@ WAIVER_KEYS = (("让的是哪一条", r"让的是哪一条"),
                ("谁批的", r"谁批的|谁批"))
 
 
+def _strip_code_blocks(text):
+    """去掉围栏代码块——**引用的原始输出不是声明**。
+
+    2026-09-27 实测误报：`fc-2026-002-spec-revisions/tasks.md` 把门禁的原始输出粘进件里，
+    那段输出含「⑦ 让路登记（声明了「谁让」的件必须写全…）」⇒ 判据⑦ 把它当成让路声明而误报。
+    ⇒ 本判据只在**正文**里找声明与三要素，围栏代码块一律不参与。
+    """
+    return re.sub(r"```.*?```", "", text, flags=re.S)
+
+
 def j7_waiver_registered(repo):
     """⑦ 让路登记：件里只要声明了"谁让"，三要素就必须写全。
 
@@ -273,8 +283,9 @@ def j7_waiver_registered(repo):
             continue
         files = sorted(d.rglob("*.md"))
         # 按**件整体**判：三要素只要在该 change 的任一产物里写全即可（不必挤在同一份文件里）
-        texts = {f: read_text(f) for f in files}
-        union = "\n".join(texts.values())
+        # **围栏代码块不参与**：引用的原始输出不是声明。
+        # （2026-09-27 实测误报：fc-2026-002/tasks.md 粘了门禁原始输出，输出里含判据⑦ 的名字 ⇒ 被当成声明。）
+        union = _strip_code_blocks("\n".join(read_text(f) for f in files))
         if "谁让" not in union:
             continue                                     # 没声明让路 ⇒ 不受本条约束
         missing = [label for label, pat in WAIVER_KEYS if not re.search(pat, union)]
@@ -282,7 +293,7 @@ def j7_waiver_registered(repo):
             where = "、".join(rel(repo, f) for f in files)
             bad.append("%s —— 声明了让路，却缺 %s（书纪律：冲突时要说明谁让；半写＝不写）"
                        % (rel(repo, d), "、".join("「%s」" % m for m in missing)))
-            bad.append("      （本条按件整体判：查的是 `%s` 的全部 `.md`）" % where)
+            bad.append("      （本条按件整体判、且**只查正文**（围栏代码块不参与）：查的是 `%s` 的全部 `.md`）" % where)
     return bad
 
 
@@ -440,16 +451,16 @@ def self_test():
         print("  => 自证不通过：%s" % "；".join(failures))
         print("  => 按本项目口径：**这条守卫是装饰，拒绝合入**。")
         return 1
-    print("  => 自证通过：**六条判据**逐条在反例下变红、在正控下全绿。")
+    print("  => 自证通过：**每条判据**在反例下变红、在正控下全绿（条数见上方逐条清单）。")
     return 0
 
 
 # ────────────────────────── 主程序 ──────────────────────────
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="规格层守卫（opsx-swe-gb 五条判据）")
+    ap = argparse.ArgumentParser(description="规格层守卫（opsx-swe-gb；判据见 JUDGMENTS，现七条）")
     ap.add_argument("--repo", default=None, help="仓库根；默认从本脚本位置向上找含 openspec/specs 的目录")
     ap.add_argument("--json", action="store_true", help="以 JSON 输出")
-    ap.add_argument("--self-test", action="store_true", help="为五条判据各造一个反例，验证它们真的会红")
+    ap.add_argument("--self-test", action="store_true", help="为**每条**判据各造一个反例（条数随 `JUDGMENTS` 增长，加一条判据必须同时加一个反例），验证它们真的会红")
     args = ap.parse_args(argv)
 
     if args.self_test:

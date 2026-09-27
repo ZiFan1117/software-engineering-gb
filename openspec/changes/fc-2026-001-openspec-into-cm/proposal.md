@@ -76,7 +76,7 @@ FC: WC-FC-2026-001
 |---|---|---|
 | **A/B 档** | **B 档** | 三条判据全不命中才可 A 档。本变更：① **有**第二个人需要交接 ② **有**交付物与验收责任（规格层、归档门禁）③ 失效后果**不可接受** ⇒ 三条均命中 |
 | **评审档位** | **R5** | 触及 **契约面**（`openspec/specs/**`）、**工具**（`tools/spec_bridge.py`）、**工作流**（默认档与归档门禁） |
-| **命中的敏感路径** | 逐条列 | `openspec/config.yaml`、`openspec/specs/**`（新增 `spec-governance`；6 份既有主规格只读）、`openspec/schemas/**`（改掉"双读＋一行指针"的写法；主本在 `D:\Code\10-openspec-swe-gb`）、`openspec/changes/archive/2026-09-27-baseline-verified-doctrine/**`（补 `review.md`、移常设项）、`world-core/tools/spec_bridge.py`（新增）、`world-core/check.sh`（加一步）、`world-core/.scope-declaration.json`（范围门禁要求时） |
+| **命中的敏感路径** | 逐条列 | `openspec/config.yaml`、`openspec/specs/**`（新增 `spec-governance`；6 份既有主规格的 **23 条 Requirement 只读**，其中 3 份的 `## Purpose` 在本次更正）、`openspec/schemas/**`（改掉"双读＋一行指针"的写法；主本在 `D:\Code\10-openspec-swe-gb`）、`openspec/changes/archive/2026-09-27-baseline-verified-doctrine/**`（补 `review.md`、移常设项）、`world-core/tools/spec_bridge.py`（新增）、`world-core/check.sh`（加一步）、`world-core/.scope-declaration.json`（范围门禁要求时） |
 | **R5 触发条件** | 见下（逐条命中／未命中 ＋ 依据句） | 见 `D:\Code\06-swe-gb\docs\01-流程与阶段\框架与模块共演化.md:61-68` 的 FC 词表 |
 | **破坏性变更** | **无** | 不改任何接口、不改出厂行为、不改既有 Requirement 语义 |
 
@@ -108,7 +108,8 @@ FC: WC-FC-2026-001
 ## Impact
 
 - **改动面**：`openspec/`（`config.yaml` 默认档、新增 `specs/spec-governance/`、`schemas/**` 改掉"双读＋一行指针"的写法、归档 change 补件、新增 `MAINTENANCE.md`）、`world-core/tools/spec_bridge.py`（新增）、`world-core/check.sh`（加一步）、`world-core/.scope-declaration.json`（按需）。
-- **不动**：`world-core/` 下全部产品代码与测试、出厂命令与行为、六章书稿与 15 篇依据、**6 份既有主规格**、07 主仓、`refs/`。
+- **不动**：`world-core/` 下全部产品代码与测试、出厂命令与行为、07 主仓、`refs/`。
+- **已退场（不是本 change 改的，是作者指示）**：来源件 `1-理论与哲学/`／`2-依据/`／`3-备选路线/`／`4-计划/`／`00-总纲.md` 与 `world-core/docs/理论/` 的散件已在**同一轮**按作者指示退场（内容并入合订本；解析根＝本仓 git 历史 `bf2eae7` 之前）。**6 份既有主规格的 23 条 Requirement 一字不动**，只有 3 份的 `## Purpose` 在本次更正。
 - **追溯面**：`mapping.md` 让 23 条承诺**首次可追**到流程侧 39 条需求（含"一条对多条"与"无号"两种真实关系）。
 - **使用方**：下一位执行者（默认档改变工作方式）、评审席（新增 `review.md` 签字闸）。**无需破坏性通知。**
 - **细节**（受影响模块、需重跑测试、回归范围 **R-A 冒烟／R-B 模块／R-C 契约／R-D 全量**、工作量、≥2 方案对比含"不改"案）写进 `design.md`。

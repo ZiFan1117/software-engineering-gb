@@ -61,7 +61,7 @@
 | **受影响模块** | ① `openspec/config.yaml`（默认档）② 新增 `openspec/specs/spec-governance/`（新能力进主规格）③ `openspec/schemas/**`（改掉"双读＋一行指针"的写法；主本 `10-openspec-swe-gb` 同步）④ `openspec/changes/archive/2026-09-27-baseline-verified-doctrine/**`（补 `review.md`、移常设项）⑤ 新增 `openspec/MAINTENANCE.md`（规格层自己的维护清单）⑥ `world-core/tools/spec_bridge.py`（新增）⑦ `world-core/check.sh`（加一步）⑧ `world-core/.scope-declaration.json`（范围门禁要求时按需收窄） |
 | **受影响需求** | 流程侧 **22 条**被映射（编号桥，见 `mapping.md`）；**5 条承诺取不到号**（登记为「无号」）；**9 条非绿需求无规格落点**（进覆盖 change） |
 | **需重跑的测试** | ① VM：`bash check.sh`（rc=0 为准出前提，本轮已跑）② 新增：`python3 world-core/tools/spec_bridge.py --self-test`（**七条判据各自的反例必须真红**（条数以 `--json` 的 `passed`/`failed` 为准））③ `openspec validate --all --strict`（6 项 → **7 项全绿**）④ `openspec validate --archived`（本 change 目标是**由红转绿**） |
-| **回归范围** | 按流程侧权威四档（`附件三-评审与门禁.md:265`「R-A 冒烟回归 / R-B 模块回归 / R-C 契约回归 / R-D 全量回归」；**流程侧没有 R-E**）：<br>**R-A 冒烟**：6 份主规格的 **23 条 Requirement 一字不动** ⇒ 判据 = `git diff --stat fd9a892 HEAD -- openspec/specs` **只允许 3 files / 7 insertions(＋3)（即三段 `## Purpose`）**；**出现 Requirement 级改动即判失败**<br>**R-B 模块**：`spec_bridge.py` 新增并接 `check.sh` ⇒ 判据 = `--self-test` 七条反例全红 ＋ `check.sh` 第 ⑧ 步通过<br>**R-C 契约**：归档件补 `review.md`、移两条常设项 ⇒ 判据 = `validate --archived` 由 `0 passed/1 failed` 变 `1 passed/0 failed`<br>**R-D 全量**：`spec-governance` 进主规格 ＋ 覆盖 change 在册 ⇒ 判据 = `validate --all --strict` 全绿且 `list --specs` 由 6 条变 7 条；**产品面**（`world-core/src/`、`tests/`）零改动并入本档，判据 = `git diff --stat` 在那两处为空 |
+| **回归范围** | 按流程侧权威四档（`附件三-评审与门禁.md:265`「R-A 冒烟回归 / R-B 模块回归 / R-C 契约回归 / R-D 全量回归」；**流程侧没有 R-E**）：<br>**R-A 冒烟**：6 份主规格的 **23 条 Requirement 一字不动** ⇒ 判据 = `git diff -U0 bf2eae7 <该轮提交> -- openspec/specs` 的**每个 hunk 都落在 `## Purpose` 段内**（出现 Requirement 级 hunk 即失败）。**实测（457c954）：3 files／13 insertions(＋3)／5 deletions**；**读数会随提交变，故只认判据，不认写死的数字**<br>**R-B 模块**：`spec_bridge.py` 新增并接 `check.sh` ⇒ 判据 = `--self-test` 七条反例全红 ＋ `check.sh` 第 ⑧ 步通过<br>**R-C 契约**：归档件补 `review.md`、移两条常设项 ⇒ 判据 = `validate --archived` 由 `0 passed/1 failed` 变 `1 passed/0 failed`<br>**R-D 全量**：`spec-governance` 进主规格 ＋ 覆盖 change 在册 ⇒ 判据 = `validate --all --strict` 全绿且 `list --specs` 由 6 条变 7 条；**产品面**（`world-core/src/`、`tests/`）零改动并入本档，判据 = `git diff --stat` 在那两处为空 |
 | **工作量估算** | 默认档 0.1 ＋ `spec_bridge.py`（**当时**五条判据＋自证；**现为七条**）0.8 ＋ 编号桥复核与登记 0.3 ＋ 归档遗留 0.3 ＋ `spec-governance` 进主规格 0.2 ＋ 覆盖 change 起草 0.5 ≈ **2.2 人日**（AI 起草；评审与人签不计） |
 | **需通知的使用方** | 下一位执行者（默认档改变其工作方式）；评审席（新增 `review.md` 闸）。**无破坏性接口变更，不需对外通知** |
 
@@ -128,7 +128,7 @@
 | 4 | `WC-SCMP-001:2537`「### K-3【高】…升级路径自杀」 | **红（未修）**：无链账本一次 `append` 即自锁死；台账标【高】且**原基线排除清单漏了它** | 缺陷已登记、未修 | `cover-*` 的 `ledger-integrity` delta「无链账本的升级路径边界」＋ tasks 第 4 组 |
 | 5 | 书第四章 4.5 写侧适配（**整节零落点**） | **红 / 零落点**：`写侧｜旧系统｜适配｜适配器｜不裁决` 在规格树与三个在办 delta **全零命中** | 这一层**连规格都还没写** ⇒ 落点先补规格 | **待立**：并入 `cover-*`（本轮已登记为 9 处零落点之一） |
 | 6 | 书第五章 5.4 强制力（部分红） | **红一半**：CLI 缺省身份 `world://user` 可执行不可逆动作（实测 `rc=0`，零流水，`WC-SCMP-001:1250` T-02）；规格把"属主与权限"写成绿（`audit.md` G5） | 规格写宽了 + 实现未覆盖祖先链 | 规格侧 `fc-2026-002`（已改）；实现侧 `cover-*` tasks 第 8 组 |
-| 7 | `WC-THEORY-DEFECT-001-v0.2.md:43–69` 登记的 **29 条未修缺陷** | **红（按台账未修）**：含 D-01 通道无超时、D-03 `notice` 不进读模型 | 规格已定、实现没做到 | 逐条并入各自的 change；**汇总落点**在覆盖 change 的 tasks 与缺陷台账 |
+| 7 | `WC-THEORY-DEFECT-001-v0.2.md:43–69` 登记的 **29 条未修缺陷**（⚠ 该件**已按作者指示退场**，行号解析根＝本仓 git 历史 `bf2eae7` 之前的树：`git show bf2eae7:world-core/docs/理论/WC-THEORY-DEFECT-001-v0.2.md`） | **红（按台账未修）**：含 D-01 通道无超时、D-03 `notice` 不进读模型 | 规格已定、实现没做到 | 逐条并入各自的 change；**汇总落点**在覆盖 change 的 tasks 与缺陷台账 |
 
 ## 排除清单
 
@@ -140,10 +140,27 @@
 | **`G-X` 必要性举证** | 决定这一层有没有存在的必要，属裁定事项 | `语义世界-理论书-第一版-合订.md:1549`（自标"最重的一条"） |
 | **七问与八条判据"一套还是两套"** | 框架明标待人裁 | `语义世界-理论书-第一版-合订.md:1638` |
 | **第五章 5.4 四类归属口径** | 正文按今天的实际强制力写，源件那一列写法不同 | `语义世界-理论书-第一版-合订.md:1550` |
-| **29 条未修缺陷**（含 D-01 通道无超时、D-03 `notice` 不进读模型） | "规格已定、实现没做到"，属兑现问题 | `WC-THEORY-DEFECT-001-v0.2.md:43–69` |
+| **29 条未修缺陷**（含 D-01 通道无超时、D-03 `notice` 不进读模型） | "规格已定、实现没做到"，属兑现问题 | `WC-THEORY-DEFECT-001-v0.2.md:43–69`（**已退场**；解析根＝`git show bf2eae7:<同路径>`）。**注**：本行原写"属兑现问题"⇒ 按新档规它属 **L5**，已在 §L5 覆盖边界 第 7 行重列 |
 | **`K-3` 升级路径自杀（无链账本一次 `append` 即自锁死）** | 未修缺陷，且**原基线排除清单漏了它** | `WC-SCMP-001-v0.1.md:2537/2541/2544`；`audit.md` L1 |
 | **通告的闸（D-13）、通道资源边界、家族演进、未知旗标、本体命名空间、`trace` 透传、可逆性判定、`concepts` 实体层** | 未实现能力，进覆盖 change 的 delta ＋ tasks | `audit.md`（C/E/G/R 组）；`REQ-F-026/027/029/030/031` |
 | **投递与订阅推送** | `subscribe`/`notify`/`push`/`watch` 在 `src/` 零命中 | 溯源一 T23；`REQ-F-023` |
+
+## 范围外改动登记（**申报，不是本 change 计划内的改动**）
+
+> **为什么要单列**：复评席 M12 查出——本 change 的 `proposal.md` 原写「不动…六章书稿与 15 篇依据」，
+> 而**同一轮**（`bf2eae7`，作者指示）把来源件退了场：`git diff --stat bf2eae7 457c954` ＝
+> **131 files changed, 2888 insertions(+), 39508 deletions(-)**，其中 110 件被删。
+> **申报口径**：这些删除**不是本 change 的改动**，是**作者指示下的仓级收敛**；本 change 只保证登记与解析根。
+
+| 项 | 内容 |
+|---|---|
+| 谁指示 | **作者**（2026-09-27）。原话**逐字**：「书只留一本合订本，其他的文本**可能**不需要」＋「agent-native-os 和 worldcore 是一个项目，以 worldcore 为准」＋「agent-native-os 这个仓库不需要了」 |
+| 删了什么 | `1-理论与哲学/`（7）／`2-依据/`（16）／`3-备选路线/`（3）／`4-计划/`（4）／`00-总纲.md`（1）／`world-core/docs/理论/` 散件（79，含 38 篇专家评审） |
+| 保留了什麼 | `world-core/docs/理论/语义世界-理论书-第一版-合订.md`（**唯一正件**，2572 行）；`变更记录.md`（旧布局史料） |
+| **解析根** | 旧引用一律解析到**本仓 git 历史**：`git show bf2eae7:<原路径>`（退场前最后状态）。**这是唯一的解析根** |
+| 已做的登记 | `openspec/BOOK/README.md` §一（正件表）；`openspec/schemas/README.md` §〇 末注；`openspec/MAINTENANCE.md` 规则 9 |
+| **未做的**（如实登记） | 引用点上**逐处**加"已退场"注记未做完（复评席 M7 列了 9 处，本件已改 2 处、`audit.md:88` 与 `fc-2026-002` 的若干处**待改**）；且「内容并入合订本」这句对 `2-依据`／`3-备选路线`／`4-计划`（**30 件**）**没有证据**——它们**不在合订本里**（合订本只含序＋六章＋附录一–五）。**这一句应改成"其内容不再在本仓维护，只在 git 历史里可查"** |
+| 回退点 | `git revert bf2eae7`（或 `git checkout bf2eae7 -- <路径>` 单独取回） |
 
 ## Migration Plan
 

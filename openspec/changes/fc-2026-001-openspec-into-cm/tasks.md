@@ -15,7 +15,7 @@
 - [x] 1.2 新增 `world-core/tools/spec_bridge.py`，五条判据（与 `specs/spec-governance/spec.md` 逐条对应）　**★ 后续追加两条**：⑥ 归档件的评审已签（`7c7e0b1`）、⑦ 让路登记（`415577d`）——**现为七条**
       ① 归档硬前置 ② 证据存在性（**两种形态都查**：`<path>::<fn>` 与 `<path> --self-test`）③ 默认档守卫
       ④ 编号桥覆盖 ⑤ 覆盖在册
-      **验收**：`python3 world-core/tools/spec_bridge.py` rc=0，逐条列出结论 ✓（实测 5/5）
+      **验收**：`python3 world-core/tools/spec_bridge.py` 逐条列出结论。**★ 读数带时点（M11）**：本条落笔时（当时五条判据）＝ `5 通过 / 0 失败`，rc=0；**现在的读数是 `6 通过 / 1 失败`，rc=1**（判据⑦ 加入、且判据⑥ 因归档件未签而红）——**读数会变，故验收只认"逐条列结论"这个形态，不认写死的数**
 - [x] 1.3 `spec_bridge.py --self-test`：为**每条**判据各造一个反例，反例不变红即判该守卫是装饰　**现状**：七条判据 ＋ 八条反例（反例⑤ 用改名实现、不删夹具）
       **验收**：`--self-test` rc=0，五条反例逐条打印"已红 OK"、正控（完好沙盒）全绿 ✓
 - [x] 1.4 把 `spec_bridge.py` 接进 `world-core/check.sh`（**新增第 ⑧ 步**，不改既有步骤号 ③／③b／④／⑥／⑦ 的含义）
@@ -72,7 +72,7 @@
       （★ 按席② 的 C1 更正：**不写"7 项全绿"**——`--all` 的射程是「全部 spec ＋ 全部未归档 change」，项数会随仓内 change 多少而变）
 - [x] 6.2 归档层：`openspec validate --archived` ⇒ **1 passed / 0 failed** ✓
 - [x] 6.3 **未改动的证明（★ 判据已收窄，原写『零改动』是假勾）**：`openspec/specs/**` 里**除 3 处 `## Purpose` 段外零改动**；`world-core/src/`、`world-core/tests/` **零改动**
-      **验收**：`git diff --stat fd9a892 HEAD -- openspec/specs` = `3 files changed, 7 insertions(+), 3 deletions(-)`；`git diff --stat fd9a892 HEAD -- world-core/src world-core/tests` **为空**
+      **验收（★ 判据＋实测，读数不许写死）**：判据＝`git diff -U0 bf2eae7 <该轮提交> -- openspec/specs` 的**每个 hunk 都落在 `## Purpose` 段内**（出现 Requirement 级 hunk 即失败）；**实测（457c954）**：`3 files changed, 13 insertions(+), 3 deletions(-)``git diff --stat fd9a892 HEAD -- world-core/src world-core/tests` **为空**
       （为什么改判据：本轮按「以书为主」更正了三处 Purpose，而原判据写的是「零改动」——**它当时已成假**。对抗席乙 把这条列为最重：一条已勾的假任务是「已知假勾进基线」的入口。）
 - [x] 6.4 门禁层：VM 内 `bash check.sh` **RC=0**，含第 ⑧ 步 ✓（**该读数取自判据⑥ 落地之前**）；环境指纹见 `review.md` §五
       **★ 待重跑**：判据⑥ 落地后 `check.sh` 第 ⑧ 步会因归档件未签而 exit 1 ⇒ **签完必须重跑一次并把新读数写进 §五**

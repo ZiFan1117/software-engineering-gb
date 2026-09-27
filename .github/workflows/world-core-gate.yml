@@ -28,6 +28,33 @@ name: world-core 门禁
 #
 # ⚠️ 五个作业名不可删改（tools/ci_self_check.py 的 REQUIRED_JOBS）：
 #    smoke / unit-test / gate-self-test / traceability / scope
+#    （2026-09-27 增三个作业时，这五个一名未动；ci_self_check 的规则是
+#     「承载了门禁作业的工作流必须承载**全部**必需作业」，故新作业必须加在本文件里，
+#     不能另开一个只装新作业的工作流文件——那会同时触发「门禁被拆散」。）
+
+# ── 2026-09-27 增：规格层（OpenSpec）与原子化机核 ────────────────────────────
+# 为什么加在**本文件**而不是新开一个 `.github/workflows/*.yml`：
+#   ① 本文件已在 `world-core/.scope-declaration.json` 的声明范围内（第 15 行），
+#      且被 `world-core/tools/scope_check.py` 的 JOINT_JURISDICTION（:159-162）拉回管辖
+#      ⇒「改门禁必须写进声明」这条还成立。新开一个工作流文件反而**落在 scope 门禁辖区之外**
+#      （实测口径：scope_check.py 只把 JOINT_JURISDICTION 里点名的两件拉回管辖，其余走
+#      「另属他门」不判定）——那正是本文件开头反对的"改门禁不需要声明"。
+#   ② GitHub 只发现**仓库根** `.github/workflows/` 下的工作流（G-11 的老教训）。
+#
+# 三个新作业：
+#   openspec-validate  形态门禁    `openspec validate --all --strict`
+#   spec-bridge        规格层守卫  `world-core/tools/spec_bridge.py`（**七条**判据）
+#   module-graph       原子化机核  `world-core/tools/module_graph.py`（WC-ATOM-001 §二 A-1／A-4／A-2）
+#
+# ⚠️ **今天有两条是红的，且不许掩盖**（逐条读数写在各自作业的注释里，实测时点 2026-09-27）：
+#   ① `spec-bridge` 判据⑥「归档件的评审已签」红 —— 台账 `openspec/BOOK/冲突总账.md` §五 裁-1
+#      （作者指示「评审完结束后签我的名字」⇒ **评审通过后**才签，未过不签）。
+#   ② `module-graph` 三条判据全红，且它自己的 `--self-test` 正控今天也失败
+#      （该工具 23:06 才落到工作区，`git status` 仍是 `?? world-core/tools/module_graph.py`，**尚未入库**）。
+# 本项目的既有教训（见本文件 `RTM_STRICT` 那一段）：「**永远红的门禁等于没有门禁**」。
+# 故这里给的是**如实红**——处置权在人：要么补签／补齐，要么由作者裁定该件退出示踪。
+# **严禁**用 `continue-on-error`、注释掉步骤、或改判据强度来换绿：那正是 G-09／G-11 的同款病。
+# 另：本工作流的 `env` 段**不含任何密钥**，全部命令只用仓库内文件与公开 CLI。
 
 on:
   push:
@@ -192,3 +219,89 @@ jobs:
         # ⚠️ 此处**不得**再加 continue-on-error: true。
         # 若某次变更确需越界，正确做法是更新 .scope-declaration.json
         # （并走 R5 框架变更评审），而不是绕过门禁。
+
+  # ══════════════════════════════════════════════════════════════════════
+  # 规格层（OpenSpec）：形态门禁 ＋ 规格层守卫
+  #   分工（`openspec/schemas/README.md` §1.3）：`openspec validate` 的绿只证明
+  #   **形态对**；「证据指向的测试是否真存在／归档件有没有签」由 `spec_bridge.py` 承担。
+  #   两者缺一，规格层的绿就是假绿。
+  # ══════════════════════════════════════════════════════════════════════
+  openspec-validate:
+    name: 规格层形态门禁（openspec validate --all --strict）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # OpenSpec CLI 的 engines 要 `node >= 20.19.0`（本机实测 package.json）。
+          node-version: "22"
+      - name: 安装 OpenSpec CLI（**版本钉死**，与本机实测的 1.13.2 一致）
+        # 钉版本的理由：形态门禁的判据（Scenario 恰好 4 个 `#`、delta 语法）随 CLI 版本变，
+        # 浮动版本会让"同一次提交、两个结论"。升级＝改这一行，且必须同时重跑本作业全绿。
+        run: npm install -g @fission-ai/openspec@1.13.2
+      - name: 形态门禁 —— 结构 / Scenario 恰好 4 个 `#` / delta 语法
+        # 2026-09-27 实测（本机 CLI 1.13.2，仓库根）：`Totals: 9 passed, 0 failed (9 items)`，rc=0。
+        # 反例已验过（不是橡皮图章）：在临时目录造一份"Scenario 只有 3 个 `#`"的 spec，
+        # 同一条命令给 `0 passed, 1 failed`、rc=1。
+        run: |
+          openspec --version
+          openspec validate --all --strict
+
+  spec-bridge:
+    name: 规格层守卫（spec_bridge.py 七条判据）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 守卫先自证会红（反例不变红 ⇒ 该守卫是装饰，拒绝合入）
+        # 2026-09-27 实测：rc=0（⑦ 条判据各有一个反例，逐条"已红 OK"）。
+        run: python world-core/tools/spec_bridge.py --self-test
+      - name: 规格层守卫 —— 归档硬前置／证据存在性／默认档／编号桥／覆盖在册／归档已签／让路登记
+        # ── 已知红，如实红，不许跳过 ────────────────────────────────────────
+        # 2026-09-27 实测（仓库根；`HEAD=50f30ac` 与 `HEAD=ab9d765` 两次复跑同值）：`通过 6 / 失败 1`，**rc=1**。
+        # 唯一红项＝判据⑥「归档件的评审已签」：
+        #   openspec/changes/archive/2026-09-27-baseline-verified-doctrine/review.md
+        #   —— 结论 =「未签**（理由见 §四）」
+        # 为什么**不**把它注释掉、**不**加 continue-on-error、**不**放宽判据：
+        #   「归档件没签却在账上记成已归档」正是本项目最忌的形态（把未定当已定）；
+        #   把已知缺陷藏进绿灯里，比红着更坏。
+        # 台账与处置权：`openspec/BOOK/冲突总账.md` §五 裁-1（作者指示：**评审通过后**由执行者签署；
+        #   评审未过不签）⇒ 两条出路：① 走完评审并签署 ⇒ 本步自动转绿；② 作者裁定该归档件退出示踪。
+        run: python world-core/tools/spec_bridge.py
+
+  module-graph:
+    name: 原子化机核（A-1 单意图／A-4 deps==import 且无环／A-2 四件同夹）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 机核工具必须在本次签出里（缺席即**显式**报错，不得静默跳过）
+        # `WC-ATOM-001-v0.1.md` §四 第 3 条把 A-4 的机核记为「**未建**」、落点在
+        # `cover-unimplemented-capabilities`。2026-09-27 23:06 实测该工具**已落到工作区**
+        # （`world-core/tools/module_graph.py`，51 317 字节），但 `git status` 仍是
+        # `?? world-core/tools/module_graph.py` ⇒ **尚未入库**。它一入库，本作业即自动生效；
+        # 若它还没入库，这一步**红**是正确结论（"未做到"不许冒充"已做到"）。
+        working-directory: world-core
+        run: |
+          if [ ! -f tools/module_graph.py ]; then
+            echo "::error::tools/module_graph.py 不在本次签出里 —— WC-ATOM-001-v0.1.md §二 A-4「deps == import 且无环」今天就没有执行者"
+            exit 1
+          fi
+          ls -l tools/module_graph.py
+      - name: 机核先自证会红
+        # 2026-09-27 实测：**rc=1** —— 它自己的"正控（完好沙盒应全绿）"今天就失败，
+        # 且两条反例报"自证材料与登记表脱节"。⇒ 该件仍在建，**它的红是在建状态的如实反映**，
+        # 不是本工作流配错。不据此放宽本步（放宽＝替在建工具背书）。
+        working-directory: world-core
+        run: python tools/module_graph.py --self-test
+      - name: 机核 —— 三条判据（逐条给会红的断言）
+        # 2026-09-27 实测：`通过 0 / 失败 3`，**rc=1**。最重的是判据②的
+        # 「依赖图**有环**：M05 → M05」（A-4 要求单向 DAG）与判据③的一批
+        # 「`src/**` 没有被任何模块号认领」。逐条登记在
+        # `openspec/changes/cover-unimplemented-capabilities/`。
+        working-directory: world-core
+        run: python tools/module_graph.py

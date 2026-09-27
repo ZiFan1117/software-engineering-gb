@@ -21,7 +21,7 @@
 
 | # | 约定 | 判据（怎么机核） | 对齐的参照原文 |
 |---|---|---|---|
-| **A-1** | **单意图原子性**：一个模块＝一个**一句话说得清**的意图；说不清的拆 | `design.md` 的原子表里每个原子必须有且只有一句 `intent`（≤30 字）；出现并列两事 ⇒ 拆 | 市场 README「**单意图原子性**：one atom = a capability you can describe in one intent」 |
+| **A-1** | **单意图原子性**：一个模块＝一个**一句话说得清**的意图；说不清的拆 | `design.md` 的原子表里每个原子必须有且只有一句 `intent`；出现并列两事（"与／和／及"）⇒ 拆。**（"≤30 字"是本项目的自定阈值，参照仓无此数——`spec/atom.schema.json` 对 `intent` 只有 `minLength: 2`，不许把它说成参照仓的要求）** | 参照仓 `software-atom-market/README.md:13` 逐字「**Single-intent atomicity / 单意图原子性** — one atom = a capability you can describe in one intent-sentence with no implementation detail; bigger → split, smaller → merge」 |
 | **A-2** | **一个原子一个文件夹，四件同夹**：契约文档 ＋ 实现 ＋ 原子级测试（＋机器可读边车，若为生成物） | 每 `world-core/src/<mNN>/`（或 `src/**/<atom>/`）下：实现、`tests/` 里的原子级测试、契约条目三者齐备 | `ATOMIZATION.md:11`「一个原子一个文件夹：`<id>.atom.md` ＋ `detail.json` ＋ `impl/` ＋ `tests/`」 |
 | **A-3** | **契约字段齐**：`intent / input / output / side_effects` 必写；不写副作用＝声明"无副作用" | 契约表逐列非空；`side_effects` 允许写"无"，但不许留空 | `spec/atom.schema.json` 必填 `id, layer, version, intent, description, input, output` ＋ 可选 `side_effects` |
 | **A-4** | **依赖单向 DAG，且 `deps` 必须等于真实 import** | 机器断言：声明的依赖集 ≡ 代码里真实 import/use 的兄弟模块集；有向图无环 | `ATOMIZATION.md:32`「依赖是单向 DAG，且 `deps` 必须等于 `impl/` 里真实 import 的兄弟原子」 |
@@ -47,11 +47,11 @@
 
 | # | 断言 | 今天的状态 | 落点 |
 |---|---|---|---|
-| 1 | 每个原子有且只有一句 `intent` | **未建** | `cover-unimplemented-capabilities` tasks（新增一组） |
+| 1 | 每个原子有且只有一句 `intent` | **未建** | `cover-unimplemented-capabilities` tasks **第 12 组**（本件落笔时新建；见该件 `tasks.md`） |
 | 2 | 每原子的实现／测试／契约三件齐备 | 部分（测试在 `tests/*.rs`，与 src 不同夹） | 同上 |
-| 3 | `deps == import` 且无环 | **未建** | 同上（`tools/module_graph.py --check`） |
+| 3 | `deps == import` 且无环 | **在建**：`world-core/tools/module_graph.py` 已落盘（2026-09-27），裸跑 `通过 0 / 失败 3`（含"依赖图有环：M05 → M05"），`--self-test` 正控自己也失败 ⇒ **尚未可用**，**尚未入库** | 同件第 12 组 ＋ 该工具自证转绿 |
 | 4 | 生成物与源一致（`WC-MODREG-001`） | 未建闸 | 同上 |
-| 5 | 编码 UTF-8 无 BOM | **已建**（`plain_text_audit.py`；BOM 已纳入） | 已有的 `check.sh` 步骤 |
+| 5 | 编码 UTF-8 无 BOM | **半建**：非法 UTF-8／NUL／控制字符**已拦**（`world-core/tools/plain_text_audit.py`）；**BOM 未拦**——实测 `audit_bytes(b"\xef\xbb\xbfhello\n")` 返回 `(True,'ok')`，该脚本只在 UTF-16LE BOM 上因"非法 UTF-8"顺带报错 ⇒ **BOM 这条今天没有执行者** | 落点：本件 §四 第 5 条改造 `plain_text_audit.py`（加一条 BOM 判据＋反例），**不进 `cover-*`**（它属工具改造，见 `WC-ATOM-001` 的原子侧落点） |
 
 > **不写"做了"就是没做**：上表第 1–4 条今天**没有执行者**，故本件不声明它们已生效——按本项目规矩（书 L5/L6 的分界）它们是"**规格已定、只差做到**"，进覆盖 change 的 `## L5 覆盖边界`。
 
