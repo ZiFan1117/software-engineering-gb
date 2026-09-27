@@ -51,7 +51,8 @@ const RESERVED_FLAG_PREFIX: &str = "gate.";
 /// 1. **不破公开签名**：`World::commit` 在 HEAD 上 `tests/**` 有 **60 处**调用点、
 ///    [`World::commit_requested`] 另有 `tests/delivery.rs` **19 处**与 `src/channel.rs` 的
 ///    `RequestSink` **1 处调用 ＋ 1 处 trait 声明**。
-///    〔★ 2026-09-28 评审席纠正〕原写 delivery **18 处**／channel **2 处**——实测 delivery 是 **19**，///    channel 是 **1 调用 ＋ 1 声明**（口径不同，不是同一个数）。给它们加参数要逐字改**每一个**调用点，而其中
+///    口径说明：`tests/delivery.rs` 的调用点是 **19 处**；`src/channel.rs` 是 **1 处调用 ＋ 1 处 trait 声明**
+///    （两者口径不同，不是同一个数）。给它们加参数要逐字改**每一个**调用点，而其中
 ///    `tests/ontology_ext.rs` 正由并行工区在写——那是**别人的文件**，跨过去就是事故。
 /// 2. **可选信封字段是一个概念**：`trace`／`to`／`flags` 都是"信封上可选的格子"。
 ///    装进结构体以后，再加一个格子**不必动任何调用点**；

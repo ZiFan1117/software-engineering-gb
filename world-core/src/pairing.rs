@@ -70,18 +70,13 @@ pub fn is_act(ev: &Value) -> bool {
 /// **只看这个键在不在，不猜别的**——猜"看起来像结果"才会掩盖事实。
 ///
 /// ⚠️ **与旧实现在这一格上不同**（旧实现是
-/// `and_then(Value::as_str).map(|r| r == "ok" || …).unwrap_or(false)`：取值读不出来时算**意图**）。
-/// 该差异由**独立评审席**实测指出（`params.result` = `7`／`null`／`{}` 三种形态：旧 false、新 true；
+/// `and_then(Value::as_str).map(|r| r == "ok" || …).unwrap_or(false)`：取值读不出来时算**意图**；
+/// `params.result` = `7`／`null`／`{}` 三种形态实测：旧 false、新 true；
 /// 同一账本经 `carrier::recover::orphans` 判出的孤儿数 2 vs 1）。
-/// ⇒ 处置：**保留这个更稳的行为**（它才符合本函数"不猜、不藏"的意图），
-/// 但**必须**：① 本节文档按实改写（原来写的是"且取值 ∈ RESULTS"，与代码矛盾）；
-/// ② 在**生产路径**（`src/carrier/recover.rs`）补一条守卫单测——评审席指出该文件原有 9 条单测
-/// **没有一条覆盖这个形态**——注意：`pairing::unit::a_broken_result_value_is_still_a_result`
-/// **早在 `75dc0d6` 就有**，它直接钉住 `is_result` 本身；**本次补的是另一层**：
-/// **经 `carrier::recover::orphans` 的生产路径端到端守卫**（`src/carrier/recover.rs`），
-/// 即"这条偏移在**真正消费它的那条路径上**也有断言"。
-/// 〔★ 2026-09-28 独立评审席纠正〕原话写"此前**无守卫**"——**那是假的**：
-/// 该形态在 `pairing.rs` 有直接单测（评审席实测：把 `Unreadable` 改成 `false` ⇒ 那条也变红）。
+/// ⇒ **这一格有两层守卫**：本模块的 `a_broken_result_value_is_still_a_result` 直接钉住 `is_result` 本身；
+/// 另一层在**真正消费它的那条路径**上——`world-core/tests/write_side.rs` 与
+/// `src/carrier/recover.rs` 的 `a_result_whose_value_is_unreadable_still_closes_the_pair`。
+/// 本节文档与实现对同一件事的说法必须一致（原来写的是"且取值 ∈ RESULTS"，与代码矛盾）。
 pub fn is_result(ev: &Value) -> bool {
     match result_tag(ev) {
         ResultTag::Named(r) => RESULTS.contains(&r),

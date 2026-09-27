@@ -22,7 +22,7 @@
       旧实现 `and_then(Value::as_str).map(|r| r=="ok"||"failed"||"refused").unwrap_or(false)` 算**意图**；新实现算**结果**（`ResultTag::Unreadable => true`）。同一账本经 `carrier::recover::orphans`：**孤儿数 2（新）vs 1（旧）**。
       **处置**：**保留这个更稳的行为**（把"结果写坏了"如实当成结果，而不是让它伪装成"有意图、无结果"），并且**三件都补齐**：
       ① `pairing.rs` 的文档按实改写（原文写"且取值 ∈ `RESULTS`"，与代码矛盾）；
-      ② **在 `src/carrier/recover.rs` 加生产路径守卫单测**（**纠正**：原话写"此前**无守卫**"是**假的**——`pairing::unit::a_broken_result_value_is_still_a_result` **早在 `75dc0d6` 就有**、直接钉住 `is_result`；本次补的是**经 `orphans` 的生产路径端到端守卫**） `a_result_whose_value_is_unreadable_still_closes_the_pair`（评审席指出该文件原有 9 条单测**没有一条覆盖这个形态** ⇒ 这条偏移此前**无守卫**）；
+      ② **在 `src/carrier/recover.rs` 加生产路径守卫单测**（**这一格在 `pairing.rs` 早有直接单测**：`pairing::unit::a_broken_result_value_is_still_a_result`（`75dc0d6` 起）直接钉住 `is_result` 本身；**本次补的是另一层**——**经 `carrier::recover::orphans` 的生产路径端到端守卫**） `a_result_whose_value_is_unreadable_still_closes_the_pair`（评审席指出该文件原有 9 条单测**没有一条覆盖这个形态** ⇒ 这条偏移此前**无守卫**）；
       ③ 本注按实改写（不再声称"未动行为"）。
 
 ## 2. 通道资源边界（`REQ-F-026`）
@@ -280,9 +280,9 @@
       **★ 已结账（2026-09-28，执行者带证据）**：规格条文**本来就在**（本件 `specs/ledger-integrity/spec.md` 的 ADDED Requirement —— 三句**逐句**、并写明"任何一句为绿 SHALL NOT 被用来支持另一句"）；缺的是那行 `证据（待补）`。现按验收"**逐句核标的**"补上**可重跑**的读数：
       · **①（唯一写入路径 ＋ 只追加账本）—— 标的今天存在且可核**：`world-core/src/lib.rs:117` 起是一段 **`compile_fail` 文档测试**，把"唯一写入口"钉成**编译期事实**（绕开 `World::commit*` 造事件**编译不过**）。取数：VM `cargo test --locked --doc` ⇒ `test src/lib.rs - World (line 117) - compile fail ... ok`（rc=0）。
       · **②（世界外面的效果可否被撤回）—— 标的今天不存在**：`git grep -n -E "第二本账|对账表|reconcil" -- world-core/src` ⇒ **rc=1（0 处）**。
-        规格树里 3 处命中**都不是"要求实现"**：`projections` 的 `:30`／`:38`／`:46` 逐字「否则读模型就成了一本会漂移的**第二本账**」是**禁止**第二本账，方向与②**同向**。
+        规格树里 3 处命中**都不是"要求实现"**（★ 坐标：**三处都在 `read-model`**，`openspec/specs/projections/spec.md` 一句都没有）：`openspec/changes/archive/2026-09-27-baseline-verified-doctrine/specs/read-model/spec.md:30`／`openspec/changes/archive/2026-09-28-fc-2026-002-spec-revisions/specs/read-model/spec.md:38`／`openspec/specs/read-model/spec.md:46` 逐字「否则读模型就成了一本会漂移的第二本账」（**原文无强调，此处照抄**）是**禁止**第二本账，方向与②**同向**。
       · **③（可担此责的人）—— 标的今天不存在**：`git grep -n -E "归责|损失机制|liabilit" -- world-core/src` ⇒ **rc=1（0 处）**。
-        规格树里 2 处是**对照句**（逐字「门禁、审计与**归责**三件事同时失效，因此这一条是 `管` 的前置条件」）——说的是"三件事同时失效会怎样"，不是归责机制的落点。
+        规格树里 2 处是**对照句**（逐字「门禁、审计与归责三件事同时失效，因此这一条是 `管` 的前置条件」）——说的是"三件事同时失效会怎样"，不是归责机制的落点。
       · **"不许互相支持"写成了可核的理由**（不是修辞）：①的标的是**账本内部**的可答性（"有没有记录"）、②的标的是**世界外面**的效果可否撤回、③的标的是**人**的可归责性——**三者的标的物各不相同**，故①的编译期事实**在逻辑上推不出**②③；并给了**反例形态**（若有人拿①论证"所以能追责"，按"冒充"处置，与 `REQ-F-029` 的"未知旗标／未知家族不许互相冒充"**同一形状**）。
       **★ 一个当场被抓的形态错误（如实记）**：我第一版把 token 全放进子条目、`- **证据**：`那一行**没有反引号 token** ⇒ 判据② 当场报
       「证据行里没有反引号包起来的 token……形态上等于声称存在」⇒ 守卫从 11/0 变 10/1。按判据的形态要求（那一行必须自带 token）改好后**复跑 11/0**。**这正是"门禁有牙"的又一例：我写得不合规，它当场红。**

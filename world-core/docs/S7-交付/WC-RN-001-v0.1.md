@@ -9,7 +9,10 @@
 
 怎么读出来（**现取**）：
 ```
-world-core/target/release/world-core state --json   # 二进制名＝包名 `world-core`（`Cargo.toml` 无 `[[bin]]`）
+cd world-core && ./target/release/world-core --ontology ontology.json --policy policy.json \
+                            --ledger ledger.jsonl state --json
+# 二进制名＝包名 `world-core`（`Cargo.toml` 无 `[[bin]]`）；三个路径参数是**必填**的，故从仓根直接写
+# `world-core/target/release/world-core state --json` 会因找不到 `ontology.json` 而 rc=2
 # 或直接看常量：Select-String world-core\src\event.rs -Pattern WORLD_VERSION
 ```
 
@@ -29,7 +32,7 @@ cargo build --locked --release
 
 | 限制 | 在册处 |
 |---|---|
-| **机核层守卫（`WC-ATOM-001` §四）今天通过**：真源码环 `M04 ↔ M09` 已按"消回边、保留合法方向"改成 DAG（`src/channel.rs` 用窄接口 `RequestSink`，`src/lib.rs` 为 `World` 实现）⇒ 三条判据 `通过 3 / 失败 0`；**读数以命令为准**（`bash check.sh`） | `openspec/BOOK/冲突总账.md` 的"里程碑"一节 |
+| **机核层守卫（`WC-ATOM-001` §四）今天通过**：真源码环 `M04 ↔ M09` 已按"消回边、保留合法方向"改成 DAG（`src/channel.rs` 用窄接口 `RequestSink`，`src/lib.rs` 为 `World` 实现）——**读数以 `bash check.sh` 与 `python world-core/tools/module_graph.py` 的输出为准，本节不复述数字** | `openspec/BOOK/冲突总账.md` 的"里程碑"一节 |
 | 一批"规格已写、断言未写"的条目：转出到 `openspec/changes/fc-2026-004-assertions/`，**未勾完** | 该 change 的 `tasks.md` |
 | 一批能力**书要求了、实现未落地**（投递与应答、通道资源边界、家族演进、未知旗标、本体命名空间、`trace` 语义、通告的闸、读模型缺格…） | `openspec/changes/cover-unimplemented-capabilities/tasks.md` |
 | `S5/S6/S7` 之外**没有**别的流程侧文档（文档集封闭，见 skill §二） | — |

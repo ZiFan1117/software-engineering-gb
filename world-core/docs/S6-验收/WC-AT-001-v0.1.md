@@ -25,7 +25,7 @@
 | ⑥ | 系统级验收（真实二进制端到端） | rc=0 |
 | ⑦ | S1 需求验证面补建（两轮 `TC-0xx`） | rc=0 |
 | ⑧ | 规格层守卫（`tools/spec_bridge.py`） | rc=0 |
-| ⑨ | 机核层守卫（`tools/module_graph.py`，`WC-ATOM-001` §四） | rc=0（**2026-09-28 已满足**：真源码环 `M04↔M09` 已按"消回边、保留合法方向"改成 DAG ⇒ 三条判据 `通过 3 / 失败 0`） |
+| ⑨ | 机核层守卫（`tools/module_graph.py`，`WC-ATOM-001` §四） | rc=0（真源码环 `M04↔M09` 已按「消回边、保留合法方向」改成 DAG）——**读数以 `python world-core/tools/module_graph.py` 的输出为准，本节不复述数字** |
 
 ## 三、准出判据（**哪些必须绿、哪些红是允许的**）
 
