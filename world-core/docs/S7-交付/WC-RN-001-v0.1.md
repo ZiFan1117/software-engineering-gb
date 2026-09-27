@@ -9,7 +9,7 @@
 
 怎么读出来（**现取**）：
 ```
-world-core/target/release/world state --json      # 或 VM 上同路径
+world-core/target/release/world-core state --json   # 二进制名＝包名 `world-core`（`Cargo.toml` 无 `[[bin]]`）
 # 或直接看常量：Select-String world-core\src\event.rs -Pattern WORLD_VERSION
 ```
 
@@ -18,7 +18,7 @@ world-core/target/release/world state --json      # 或 VM 上同路径
 ```
 cd world-core
 cargo build --locked --release
-./target/release/world --help
+./target/release/world-core --help
 ```
 - **依赖锁定**：一律 `--locked`；
 - **环境**：Rust `1.98.1`（`cargo`／`rustc` 同版）；**主机没有 Rust 工具链 ⇒ 构建与测试只在 VM**（见 `WC-ST-001` §二）；
@@ -29,7 +29,7 @@ cargo build --locked --release
 
 | 限制 | 在册处 |
 |---|---|
-| ~~机核层守卫（`WC-ATOM-001` §四）仍红~~ **已消（2026-09-28）**：真源码环 `M04 ↔ M09` 已按"消回边、保留合法方向"改成 DAG（`src/channel.rs` 用窄接口 `RequestSink`，`src/lib.rs` 为 `World` 实现）⇒ 三条判据 `通过 3 / 失败 0`，`check.sh` 十步全过 | `openspec/BOOK/冲突总账.md` 的"里程碑"一节 |
+| **机核层守卫（`WC-ATOM-001` §四）今天通过**：真源码环 `M04 ↔ M09` 已按"消回边、保留合法方向"改成 DAG（`src/channel.rs` 用窄接口 `RequestSink`，`src/lib.rs` 为 `World` 实现）⇒ 三条判据 `通过 3 / 失败 0`；**读数以命令为准**（`bash check.sh`） | `openspec/BOOK/冲突总账.md` 的"里程碑"一节 |
 | 一批"规格已写、断言未写"的条目：转出到 `openspec/changes/fc-2026-004-assertions/`，**未勾完** | 该 change 的 `tasks.md` |
 | 一批能力**书要求了、实现未落地**（投递与应答、通道资源边界、家族演进、未知旗标、本体命名空间、`trace` 语义、通告的闸、读模型缺格…） | `openspec/changes/cover-unimplemented-capabilities/tasks.md` |
 | `S5/S6/S7` 之外**没有**别的流程侧文档（文档集封闭，见 skill §二） | — |

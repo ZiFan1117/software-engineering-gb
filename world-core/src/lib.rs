@@ -49,8 +49,9 @@ const RESERVED_FLAG_PREFIX: &str = "gate.";
 /// ## 为什么是一个结构体，而不是继续给 [`World::commit`] 堆位置参数（形态裁定，理由三条）
 ///
 /// 1. **不破公开签名**：`World::commit` 在 HEAD 上 `tests/**` 有 **60 处**调用点、
-///    [`World::commit_requested`] 另有 `tests/delivery.rs` **18 处**与 `src/channel.rs` 的
-///    `RequestSink` **2 处**。给它们加参数要逐字改**每一个**调用点，而其中
+///    [`World::commit_requested`] 另有 `tests/delivery.rs` **19 处**与 `src/channel.rs` 的
+///    `RequestSink` **1 处调用 ＋ 1 处 trait 声明**。
+///    〔★ 2026-09-28 评审席纠正〕原写 delivery **18 处**／channel **2 处**——实测 delivery 是 **19**，///    channel 是 **1 调用 ＋ 1 声明**（口径不同，不是同一个数）。给它们加参数要逐字改**每一个**调用点，而其中
 ///    `tests/ontology_ext.rs` 正由并行工区在写——那是**别人的文件**，跨过去就是事故。
 /// 2. **可选信封字段是一个概念**：`trace`／`to`／`flags` 都是"信封上可选的格子"。
 ///    装进结构体以后，再加一个格子**不必动任何调用点**；
@@ -649,8 +650,27 @@ impl World {
     /// 这个方法**不缓存、不写盘、不记住上次结果**——每次调用都是"把账本从头折叠一遍"。
     /// 慢是它的缺点，也是它的全部价值：**它不可能与账本不一致**。
     /// 将来若加快照（`M08`），必须先证明"从快照续算"与"从这里重算"结果相同。
+    ///
+    /// ## 为什么在这里把**法律**递给读模型（`REQ-F-032` 的缺格判据）
+    ///
+    /// 读模型侧的缺格判据要按"本体**已声明**的必填格"来判（书第五章 5.6 表 5.2 行逐字
+    /// 「每个已声明的字段至少有一份读法可读，缺格就报错」），而读模型**不许**
+    /// `use crate::ontology::…`——`WC-MODREG-001` §2 给 `M03` 的口径是「**无**（生产代码零出边）」，
+    /// 机核层 `tools/module_graph.py` 判据② 逐边核对「声明集 ≡ 真实 import 集」。
+    /// ⇒ 依赖方向留在**装配处**：本处（`M04`，依赖列本就含 `M01` 与 `M03`）把法律以**纯数据**
+    /// 递进去（[`Ontology::envelope_required`]／[`Ontology::family_required`]），
+    /// 两边读的是**同一份**出厂本体——同源，且不新增任何模块边。
+    ///
+    /// ⚠️ 这一行让**命令这一级**也变严：`state`／`project` 对"缺已声明必填格"的账本行
+    /// 从"静默通过"变成"拒"（`ext.world.ReadModel.MissingCell`，点名缺的那一格）。
+    /// `tools/s1_sys_probe.sh` 的 `TC-047` ⑨ 登记的就是这一格（逐字：「缺必填信封字段 `actor`
+    /// 竟**被接受**…折叠层不校验」），它**同日改为断言**。
     pub fn read_model(&self) -> Result<State, String> {
-        State::fold(&self.ledger.read_all()?)
+        let cells = readmodel::DeclaredCells::new(
+            self.ontology.envelope_required(),
+            self.ontology.family_required(),
+        );
+        State::fold_declared(&cells, &self.ledger.read_all()?)
     }
 }
 

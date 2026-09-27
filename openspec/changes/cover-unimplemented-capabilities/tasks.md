@@ -22,7 +22,7 @@
       旧实现 `and_then(Value::as_str).map(|r| r=="ok"||"failed"||"refused").unwrap_or(false)` 算**意图**；新实现算**结果**（`ResultTag::Unreadable => true`）。同一账本经 `carrier::recover::orphans`：**孤儿数 2（新）vs 1（旧）**。
       **处置**：**保留这个更稳的行为**（把"结果写坏了"如实当成结果，而不是让它伪装成"有意图、无结果"），并且**三件都补齐**：
       ① `pairing.rs` 的文档按实改写（原文写"且取值 ∈ `RESULTS`"，与代码矛盾）；
-      ② **在 `src/carrier/recover.rs` 加生产路径守卫单测** `a_result_whose_value_is_unreadable_still_closes_the_pair`（评审席指出该文件原有 9 条单测**没有一条覆盖这个形态** ⇒ 这条偏移此前**无守卫**）；
+      ② **在 `src/carrier/recover.rs` 加生产路径守卫单测**（**纠正**：原话写"此前**无守卫**"是**假的**——`pairing::unit::a_broken_result_value_is_still_a_result` **早在 `75dc0d6` 就有**、直接钉住 `is_result`；本次补的是**经 `orphans` 的生产路径端到端守卫**） `a_result_whose_value_is_unreadable_still_closes_the_pair`（评审席指出该文件原有 9 条单测**没有一条覆盖这个形态** ⇒ 这条偏移此前**无守卫**）；
       ③ 本注按实改写（不再声称"未动行为"）。
 
 ## 2. 通道资源边界（`REQ-F-026`）

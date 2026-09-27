@@ -76,7 +76,12 @@ pub fn is_act(ev: &Value) -> bool {
 /// ⇒ 处置：**保留这个更稳的行为**（它才符合本函数"不猜、不藏"的意图），
 /// 但**必须**：① 本节文档按实改写（原来写的是"且取值 ∈ RESULTS"，与代码矛盾）；
 /// ② 在**生产路径**（`src/carrier/recover.rs`）补一条守卫单测——评审席指出该文件原有 9 条单测
-/// **没有一条覆盖这个形态**，所以这条行为偏移此前**无守卫**。
+/// **没有一条覆盖这个形态**——注意：`pairing::unit::a_broken_result_value_is_still_a_result`
+/// **早在 `75dc0d6` 就有**，它直接钉住 `is_result` 本身；**本次补的是另一层**：
+/// **经 `carrier::recover::orphans` 的生产路径端到端守卫**（`src/carrier/recover.rs`），
+/// 即"这条偏移在**真正消费它的那条路径上**也有断言"。
+/// 〔★ 2026-09-28 独立评审席纠正〕原话写"此前**无守卫**"——**那是假的**：
+/// 该形态在 `pairing.rs` 有直接单测（评审席实测：把 `Unreadable` 改成 `false` ⇒ 那条也变红）。
 pub fn is_result(ev: &Value) -> bool {
     match result_tag(ev) {
         ResultTag::Named(r) => RESULTS.contains(&r),
