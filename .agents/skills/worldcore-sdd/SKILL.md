@@ -200,6 +200,7 @@ description: 语义世界／world-core 的**软件开发 skill**（我们自己�
 | **`cargo test` 可能跑旧二进制 ⇒ 假绿** | 变异明明打上了，测试却 `ok`。根因：副本用 `tar` 复制会**保留 mtime**，而 cargo 的新鲜度判定是 **mtime 比较** ⇒ **不重建**，CLI 用例跑的是上一轮的二进制。**实测踩到两次。** | 每条变异先 **`find src tests -name '*.rs' -exec touch {} +`** ＋ `cargo build --locked --bin world-core`，**再**跑测试。凡测 `tests/cli.rs` 的工区都踩得到 |
 | **共享临时目录被并行工区互踩** | `/tmp/mut`／`/tmp/tam`／`/tmp/ta` 是任务书里的**写死路径** ⇒ 一个工区把另一个正在用的副本**中途重拷**（于是出现上面那种假绿）；`/tmp`（tmpfs 3.9G）一度 93% 满、`cargo` 报 `No space left on device` | 每个工区用**带自己后缀的私有路径**（`/tmp/mut-<工区>`／`/tmp/t-<工区>`），用完清 |
 | **`scp -r` 带过去的权限位会造"假红"** | Windows → VM 的 `scp -r` 把目录弄成 **705/707** ⇒ `cap.d` 触发**静态墙** ⇒ **全部用例一起红**（看着像"世界坏了"，其实是传输） | 传完 `chmod 755` 目录再跑。**`push-vm.ps1` 的 base64 ＋ `mkdir -p` 路径不保留 mode，故没有这个问题**——这也是"用仓内既有工具而不是随手 `scp`"的一个理由 |
+| **★ 同步与工区落盘之间的竞态 ⇒ 假"编译失败"** | 并行工区**刚**新建 `src/*.rs`、又已在 `mod.rs` 里 `pub mod` 了它，而我的镜像同步**跑在它落盘之前** ⇒ VM 上"文件不存在" ⇒ `error[E0583]: file not found for module X`、`could not compile`。**看起来像代码错，其实是时序** | **复跑一次同步再判**（实测：第一次 `HEALTH=FAIL`＋5 条 error；重新同步后 **`HEALTH=OK`、0 error**——三个文件其实都在、且都在该工区的文件面内、`src/lib.rs` 没被碰）。判"树坏没坏"时**先看那几个 `mod` 声明的源文件在不在**，别急着当成缺陷报 |
 
 **通则（与 §六 同一句）**：**"测试绿了/红了"要先问一句"我跑的是哪一个二进制、哪一个副本、哪一棵树"**。
 
