@@ -130,22 +130,12 @@ impl State {
     fn apply_change(&mut self, seq: u64, ev: &Value) -> Result<(), String> {
         let body = match ev.get("body") {
             Some(Value::Object(m)) => m,
-            Some(_) => {
-                return Err(format!(
-                    "ext.world.ReadModel.BadCell: change 事件 seq={seq} 的 body **不是对象**\
-                     ——它不是缺格，是形状不对（读模型不猜、也不修补）"
-                ))
-            }
+            Some(_) => return Err(bad_cell_msg(seq, "body")),
             None => return Err(missing_cell_msg(seq, "envelope", "body")),
         };
         let subject = match body.get("subject") {
             Some(Value::String(s)) => s.as_str(),
-            Some(_) => {
-                return Err(format!(
-                    "ext.world.ReadModel.BadCell: change 事件 seq={seq} 的 body.subject **不是字符串**\
-                     ——它不是缺格，是形状不对"
-                ))
-            }
+            Some(_) => return Err(bad_cell_msg(seq, "body.subject")),
             None => return Err(missing_cell_msg(seq, "body[change]", "subject")),
         };
         let path = match body.get("path") {
@@ -355,7 +345,10 @@ pub struct DeclaredCells {
 
 impl DeclaredCells {
     /// 用**纯数据**装配（调用方从本体取；见类型文档的"为什么是数据"）。
-    pub fn new(envelope_required: Vec<String>, family_required: BTreeMap<String, Vec<String>>) -> Self {
+    pub fn new(
+        envelope_required: Vec<String>,
+        family_required: BTreeMap<String, Vec<String>>,
+    ) -> Self {
         Self {
             envelope_required,
             family_required,
@@ -461,6 +454,18 @@ fn missing_cell_msg(seq: u64, at: &str, field: &str) -> String {
         "ext.world.ReadModel.MissingCell: 缺格：{at} 少了 `{field}`（seq={seq}）\
          ——（无法律折叠：读模型只查它自己要用的那几格；\"该层已声明的必填格\"要由带法律的那条路给出，\
          见 `State::apply_declared`）"
+    )
+}
+
+/// 「在，但不是那个形状」——**与"缺格"分开**（`BadCell` ≠ `MissingCell`）。
+///
+/// 为什么抽成函数而不是内联 `format!`：那两处的文案里有**跨行的字符串续行**，其缩进属于字符串内容、
+/// 会参与 rustfmt 的行长计算 ⇒ 内联时 **rustfmt 的结论会来回翻**（2026-09-28 实测：先要块形式、
+/// 改成块形式后又要回非块形式，`cargo fmt --all -- --check` 永远差 1 处）。抽出来结构就定了。
+fn bad_cell_msg(seq: u64, what: &str) -> String {
+    format!(
+        "ext.world.ReadModel.BadCell: change 事件 seq={seq} 的 {what} 形状不对\
+         ——它不是缺格，是形状不对（读模型不猜、也不修补）"
     )
 }
 

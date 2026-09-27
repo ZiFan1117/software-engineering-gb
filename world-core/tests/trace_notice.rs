@@ -147,7 +147,10 @@ fn f61_append_with_trace_lands_and_reads_back_byte_for_byte() {
             traced,
         ],
     );
-    assert_eq!(code, 0, "带 trace 的事件必须被接受并落笔（判据 (2) 正向）；stderr={err}");
+    assert_eq!(
+        code, 0,
+        "带 trace 的事件必须被接受并落笔（判据 (2) 正向）；stderr={err}"
+    );
     assert!(
         out.contains("\"trace\":\"e-意图-001\""),
         "append 的 stdout 里必须原样出现 trace；stdout={out}"
@@ -204,7 +207,10 @@ fn f62_append_without_trace_writes_no_trace_key_and_still_lands() {
             "world://user",
         ],
     );
-    assert_eq!(code, 0, "不带 trace 的事件同样必须被接受并落笔（判据 (2) 反向）；stderr={err}");
+    assert_eq!(
+        code, 0,
+        "不带 trace 的事件同样必须被接受并落笔（判据 (2) 反向）；stderr={err}"
+    );
     assert!(
         !out.contains("trace"),
         "没给 trace 就不许写该键（不写 null）；stdout={out}"
@@ -220,7 +226,11 @@ fn f62_append_without_trace_writes_no_trace_key_and_still_lands() {
     let evs = events(&d);
     assert_eq!(evs.len(), 1, "事件必须真的落笔：{evs:?}");
     assert_eq!(evs[0]["seq"], json!(1), "落笔位置号从 1 起：{evs:?}");
-    assert_eq!(evs[0]["body"]["type"], json!("job.done"), "信纸必须完整：{evs:?}");
+    assert_eq!(
+        evs[0]["body"]["type"],
+        json!("job.done"),
+        "信纸必须完整：{evs:?}"
+    );
 }
 
 /// **f63**：`--trace ""`（给了空串）按**未给**处理 ⇒ 不写该键。
@@ -283,10 +293,7 @@ fn f64_a_traced_result_can_be_traced_back_from_the_ledger() {
     );
     assert_eq!(c1, 0, "意图必须落账；stderr={e1}");
     let intent: Value = serde_json::from_str(o1.trim()).expect("append 的 stdout 是一条事件 JSON");
-    let intent_id = intent["id"]
-        .as_str()
-        .expect("事件必须带 id")
-        .to_string();
+    let intent_id = intent["id"].as_str().expect("事件必须带 id").to_string();
 
     // ② 结果带 `trace` 指回意图
     let (c2, _o2, e2) = run(
@@ -479,7 +486,8 @@ fn f67_flags_land_through_the_write_entry_and_unknown_ones_are_kept() {
     // 反假：这两个旗标**不在**出厂本体的声明里（`ontology.json` 的 `flags` 是空数组）——
     // 否则本用例验的不是"未知旗标"。
     let ont: Value =
-        serde_json::from_str(&fs::read_to_string(manifest().join("ontology.json")).unwrap()).unwrap();
+        serde_json::from_str(&fs::read_to_string(manifest().join("ontology.json")).unwrap())
+            .unwrap();
     assert_eq!(
         ont["flags"].as_array().map(Vec::len),
         Some(0),
@@ -530,7 +538,9 @@ fn f68_a_caller_supplied_reserved_flag_is_refused_and_leaves_a_flow() {
     );
     let evs = events(&d);
     assert_eq!(
-        evs.iter().filter(|e| e["body"]["type"] == json!("job.done")).count(),
+        evs.iter()
+            .filter(|e| e["body"]["type"] == json!("job.done"))
+            .count(),
         0,
         "被拒的事件绝不许落笔：{evs:?}"
     );
@@ -578,7 +588,14 @@ fn f68_a_caller_supplied_reserved_flag_is_refused_and_leaves_a_flow() {
     // 正控：同一本账上，非保留前缀的旗标照样落笔（防"把正常路径一并打死"）
     let (c3, _o3, e3) = run(
         &d2,
-        &["append", "notice", body, "world://user", "--flag", "future.flag"],
+        &[
+            "append",
+            "notice",
+            body,
+            "world://user",
+            "--flag",
+            "future.flag",
+        ],
     );
     assert_eq!(c3, 0, "非保留前缀的旗标必须放行；stderr={e3}");
 }
@@ -604,15 +621,21 @@ fn f69_commit_envelope_carries_flags_and_default_equals_commit() {
         let d = tmpdir(tag);
         let lp = d.join("ledger.jsonl");
         (
-            World::open(&manifest().join("ontology.json"), &lp, &manifest().join("policy.json"))
-                .expect("出厂本体与策略应当能打开"),
+            World::open(
+                &manifest().join("ontology.json"),
+                &lp,
+                &manifest().join("policy.json"),
+            )
+            .expect("出厂本体与策略应当能打开"),
             d,
         )
     };
 
     // ① `commit` 与 `commit_envelope(default)`：**键集相同**、都不带 `trace`/`to`
     let (mut wa, _da) = open("f69a");
-    let a = wa.commit("notice", "world://user", notice()).expect("commit 应当成功");
+    let a = wa
+        .commit("notice", "world://user", notice())
+        .expect("commit 应当成功");
     let (mut wb, _db) = open("f69b");
     let b = wb
         .commit_envelope("notice", "world://user", notice(), &Envelope::default())
@@ -622,8 +645,14 @@ fn f69_commit_envelope_carries_flags_and_default_equals_commit() {
         keys(&b),
         "`Envelope::default()` 必须与 `commit` 落出**同形**的事件（键集逐字相等）"
     );
-    assert!(!keys(&a).contains(&"trace".to_string()), "没给因果就不许写 trace 键");
-    assert!(!keys(&a).contains(&"to".to_string()), "没给目的地就不许写 to 键");
+    assert!(
+        !keys(&a).contains(&"trace".to_string()),
+        "没给因果就不许写 trace 键"
+    );
+    assert!(
+        !keys(&a).contains(&"to".to_string()),
+        "没给目的地就不许写 to 键"
+    );
     assert_eq!(a["flags"], json!([]), "没给旗标就是空数组");
 
     // ② 库入口给旗标 ⇒ 落账、读回
@@ -675,7 +704,10 @@ fn f71_notices_that_must_not_be_sent_are_refused_and_leave_a_flow() {
             "world://user",
         ],
     );
-    assert_eq!(c1, 2, "保留前缀通告必须被拒（在册也不许冒充世界）；stderr={e1}");
+    assert_eq!(
+        c1, 2,
+        "保留前缀通告必须被拒（在册也不许冒充世界）；stderr={e1}"
+    );
     assert!(
         e1.contains("ext.world.Gate.NoticeNotAllowed"),
         "拒绝理由必须点名错误码；stderr={e1}"
@@ -720,7 +752,11 @@ fn f71_notices_that_must_not_be_sent_are_refused_and_leave_a_flow() {
         .iter()
         .filter(|e| e["body"]["type"] == json!("my.own.notice"))
         .collect();
-    assert_eq!(own.len(), 1, "正控的通告必须落笔，被拒的那条不许落笔：{evs:?}");
+    assert_eq!(
+        own.len(),
+        1,
+        "正控的通告必须落笔，被拒的那条不许落笔：{evs:?}"
+    );
     assert_eq!(
         own[0]["actor"],
         json!("world://agent/1"),
@@ -750,7 +786,11 @@ fn f71_notices_that_must_not_be_sent_are_refused_and_leave_a_flow() {
         );
     }
     // 流水记的是**哪一次尝试**：发起人 与 被拒信纸的 subject 是两件事，各占一格
-    assert_eq!(f1["actor"], json!("world://user"), "流水主体 = 被拒尝试的发起人：{f1}");
+    assert_eq!(
+        f1["actor"],
+        json!("world://user"),
+        "流水主体 = 被拒尝试的发起人：{f1}"
+    );
     assert_eq!(
         f1["body"]["payload"]["refused_subject"],
         json!("world://job/9"),
@@ -786,8 +826,7 @@ fn f71_notices_that_must_not_be_sent_are_refused_and_leave_a_flow() {
 #[test]
 fn f72_the_two_notice_refusal_paths_do_not_impersonate_each_other() {
     let d = tmpdir("f72");
-    let reserved =
-        r#"{"type":"gate.rejected","subject":"world://job/9","payload":{}}"#;
+    let reserved = r#"{"type":"gate.rejected","subject":"world://job/9","payload":{}}"#;
     let ordinary = r#"{"type":"my.own.notice","subject":"world://job/1","payload":{}}"#;
 
     // ① 不在册 ＋ 保留前缀 ⇒ 报的是"保留前缀"，不是"不在册"
@@ -823,8 +862,16 @@ fn f72_the_two_notice_refusal_paths_do_not_impersonate_each_other() {
     assert_eq!(c5, 2, "同一次尝试再来一次同样被拒");
 
     // ── 两条路径各自留了**自己类型**的流水（互不冒充）──
-    assert_eq!(kinds(&d, "gate.notice-not-allowed"), 1, "保留前缀路径的流水");
-    assert_eq!(kinds(&d, "gate.notice-rejected"), 4, "不在册路径的流水（四次尝试四条）");
+    assert_eq!(
+        kinds(&d, "gate.notice-not-allowed"),
+        1,
+        "保留前缀路径的流水"
+    );
+    assert_eq!(
+        kinds(&d, "gate.notice-rejected"),
+        4,
+        "不在册路径的流水（四次尝试四条）"
+    );
 
     let prints: Vec<String> = events(&d)
         .iter()

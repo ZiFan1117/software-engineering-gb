@@ -8,7 +8,8 @@
  · v1 误报 12 条：**把缩写当全名**比对（`d02` vs 真名 `d02_…`）⇒ 改**前缀匹配**；
  · v2 的"块级赦免"更坏：一个块里提一句"不存在"，就把该块**所有**引用都放过（连明明存在的 `policy.json` 也赦免）⇒
    那是**遮羞布**。⇒ v3 一律**按"这条引用所在的那一行"**裁定，且**逐条打印排除原因**（不静默放过）。
-排除面只有四种，判据写死在代码里、可复核。
+排除面**不写死类数**——**以输出里逐条打印的"原因串"为准**（写死就会烂：本文件自己就曾写"只有四种"，
+而当时的实际原因已有六类；改法是把类数交给输出）。判据写在代码里、可复核。
 '''
 import io, re
 from pathlib import Path
@@ -49,6 +50,48 @@ def _neg_adjacent(line: str, tok: str, window: int = 60) -> bool:
             tail = tail[:k]
     return any(w in tail for w in ('不存在', '无此文件', '零命中', '（无此 delta）'))
 
+
+# 命令串的**首词**白名单（**认形态，不认空格**——见 `_looks_like_command` 的说明）
+_CMD_HEADS = ('git', 'python', 'python3', 'bash', 'sh', 'cargo', 'cd', 'ls', 'run_tail', 'wc',
+              'grep', 'sed', 'awk', 'tar', 'ssh', 'scp', 'echo', 'cat', 'head', 'tail')
+
+
+def _looks_like_command(p: str) -> bool:
+    """`p` 是不是一条**命令串**（而不是一个路径）。
+
+    ★ 为什么必须"认形态"（2026-09-28，第三席实证的【洞②】）：旧判据是 `' ' in p` ——
+    **路径里只要有空格就整类排除**。于是 `world-core/src/ghost file.rs`（一个**不存在**的幽灵路径）
+    会被当成"仓外命令串"放过，**连"排除原因"都印成仓库外**，而它其实是个仓库内的坏路径。
+    ⚠ 这条兜底是**承重**的：`python world-core/tools/module_graph.py`／`git ls-files …` 这类
+    **真命令串**现在全靠它才不被当成路径去追存在性 ⇒ **不能简单删**，只能改认形态。
+    """
+    p = p.strip()
+    if not p:
+        return False
+    if any(ch in p for ch in ('$(', '|', '>', '&&', ';')) or '"' in p or '`' in p:
+        return True
+    head = p.split()[0] if ' ' in p else ''
+    return head in _CMD_HEADS
+
+
+def _expl_adjacent(line: str, tok: str, window: int = 30) -> bool:
+    """该引用**紧后面**（同一子句内）是不是"这是简称／内部编号／真名"的说明。
+
+    ★ 为什么（2026-09-28，第三席点出的【洞④】，与洞①同形）：旧判据只要**行内任意位置**出现
+    `简称/内部编号/真名/映射到`，就把该行**所有**引用赦免 ⇒ 一行里解释一句"`c23a` 是内部编号"，
+    同行的幽灵引用（实证 `zz77_ghost_assert`，全仓不存在）也被放过。
+    """
+    i = line.find('`%s`' % tok)
+    if i < 0:
+        return False
+    tail = line[i + len(tok) + 2: i + len(tok) + 2 + window]
+    for sep in ('；', '。', '——', '|'):
+        k = tail.find(sep)
+        if k >= 0:
+            tail = tail[:k]
+    return any(w in tail for w in ('简称', '内部编号', '真名', '映射到'))
+
+
 SHA = re.compile(r'^[0-9a-f]{7,40}$')
 blocks = re.split(r'(?m)^(?=- \[[ x]\] \d+\.\d+)', t)
 rows = []
@@ -84,8 +127,8 @@ for num, checked, blk in rows:
             continue
         ls = line_of(n)
         why = None
-        if any(w in ln for ln in ls for w in EXPL):
-            why = '该行是「简称／内部编号 → 真名」的映射说明'
+        if any(_expl_adjacent(ln, n) for ln in ls):
+            why = '该引用**紧后面**就是「简称／内部编号 → 真名」的映射说明（**子句内**判定，不再整行赦免）'
         elif any(_neg_adjacent(ln, n) for ln in ls):
             why = '该引用**紧后面**就是"它不存在"的声明（**相邻**判定，不再按整行赦免）'
         if why:
@@ -123,7 +166,7 @@ for num, checked, blk in rows:
             if all((R / c).exists() or (R / 'world-core' / c).exists()
                    or any((R / 'world-core').rglob(Path(c).name)) for c in cs):
                 why = '花括号路径，展开后 %d 个都在' % len(cs)
-        if why is None and (Path(p).name in OUTSIDE or ' ' in p):
+        if why is None and (Path(p).name in OUTSIDE or _looks_like_command(p)):
             why = '仓外工具名或命令串'
         if why is None and any(_neg_adjacent(ln, p) for ln in ls):
             why = '该引用**紧后面**就是"它不存在"的声明（**相邻**判定）'

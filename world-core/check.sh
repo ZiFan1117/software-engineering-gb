@@ -88,6 +88,13 @@ cp ontology.json policy.json "$SB"/
 chmod 755 "$SB"; chmod 644 "$SB/ontology.json" "$SB/policy.json"
 
 echo
+echo
+step "①b 格式检查（rustfmt）"
+# 为什么在这一步：CI workflow 跑 `cargo fmt --all -- --check`（`.github/workflows/world-core-gate.yml`），
+# 而本脚本此前**从不跑** ⇒ 本地十步全绿、**CI 每次 push 都红**（2026-09-28 实测：最近 5 次 run 全 failure，
+# 红的正是"格式检查"：65 处 diff、10 个文件）。格式是最便宜、最先该过的一关，故紧挨 ① 构建。
+run_tail 4 "格式检查（与 CI 同一条命令）" cargo fmt --all -- --check
+
 step "② 骨架冒烟（沙箱账本：$SB）"
 OUT="$("$BIN" --ontology "$SB/ontology.json" --ledger "$SB/ledger.jsonl" --policy "$SB/policy.json" check)"
 echo "$OUT" | sed 's/^/  /'

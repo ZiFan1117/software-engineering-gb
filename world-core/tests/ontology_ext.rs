@@ -277,7 +277,11 @@ fn e02_a_landed_ledger_line_with_unknown_flags_folds_byte_identically() {
         Some(&json!(true)),
         "那条带未知旗标的 change 必须**被折进状态**（不是被跳过——跳过也会『结果相同』）"
     );
-    assert_eq!(flagged_state.seen() as usize, base.len(), "每一行都被折叠过");
+    assert_eq!(
+        flagged_state.seen() as usize,
+        base.len(),
+        "每一行都被折叠过"
+    );
 }
 
 /// **e03**（**对偶**）：未知**家族**必须被拒，且**两处**都拒：写入侧（法律）与折叠侧（读模型）。
@@ -475,22 +479,19 @@ fn e05_the_public_write_entry_lands_an_unknown_flag_end_to_end() {
         !s1.is_empty() && s1.len() > 2,
         "折叠结果不能是空的（否则『逐字节相同』是同义反复）：{s1}"
     );
-    assert_eq!(
-        s1, s2,
-        "同一账本的折叠结果必须与不带该旗标时逐字节相同"
-    );
+    assert_eq!(s1, s2, "同一账本的折叠结果必须与不带该旗标时逐字节相同");
 
     // ⑤ 读者：认得的为空、它进 ignored；法律面照样接受
     let ont = Ontology::load(&factory_ontology()).unwrap();
     let f = ont.read_flags(&ev, event::is_factory_flag);
     assert!(f.known.is_empty(), "出厂读法不该认得它，实得 {:?}", f.known);
     assert_eq!(f.ignored, vec!["future.flag"]);
-    ont.validate(&ev)
-        .expect("带未知旗标的账本行必须被接受");
+    ont.validate(&ev).expect("带未知旗标的账本行必须被接受");
 
     // ⑥ 仍在册的边界：出厂两处"旗标表"都是空的（本体侧没有已定义旗标可比对）
     assert!(event::FLAGS.is_empty(), "出厂事件恒带的旗标表为空");
-    let raw: Value = serde_json::from_str(&fs::read_to_string(factory_ontology()).unwrap()).unwrap();
+    let raw: Value =
+        serde_json::from_str(&fs::read_to_string(factory_ontology()).unwrap()).unwrap();
     assert_eq!(
         raw["flags"].as_array().map(Vec::len),
         Some(0),
@@ -534,16 +535,16 @@ fn x01_an_extension_item_colliding_with_a_core_field_is_refused_at_load() {
         v["concepts"]["body"] = json!({ "fields": { "whatever": "string" } });
     });
     let e2 = Ontology::load(&collide_entity).expect_err("实体名与核心字段重名必须被拒");
-    assert!(e2.contains("ext.world.Ontology.CoreCollision"), "实得：{e2}");
+    assert!(
+        e2.contains("ext.world.Ontology.CoreCollision"),
+        "实得：{e2}"
+    );
 
     // 拒绝发生在**世界打开**这一步，且**不建账本**（法律不对就不许带病跑）
     let lp = dir.join("collide.jsonl");
     let opened = World::open(&collide_field, &lp, &factory_policy());
     assert!(opened.is_err(), "重名本体必须让世界拒绝启动");
-    assert!(
-        !lp.exists(),
-        "法律不对时不得建账本（拒绝发生在落笔之前）"
-    );
+    assert!(!lp.exists(), "法律不对时不得建账本（拒绝发生在落笔之前）");
 
     // 正控②：**只加扩展**的本体必须照常加载（否则这条检查会把判据③ 一起打死）
     let pure = write_ontology(&dir, "pure-ext.json", add_pure_extension);

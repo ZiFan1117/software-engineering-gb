@@ -206,7 +206,11 @@ fn h01_a_new_family_is_added_by_addition_and_the_new_reader_reads_the_old_ledger
         Some(&["scope".to_string(), "result".to_string()][..]),
         "新家族的必填格必须来自本体（不是读模型猜的）"
     );
-    assert_eq!(cells_old.family_required("audit"), None, "旧法律里没有这个家族");
+    assert_eq!(
+        cells_old.family_required("audit"),
+        None,
+        "旧法律里没有这个家族"
+    );
     for k in ["change", "act", "notice"] {
         assert_eq!(
             cells_ext.family_required(k),
@@ -412,10 +416,7 @@ fn h04_a_missing_declared_cell_is_refused_with_that_cell_named() {
 
     // ① 手写一条缺必填信封字段 `actor` 的账本行
     let mut missing_actor = lines.clone();
-    missing_actor[0]
-        .as_object_mut()
-        .unwrap()
-        .remove("actor");
+    missing_actor[0].as_object_mut().unwrap().remove("actor");
     let e = State::fold_declared(&cells, &missing_actor).expect_err("缺格必须拒（不得静默通过）");
     assert!(
         e.contains("ext.world.ReadModel.MissingCell"),
@@ -431,7 +432,11 @@ fn h04_a_missing_declared_cell_is_refused_with_that_cell_named() {
 
     // ② 反假：补回 actor ⇒ 能读，且与基线逐字节相同
     let back = State::fold_declared(&cells, &lines).expect("补回 actor 后必须能读");
-    assert_eq!(back.to_json().to_string(), base, "补回那一格后结论必须与基线逐字节相同");
+    assert_eq!(
+        back.to_json().to_string(),
+        base,
+        "补回那一格后结论必须与基线逐字节相同"
+    );
 
     // ③ 家族信纸的缺格同判（act 的 request_id）
     let mut missing_rid = lines.clone();
@@ -494,10 +499,7 @@ fn h05_the_cli_read_path_refuses_a_missing_declared_cell_end_to_end() {
     let good = dir.join("good.jsonl");
     write_ledger(&good, &lines);
     let mut missing_actor = lines.clone();
-    missing_actor[0]
-        .as_object_mut()
-        .unwrap()
-        .remove("actor");
+    missing_actor[0].as_object_mut().unwrap().remove("actor");
     let lp = dir.join("missing-actor.jsonl");
     write_ledger(&lp, &missing_actor);
 
@@ -583,7 +585,10 @@ fn h06_an_empty_declared_cell_list_is_not_read_as_lenient() {
 
     // 正控：真法律的清单不是空的，且同一批行必须能读（否则上面那条恒绿）
     let cells = declared_cells(&ont);
-    assert!(!cells.is_empty(), "出厂本体声明了 8 ＋ 4／3／2 格，清单不许为空");
+    assert!(
+        !cells.is_empty(),
+        "出厂本体声明了 8 ＋ 4／3／2 格，清单不许为空"
+    );
     assert_eq!(
         State::fold_declared(&cells, &lines).unwrap().seen(),
         lines.len() as u64
@@ -598,7 +603,8 @@ fn h06_an_empty_declared_cell_list_is_not_read_as_lenient() {
 #[test]
 fn h07_the_declared_inventory_is_mechanically_enumerable() {
     let ont = Ontology::load(&factory_ontology()).unwrap();
-    let raw: Value = serde_json::from_str(&fs::read_to_string(factory_ontology()).unwrap()).unwrap();
+    let raw: Value =
+        serde_json::from_str(&fs::read_to_string(factory_ontology()).unwrap()).unwrap();
 
     let strs = |v: &Value| -> Vec<String> {
         v.as_array()
@@ -611,10 +617,18 @@ fn h07_the_declared_inventory_is_mechanically_enumerable() {
     // ① 信封：必填 8 项、可选 2 项，逐字与原文一致
     let raw_req = strs(&raw["envelope"]["required"]);
     let raw_opt = strs(&raw["envelope"]["optional"]);
-    assert_eq!(ont.envelope_required(), raw_req, "信封必填格必须与本体原文逐字一致");
+    assert_eq!(
+        ont.envelope_required(),
+        raw_req,
+        "信封必填格必须与本体原文逐字一致"
+    );
     assert_eq!(ont.optional(), raw_opt.as_slice());
     assert_eq!(ont.envelope_required().len(), 8, "出厂本体：信封必填 8 项");
-    assert_eq!(ont.optional().len(), 2, "出厂本体：信封可选 2 项（to／trace）");
+    assert_eq!(
+        ont.optional().len(),
+        2,
+        "出厂本体：信封可选 2 项（to／trace）"
+    );
 
     // ② 三家族：必填格逐字一致；**可选格不在清单里**（可选 ≠ 缺格）
     let fams = ont.family_required();

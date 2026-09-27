@@ -83,8 +83,14 @@ fn d01_a_tagged_event_reaches_only_the_named_recipient() {
     let mut w = open_world("d01");
     let (a, b) = ("world://agent/1", "world://agent/2");
 
-    w.commit_requested("notice", a, event::notice_body("job.done", a, json!({})), None, Some(a))
-        .expect("带 `to` 的事件必须被接受（本体把 `to` 列为可选字段，不填或填了都不该报错）");
+    w.commit_requested(
+        "notice",
+        a,
+        event::notice_body("job.done", a, json!({})),
+        None,
+        Some(a),
+    )
+    .expect("带 `to` 的事件必须被接受（本体把 `to` 列为可选字段，不填或填了都不该报错）");
 
     let evs = w.ledger().read_all().unwrap();
     assert_eq!(evs.len(), 1, "账本必须有且只有这一条");
@@ -124,13 +130,31 @@ fn d02_an_untagged_event_is_broadcast_to_every_recipient() {
     let (a, b) = ("world://agent/1", "world://agent/2");
 
     // ① 收件人 a 各收一条（一条指定、一条广播）
-    w.commit_requested("notice", a, event::notice_body("job.done", a, json!({})), None, Some(a))
-        .unwrap();
-    w.commit_requested("notice", a, event::notice_body("job.done", a, json!({})), None, Some(b))
-        .unwrap();
+    w.commit_requested(
+        "notice",
+        a,
+        event::notice_body("job.done", a, json!({})),
+        None,
+        Some(a),
+    )
+    .unwrap();
+    w.commit_requested(
+        "notice",
+        a,
+        event::notice_body("job.done", a, json!({})),
+        None,
+        Some(b),
+    )
+    .unwrap();
     // ② 无 `to`：广播
-    w.commit_requested("notice", a, event::notice_body("job.done", a, json!({})), None, None)
-        .unwrap();
+    w.commit_requested(
+        "notice",
+        a,
+        event::notice_body("job.done", a, json!({})),
+        None,
+        None,
+    )
+    .unwrap();
 
     let evs = w.ledger().read_all().unwrap();
     assert_eq!(evs.len(), 3);
@@ -160,10 +184,22 @@ fn d03_an_empty_to_is_a_broadcast_and_a_name_narrows_it() {
     let mut w = open_world("d03");
     let (a, b) = ("world://agent/1", "world://agent/2");
 
-    w.commit_requested("notice", a, event::notice_body("job.done", a, json!({})), None, Some(""))
-        .expect("`to` 为空串必须被接受（空 = 广播，本体逐字）");
-    w.commit_requested("notice", a, event::notice_body("job.done", a, json!({})), None, Some(a))
-        .unwrap();
+    w.commit_requested(
+        "notice",
+        a,
+        event::notice_body("job.done", a, json!({})),
+        None,
+        Some(""),
+    )
+    .expect("`to` 为空串必须被接受（空 = 广播，本体逐字）");
+    w.commit_requested(
+        "notice",
+        a,
+        event::notice_body("job.done", a, json!({})),
+        None,
+        Some(a),
+    )
+    .unwrap();
 
     let evs = w.ledger().read_all().unwrap();
     assert_eq!(
@@ -196,15 +232,39 @@ fn d04_a_decorative_to_would_turn_this_red() {
     let mut w = open_world("d04");
     let (a, b) = ("world://agent/1", "world://agent/2");
 
-    w.commit_requested("notice", a, event::notice_body("job.done", a, json!({})), None, Some(a))
-        .unwrap();
-    w.commit_requested("notice", b, event::notice_body("job.done", b, json!({})), None, Some(b))
-        .unwrap();
-    w.commit_requested("notice", a, event::notice_body("job.done", a, json!({})), None, None)
-        .unwrap();
+    w.commit_requested(
+        "notice",
+        a,
+        event::notice_body("job.done", a, json!({})),
+        None,
+        Some(a),
+    )
+    .unwrap();
+    w.commit_requested(
+        "notice",
+        b,
+        event::notice_body("job.done", b, json!({})),
+        None,
+        Some(b),
+    )
+    .unwrap();
+    w.commit_requested(
+        "notice",
+        a,
+        event::notice_body("job.done", a, json!({})),
+        None,
+        None,
+    )
+    .unwrap();
     // 第三个收件人：**没被点名，也没有广播以外的东西**
-    w.commit_requested("notice", a, event::notice_body("job.done", a, json!({})), None, Some(a))
-        .unwrap();
+    w.commit_requested(
+        "notice",
+        a,
+        event::notice_body("job.done", a, json!({})),
+        None,
+        Some(a),
+    )
+    .unwrap();
 
     let evs = w.ledger().read_all().unwrap();
     assert_eq!(evs.len(), 4, "账本四条（投递不删账本）");
@@ -263,18 +323,17 @@ fn d05_an_answer_can_be_traced_back_to_its_request_by_request_id() {
             None,
         )
         .expect("结果落账");
-    assert_ne!(
-        json!(intent_id),
-        answer["id"],
-        "请求与应答是**两条**事件"
-    );
+    assert_ne!(json!(intent_id), answer["id"], "请求与应答是**两条**事件");
 
     // ── 事后核对：只用账本 ──
     let evs = w.ledger().read_all().unwrap();
     assert_eq!(evs.len(), 2, "两半都要在账本上");
     match pairing::find_pair(&evs, "r-delivery-1") {
         pairing::Outcome::Complete(pair) => {
-            assert_eq!(pair.request_id, "r-delivery-1", "配对键 = 同一个 request_id");
+            assert_eq!(
+                pair.request_id, "r-delivery-1",
+                "配对键 = 同一个 request_id"
+            );
             assert_eq!(pair.intents.len(), 1);
             assert_eq!(pair.results.len(), 1);
             assert!(pair.is_complete());
@@ -291,10 +350,16 @@ fn d05_an_answer_can_be_traced_back_to_its_request_by_request_id() {
     }
 
     // 反假：**换了请求号就追不回**——否则说明配对键根本不是 `request_id`
-    assert_eq!(pairing::find_pair(&evs, "r-别的"), pairing::Outcome::Untraced);
+    assert_eq!(
+        pairing::find_pair(&evs, "r-别的"),
+        pairing::Outcome::Untraced
+    );
     // 而配对键**不是** `trace`：同一条 trace，另一个请求号照样取不到
     assert_eq!(
-        pairing::pairs(&evs).iter().map(|p| p.request_id.clone()).collect::<Vec<_>>(),
+        pairing::pairs(&evs)
+            .iter()
+            .map(|p| p.request_id.clone())
+            .collect::<Vec<_>>(),
         vec!["r-delivery-1".to_string()]
     );
 }
@@ -332,7 +397,10 @@ fn d06_the_pairing_key_is_request_id_and_a_broken_key_is_visible() {
         pairing::find_pair(&evs, "r-pair-2"),
         pairing::Outcome::Unrequested { .. }
     ));
-    assert_eq!(pairing::find_pair(&evs, "r-从未出现"), pairing::Outcome::Untraced);
+    assert_eq!(
+        pairing::find_pair(&evs, "r-从未出现"),
+        pairing::Outcome::Untraced
+    );
 
     // ② 配对键在、因果那一格**指错**⇒ 只对上一处，必须与"两处都对上"分开判
     let mut w2 = open_world("d06b");
@@ -433,7 +501,11 @@ fn d07_an_explicit_empty_to_in_the_raw_ledger_is_also_a_broadcast() {
     assert_eq!(box1[0]["id"], json!("e-1"), "留下的必须是那条空串广播");
     let box9 = delivery::outbox(&evs, "world://agent/9");
     assert_eq!(box9.len(), 2, "agent/9 应当两条都收到");
-    assert_eq!(box9[1]["id"], json!("e-2"), "明细：第一条是空串广播、第二条才是点名给它的");
+    assert_eq!(
+        box9[1]["id"],
+        json!("e-2"),
+        "明细：第一条是空串广播、第二条才是点名给它的"
+    );
 }
 
 /// **登记项**（不是"已做到"）：投递的边界今天在哪。
@@ -470,8 +542,14 @@ fn d08_registered_boundaries_of_delivery_today() {
 
     // ② 投递不产生新事件：写 N 条 ⇒ 账本就是 N 条，出口之和 ≥ N（广播按人头重复计数）
     let before = evs.len();
-    w.commit_requested("notice", a, event::notice_body("job.done", a, json!({})), None, None)
-        .unwrap();
+    w.commit_requested(
+        "notice",
+        a,
+        event::notice_body("job.done", a, json!({})),
+        None,
+        None,
+    )
+    .unwrap();
     assert_eq!(
         w.ledger().read_all().unwrap().len(),
         before + 1,

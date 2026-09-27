@@ -1692,7 +1692,8 @@ fn c31_chainless_ledger_opens_readonly_and_refuses_writes() {
     write_v1_ledger(&lp, 1);
     let before = fs::read(&lp).unwrap();
 
-    let mut w = World::open_readonly(&ontology(), &lp, &policy()).expect("无链账本只读口径应能打开");
+    let mut w =
+        World::open_readonly(&ontology(), &lp, &policy()).expect("无链账本只读口径应能打开");
     assert!(!w.ledger().is_chained(), "无链账本必须被判为 false");
     assert_eq!(w.ledger().last_seq(), 1, "无链账本仍应能**读**（v1 兼容）");
 

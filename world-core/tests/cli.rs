@@ -411,7 +411,10 @@ fn cli09_whitelisted_actor_may_run_irreversible_and_the_event_carries_friction()
         code, 0,
         "白名单主体执行不可逆动作必须**放行**（v1 无审批通道，否则该能力是死号）；stderr={err}"
     );
-    assert!(out.contains("\"kind\":\"act\""), "落笔的应是 act；stdout={out}");
+    assert!(
+        out.contains("\"kind\":\"act\""),
+        "落笔的应是 act；stdout={out}"
+    );
 
     // ── ② 摩擦旗标：等级**取自载体清单**，不是写死在这里 ──
     let cap_manifest = manifest().join("cap.d/ledger.compact.json");
@@ -451,7 +454,6 @@ fn cli09_whitelisted_actor_may_run_irreversible_and_the_event_carries_friction()
         "① 这条路径**不得**出现任何 `gate.*` 通告（它既没被拒、也没加摩擦到拒绝）：{text}"
     );
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 // cli-13 … cli-17 —— **投影与读模型**的命令路径断言（`fc-2026-004-assertions` 组 5）
@@ -584,7 +586,10 @@ fn cli14_project_check_feeds_both_projections_the_same_state_and_vocab() {
         .next()
         .unwrap()
         .replace("projection=visual", "projection=X");
-    assert_eq!(la, lb, "同源头除 projection 外必须逐字一致；实得\n{la}\n{lb}");
+    assert_eq!(
+        la, lb,
+        "同源头除 projection 外必须逐字一致；实得\n{la}\n{lb}"
+    );
 
     // 命令自报：project check rc=0，且它打印的状态与上面两份首行**同一个**
     let (c3, out3, e3) = run(&as_refs(&args_for(&lp, &["project", "check"])));
@@ -645,7 +650,10 @@ fn cli16_checkpoint_format_mismatch_is_named() {
     assert_eq!(run(&as_refs(&a)).0, 0, "夹具：append 应成功");
     let w = args_for(&lp, &["checkpoint", "write", &cp_s]);
     let (code, out, err) = run(&as_refs(&w));
-    assert_eq!(code, 0, "checkpoint write 应成功；stdout={out} stderr={err}");
+    assert_eq!(
+        code, 0,
+        "checkpoint write 应成功；stdout={out} stderr={err}"
+    );
 
     // 正控：未改动的快照 ⇒ 核验通过
     let v = args_for(&lp, &["checkpoint", "verify", &cp_s]);
@@ -710,10 +718,7 @@ fn cli17_checkpoint_resume_falls_back_to_post_hoc_comparison() {
     // ── 判据 1（正控）：未篡改 ⇒ resume rc=0 且自报「一致」 ──
     let r0 = args_for(&lp, &["checkpoint", "resume", &cp_s]);
     let (code, out, err) = run(&as_refs(&r0));
-    assert_eq!(
-        code, 0,
-        "正控：未篡改时必须一致；stdout={out} stderr={err}"
-    );
+    assert_eq!(code, 0, "正控：未篡改时必须一致；stdout={out} stderr={err}");
     assert!(out.contains("一致"), "stdout={out}");
 
     // ── 判据 2：只改 `digest` ⇒ verify 报 DigestMismatch；resume **不报**（它没核验） ──

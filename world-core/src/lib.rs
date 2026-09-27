@@ -712,4 +712,3 @@ impl crate::carrier::translate::Declared for Ontology {
             .is_some_and(|fields| fields.contains(path))
     }
 }
-

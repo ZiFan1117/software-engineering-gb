@@ -84,7 +84,8 @@ fn expect_for(p: &Path) -> Listener {
 /// 用填充 `payload` 的方式凑长度：填充字符是 ASCII，故"字符数 = 字节数"，
 /// 边界值（正好等于上限 / 超一个字节）才是**可判定**的。
 fn request_line_of(want: usize) -> String {
-    let head = r#"{"kind":"notice","body":{"type":"l01","subject":"world://notice/l01","payload":""}}"#;
+    let head =
+        r#"{"kind":"notice","body":{"type":"l01","subject":"world://notice/l01","payload":""}}"#;
     assert!(want >= head.len(), "want 太小，装不下最小请求");
     let pad = want - head.len();
     let s = format!(
@@ -207,7 +208,10 @@ fn l02_the_second_simultaneous_connection_is_refused() {
     let r2 = read_reply(&c2);
     let (rec, n) = h.join().unwrap();
 
-    assert!(r1.contains("\"ok\":true"), "第一条必须被正常服务；实得 {r1}");
+    assert!(
+        r1.contains("\"ok\":true"),
+        "第一条必须被正常服务；实得 {r1}"
+    );
     assert!(
         r2.contains("Channel.TooManyConnections"),
         "第二条必须被拒并**点名**并发上限；实得 {r2}"
@@ -291,7 +295,11 @@ fn l04_messages_over_the_per_second_limit_are_refused_across_connections() {
     }
     let (rec, rs) = h.join().unwrap();
 
-    assert!(got[0].contains("\"ok\":true"), "第 1 条必须放行；实得 {}", got[0]);
+    assert!(
+        got[0].contains("\"ok\":true"),
+        "第 1 条必须放行；实得 {}",
+        got[0]
+    );
     assert!(
         got[1].contains("\"ok\":true"),
         "第 2 条必须放行（上限是 2，不是 1）；实得 {}",
@@ -353,7 +361,10 @@ fn l05_the_four_numbers_come_only_from_the_config() {
         r#"{"policy":1,"channel_limits":{"max_connections":1,"max_line_bytes":2048,"idle_timeout_ms":700}}"#,
     );
     let e3 = Limits::from_policy(&p3).unwrap_err();
-    assert!(e3.contains("max_msgs_per_sec"), "缺哪一项就点名哪一项；实得：{e3}");
+    assert!(
+        e3.contains("max_msgs_per_sec"),
+        "缺哪一项就点名哪一项；实得：{e3}"
+    );
 
     // ④ 取 0 ⇒ 拒：「不设界」不许由配置**悄悄**表达（那等于把边界关掉）
     let p4 = write(

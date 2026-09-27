@@ -141,7 +141,11 @@ fn assert_dir_unchanged(before: &[(String, Vec<u8>)], after: &[(String, Vec<u8>)
     let names = |v: &[(String, Vec<u8>)]| -> Vec<String> {
         v.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()
     };
-    assert_eq!(names(after), names(before), "{what}：件名不许增、不许减、不许改名");
+    assert_eq!(
+        names(after),
+        names(before),
+        "{what}：件名不许增、不许减、不许改名"
+    );
     for ((n, x), (_, y)) in after.iter().zip(before.iter()) {
         assert_eq!(x, y, "{what}：`{n}` 的字节必须一字未动");
     }
@@ -168,7 +172,11 @@ fn append_one(lp: &Path, subject: &str, path: &str, after: Value) {
     .to_string();
     let a = args_for(lp, &["append", "change", &body]);
     let o = run(&as_refs(&a));
-    assert_eq!(o.code, 0, "夹具：append 必须成功（body={body}）；stderr={}", o.stderr);
+    assert_eq!(
+        o.code, 0,
+        "夹具：append 必须成功（body={body}）；stderr={}",
+        o.stderr
+    );
 }
 
 /// 夹具：三条事件（三个主体、两个字段），返回**我们真正写进账本**的三元组。
@@ -228,8 +236,16 @@ fn p01_language_alone_is_complete_and_the_other_reading_never_runs() {
     // ① 头部四项
     let h = parse_header(&text).expect("首行必须是同源头");
     assert_eq!(h.projection, "language", "这一份必须自报是语言投影：{text}");
-    assert!(h.vocab.starts_with("fnv1a64:"), "词表身份必须是内容寻址指纹：{}", h.vocab);
-    assert!(h.state.starts_with("fnv1a64:"), "状态指纹必须是内容寻址指纹：{}", h.state);
+    assert!(
+        h.vocab.starts_with("fnv1a64:"),
+        "词表身份必须是内容寻址指纹：{}",
+        h.vocab
+    );
+    assert!(
+        h.state.starts_with("fnv1a64:"),
+        "状态指纹必须是内容寻址指纹：{}",
+        h.state
+    );
     let (fw, fv, st) = fold_state(&lp);
     assert_eq!(h.world, fw, "同源头的 world 必须与本体一致");
     assert_eq!(h.vocab, fv, "同源头的 vocab 必须与本体算出的词表身份一致");
@@ -238,13 +254,25 @@ fn p01_language_alone_is_complete_and_the_other_reading_never_runs() {
     assert_eq!(h.state, st.digest(), "状态指纹必须与独立折叠一致");
 
     // ②③ 正文**齐全**且逐项相符
-    assert_eq!(text.lines().count(), 1 + want.len(), "正文行数必须齐：\n{text}");
+    assert_eq!(
+        text.lines().count(),
+        1 + want.len(),
+        "正文行数必须齐：\n{text}"
+    );
     let got = sorted(language::parse(&text).expect("语言投影必须能被机器解析回三元组"));
     assert_eq!(got, want, "正文必须与真正写进账本的那三条逐项相符");
-    assert_eq!(got, sorted(state_triples(&st)), "正文必须与独立折叠的结果逐项相符");
+    assert_eq!(
+        got,
+        sorted(state_triples(&st)),
+        "正文必须与独立折叠的结果逐项相符"
+    );
 
     // 另一份**不在场**：跑完与跑前逐件相同（没有多出任何"另一份的产出/状态"文件）
-    assert_dir_unchanged(&before, &snapshot(&d), "读法只许往外给：账本目录一字未动、一件未增");
+    assert_dir_unchanged(
+        &before,
+        &snapshot(&d),
+        "读法只许往外给：账本目录一字未动、一件未增",
+    );
 }
 
 /// **p02**：拔掉语言投影 —— 视觉投影**一个人**也必须给出**正确且完整**的产出。
@@ -281,7 +309,10 @@ fn p02_visual_alone_is_complete_and_the_other_reading_never_runs() {
         st.acts(),
         st.notices()
     );
-    assert!(text.contains(&stat), "统计行必须与独立折叠一致（找 `{stat}`）：\n{text}");
+    assert!(
+        text.contains(&stat),
+        "统计行必须与独立折叠一致（找 `{stat}`）：\n{text}"
+    );
     assert!(
         text.lines().any(|l| l.starts_with("      muted = true")),
         "取值行必须按可审计排版给出（6 空格缩进 ＋ `路径 = 值`）：\n{text}"
@@ -289,10 +320,18 @@ fn p02_visual_alone_is_complete_and_the_other_reading_never_runs() {
 
     let got = sorted(visual::parse(&text).expect("视觉投影必须能被审计脚本解析回三元组"));
     assert_eq!(got, want, "正文必须与真正写进账本的那三条逐项相符");
-    assert_eq!(got, sorted(state_triples(&st)), "正文必须与独立折叠的结果逐项相符");
+    assert_eq!(
+        got,
+        sorted(state_triples(&st)),
+        "正文必须与独立折叠的结果逐项相符"
+    );
     assert_eq!(got.len(), 3, "主体与字段一个都不许少：\n{text}");
 
-    assert_dir_unchanged(&before, &snapshot(&d), "读法只许往外给：账本目录一字未动、一件未增");
+    assert_dir_unchanged(
+        &before,
+        &snapshot(&d),
+        "读法只许往外给：账本目录一字未动、一件未增",
+    );
 }
 
 /// **p03**：同一账本 ⇒ 产出**逐字节**相同（"读法不持有状态"的可核形态）。
@@ -312,7 +351,10 @@ fn p03_same_ledger_same_bytes_twice_and_no_state_kept_anywhere() {
         let ha = parse_header(&a.text()).expect("首行必须是同源头");
         assert_eq!(ha.projection, which);
         assert_eq!(ha.last_seq, 3, "两次都必须真的读到账本的三条事件");
-        assert!(!a.stdout.is_empty(), "第一次必须有产出（否则下面的『相同』是空话）");
+        assert!(
+            !a.stdout.is_empty(),
+            "第一次必须有产出（否则下面的『相同』是空话）"
+        );
 
         let cwd2 = tmpdir(&format!("p03-cwd-{which}"));
         let b = run_in(Some(&cwd2), &as_refs(&args_for(&lp, &["project", which])));
@@ -321,10 +363,18 @@ fn p03_same_ledger_same_bytes_twice_and_no_state_kept_anywhere() {
             b.stdout, a.stdout,
             "同一账本 ⇒ 两次必须**逐字节**相同（读法不持有状态）"
         );
-        assert_eq!(snapshot(&cwd2).len(), 0, "读法不许在自己脚下留下状态：`project {which}`");
+        assert_eq!(
+            snapshot(&cwd2).len(),
+            0,
+            "读法不许在自己脚下留下状态：`project {which}`"
+        );
     }
 
-    assert_dir_unchanged(&before, &snapshot(&d), "跑过两份读法之后，账本目录必须一字未变");
+    assert_dir_unchanged(
+        &before,
+        &snapshot(&d),
+        "跑过两份读法之后，账本目录必须一字未变",
+    );
 }
 
 /// **p04**：账本变了 ⇒ **各自的**产出随之变（把"缓存／常量"钉死）。
@@ -358,8 +408,15 @@ fn p04_ledger_grows_so_does_each_reading() {
     assert_eq!(st2.last_seq(), 4, "夹具：独立折叠也必须看到 4 条");
 
     // ★ 语言投影随账本变
-    assert_eq!(h2.last_seq, h1.last_seq + 1, "账本多一条 ⇒ last_seq 必须 ＋1");
-    assert_ne!(h2.state, h1.state, "状态指纹必须随账本变（不变 ⇒ 它是缓存或常量）");
+    assert_eq!(
+        h2.last_seq,
+        h1.last_seq + 1,
+        "账本多一条 ⇒ last_seq 必须 ＋1"
+    );
+    assert_ne!(
+        h2.state, h1.state,
+        "状态指纹必须随账本变（不变 ⇒ 它是缓存或常量）"
+    );
     assert_eq!(h2.last_seq, st2.last_seq());
     assert_eq!(h2.state, st2.digest(), "必须与独立折叠的状态指纹一致");
     assert_ne!(l2.stdout, l1.stdout, "产出必须随账本变");
@@ -372,10 +429,18 @@ fn p04_ledger_grows_so_does_each_reading() {
     );
 
     // ★ 视觉投影**独立地**同样随账本变（不是靠语言投影告诉它）
-    assert_eq!(g2.last_seq, g1.last_seq + 1, "账本多一条 ⇒ last_seq 必须 ＋1");
+    assert_eq!(
+        g2.last_seq,
+        g1.last_seq + 1,
+        "账本多一条 ⇒ last_seq 必须 ＋1"
+    );
     assert_ne!(g2.state, g1.state);
     assert_ne!(v2.stdout, v1.stdout, "产出必须随账本变");
-    assert!(v2.text().contains("world://job/j-2"), "新主体必须出现在视觉投影里：\n{}", v2.text());
+    assert!(
+        v2.text().contains("world://job/j-2"),
+        "新主体必须出现在视觉投影里：\n{}",
+        v2.text()
+    );
 
     // 两份读法说的是同一本账（各自的头部四项不比任何一方解释自己）
     assert_eq!(h2.last_seq, g2.last_seq);
@@ -413,8 +478,15 @@ fn p05_a_lagging_reading_neither_breaks_nor_bleeds_into_the_other() {
     let hv = parse_header(&lead.text()).unwrap();
     assert_eq!(hv.last_seq, 4);
     let got = sorted(visual::parse(&lead.text()).unwrap());
-    assert_eq!(got.len(), 4, "视觉投影必须给出 4 条（不多不少）：\n{}", lead.text());
-    assert!(got.iter().any(|(s, p, _)| s == "world://job/j-2" && p == "status"));
+    assert_eq!(
+        got.len(),
+        4,
+        "视觉投影必须给出 4 条（不多不少）：\n{}",
+        lead.text()
+    );
+    assert!(got
+        .iter()
+        .any(|(s, p, _)| s == "world://job/j-2" && p == "status"));
 
     // ③ 落后**暴露在头部**：同一账本、两方各算各的 ⇒ 一比就知道谁落后
     let e = assert_same_source(&lag.text(), &lead.text()).expect_err("一方落后一条 ⇒ 必须报不同源");
@@ -423,7 +495,10 @@ fn p05_a_lagging_reading_neither_breaks_nor_bleeds_into_the_other() {
     // 正控：两边读**同一本账**时，同一个判据必须判同源（证明它不是恒 Err）
     let again = run(&as_refs(&args_for(&lp, &["project", "language"])));
     again.ok("语言投影（补跑：账本 4 条）");
-    assert!(assert_same_source(&again.text(), &lead.text()).is_ok(), "同源时不许误报");
+    assert!(
+        assert_same_source(&again.text(), &lead.text()).is_ok(),
+        "同源时不许误报"
+    );
 }
 
 /// **p06**：两份出口**互不夹带对方的形态**（没有一份把另一份的输出当作自己的输入）。
@@ -450,11 +525,21 @@ fn p06_the_two_exits_do_not_carry_each_others_shapes() {
         .to_string();
     for m in ["世界状态（视觉投影）", rule.as_str(), "      muted = true"] {
         assert!(vt.contains(m), "正控：视觉投影里必须真有 `{m}`：\n{vt}");
-        assert!(!lt.contains(m), "语言投影里混进了视觉投影的形态 `{m}`：\n{lt}");
+        assert!(
+            !lt.contains(m),
+            "语言投影里混进了视觉投影的形态 `{m}`：\n{lt}"
+        );
     }
 
     // 反过来：语言投影的逐行 JSON 形态
     let json_lines = |t: &str| t.lines().filter(|x| x.starts_with("{\"fields\":")).count();
-    assert!(json_lines(&lt) >= 3, "正控：语言投影必须真有逐行 JSON 形态：\n{lt}");
-    assert_eq!(json_lines(&vt), 0, "视觉投影里不许出现语言投影的 JSON 行：\n{vt}");
+    assert!(
+        json_lines(&lt) >= 3,
+        "正控：语言投影必须真有逐行 JSON 形态：\n{lt}"
+    );
+    assert_eq!(
+        json_lines(&vt),
+        0,
+        "视觉投影里不许出现语言投影的 JSON 行：\n{vt}"
+    );
 }
