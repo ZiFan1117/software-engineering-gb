@@ -61,11 +61,3 @@
 |---|---|---|
 | **软件原子市场**（`03-atom-market`） | **怎么切、怎么拼、怎么机核**（本件 §二 六条） | 本件＝开发形态要求 |
 | **本体研究**（`04-research-ontology`：`Palantir本体-总览与构件.md` ＋ `operational-ontology` 参考实现） | **"本体"这一层该有什么**（Object／Link／**Action Type**／Functions／Interfaces／Roles／Action Log／Undo） | 喂 `REQ-F-030` 本体能力与 `concepts` 实体层；映射表见 `cover-unimplemented-capabilities/design.md` |
-
----
-
-**修订记录**
-
-| 版本 | 日期 | 改了什么 | 依据 |
-|---|---|---|---|
-| v0.1 | 2026-09-27 | 首次确立：六条约定 ＋ 机核清单 ＋ 两个参照的分工 | 作者指示（原子化编程作为项目要求）；参照 `software-atom-market/ATOMIZATION.md`、`spec/atom.schema.json` |
