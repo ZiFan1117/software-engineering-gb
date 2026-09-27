@@ -696,3 +696,19 @@ impl crate::channel::RequestSink for World {
         World::commit_requested(self, kind, actor, body, trace, to)
     }
 }
+
+/// **写侧的"声明面"由谁来答**（书 §4.5 的第二条：前值必须带上、翻不出来就报错、不许猜）。
+///
+/// 写侧（`M10`）只需要知道**一件事**：某个 (主体, 字段) 在出厂声明里吗。
+/// 这一层知识属于**这部法律**，所以由 [`Ontology`] 来答——装配点在这里（`M04`），
+/// 与上面那条 [`crate::channel::RequestSink`] 同理：**接口窄到只回答一个问题**，
+/// 装配关系只出现在 `M04` 这一处，`M10` 自己不反向依赖 `M01`／`M03`（那会成环，A-4 不许）。
+impl crate::carrier::translate::Declared for Ontology {
+    fn is_declared(&self, subject: &str, path: &str) -> bool {
+        // 主体 → 实体名（`world://notice/n-1` ⇒ `notice`）→ 该实体已声明的字段集。
+        Ontology::entity_of(subject)
+            .and_then(|e| self.declared_fields(e))
+            .is_some_and(|fields| fields.contains(path))
+    }
+}
+

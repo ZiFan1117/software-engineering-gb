@@ -10,6 +10,7 @@
 #   C-06 内核不在即不执行：内核没起 ⇒ 适配器拒绝执行，且**不产生任何副作用**
 #   C-07 孤儿可查：有意图、无结果的请求能被查出来（只报告，不重试）
 #   C-08 撤销不进主干：账本每一行都是语义事件；载体撤销以内容引用出现在事件字段里
+#   C-09 写侧进程（**被管者身份**）读得到账本，但**写不到账本、也改不了规则**（书 §4.5:601）
 #
 # 纪律：只碰一次性沙箱（mktemp 目录），退出即删；**绝不触碰真实账本**。
 # 用法：bash tools/carrier_acceptance.sh [world-core 可执行文件路径]
@@ -191,6 +192,72 @@ case "$RESULT_LINE" in
   *'"carrier_undo"'*) ok "C-08c 载体撤销以**内容引用**出现在事件字段里" ;;
   *) ok "C-08c 本次未触发撤销点（该能力不需要撤销）——判据留给需要撤销的能力" ;;
 esac
+
+# ── C-09 写侧进程（被管者身份）对账本与规则**没有写权限** ─────────────
+#
+# 书 §4.5:601 逐字：「写侧这只手跑在自己的进程里，以被管者身份运行，对账本与规则都没有
+# 写权限。……手如果自己有写权限，世界就有了第二个权威」。
+#
+# 与 C-01 的分工：C-01 只看"账本里的字节对不对"（判据弱）；本组以**被管者身份真去写**。
+# 与 tools/con01-no-bypass.sh 的分工：那里跑的是**内核二进制**；这里跑的是**载体自己**。
+# ⚠️ 载体**没有**"写账本"这条路（这正是零写权限的设计面）⇒ 本组分两半：
+#    ① 以被管者身份跑**载体自己** ⇒ 必须**读得到**账本（只读消费面成立）；
+#    ② 以同一身份**直接写**账本／改规则 ⇒ 必须**被拒**，且原因必须是 Permission denied
+#       （只看 rc≠0 会把"命令找不到""用户不存在"都算成被拒——con01 v1 的 F1 教训）。
+#
+# 为什么这一组**不碰 /tmp 之外**：沙箱与账本都在一次性目录里；放宽 mode 只为造反证，随即复原。
+echo
+echo "── C-09 写侧进程（被管者身份）对账本与规则无写权限 ──────────"
+MANAGED=agent
+if ! id "$MANAGED" >/dev/null 2>&1; then
+  if command -v useradd >/dev/null 2>&1; then useradd -M -s /usr/bin/nologin "$MANAGED"; fi
+fi
+if ! id "$MANAGED" >/dev/null 2>&1; then
+  bad "C-09 前提不成立：本机没有「$MANAGED」这个被管者用户（也无法创建）⇒ 判据**未能校验**，按不通过处置"
+else
+  MUID=$(id -u "$MANAGED" 2>/dev/null)
+  check "C-09 前提：被管者 uid 不是 0" "$([ "${MUID:-0}" != "0" ] && echo yes || echo no)" "yes"
+  check "C-09 前提：账本属主≠被管者（否则 mode 再严也没用）" \
+        "$([ "$(stat -c '%u' "$LEDGER")" != "${MUID:-x}" ] && echo yes || echo no)" "yes"
+  # 让被管者**进得来**：否则拒绝会落在目录层（con01 v1 的 F4 教训：那证明的不是文件位）
+  chmod 755 "$SB" "$SB/run" "$SB/cap.d" 2>/dev/null
+  chmod 644 "$LEDGER" 2>/dev/null
+  RUNBOX="$SB/runbox"
+  mkdir -p "$RUNBOX"
+  cp "$BIN" "$RUNBOX/world-core"
+  chmod 755 "$RUNBOX" "$RUNBOX/world-core"
+
+  # ① 以被管者身份跑**载体自己**：只读消费账本必须走得通
+  if runuser -u "$MANAGED" -- "$RUNBOX/world-core" --cap-dir "$SB/cap.d" --ledger "$LEDGER" \
+       carrier orphans >/dev/null 2>&1; then
+    ok "C-09 以被管者身份跑**载体自己**（carrier orphans）读得到账本（只读消费面成立）"
+  else
+    bad "C-09 以被管者身份跑载体自己就被挡住了 —— 账本对被管者不是「只读可用」"
+  fi
+
+  # ② 同一身份**直接写**账本／改规则：两次都必须被拒，且原因必须是 Permission denied
+  denied() { # $1=描述 $2=命令
+    local desc="$1" cmd="$2" out rc
+    out=$(runuser -u "$MANAGED" -- sh -c "id -u >/dev/null; $cmd" 2>&1); rc=$?
+    if [ $rc -eq 0 ]; then bad "$desc —— **居然成功了**：$out"; return; fi
+    if ! printf '%s' "$out" | grep -qi 'Permission denied'; then
+      bad "$desc —— 被拒了但原因不是 Permission denied（rc=$rc）：$(printf '%s' "$out" | head -1 | cut -c1-90)"
+      return
+    fi
+    ok "$desc（rc=$rc；原因含 Permission denied；执行者 uid=${MUID}）"
+  }
+  denied "C-09 写侧直写账本（追加一行）被拒" "echo '{}' >> $LEDGER"
+  denied "C-09 写侧改规则（向 policy.json 追加）被拒" "echo '{}' >> $SB/policy.json"
+
+  # ③ 反证：把账本放宽到 0666 ⇒ **同一动作必须成功**（否则上面两条是橡皮图章）
+  chmod 666 "$LEDGER"
+  if runuser -u "$MANAGED" -- sh -c "printf '{\"probe\":1}\n' >> $LEDGER" 2>/dev/null; then
+    ok "C-09b 反证：账本 0666 ⇒ 同一动作**成功了**（上面那两条判据会变，不是永远绿）"
+  else
+    bad "C-09b 反证不成立：账本已放宽到 0666 却仍写不进 ⇒ 上面那两条说明不了任何事"
+  fi
+  chmod 644 "$LEDGER"
+fi
 
 # ── 汇总 ──────────────────────────────────────────────────────────────
 echo
