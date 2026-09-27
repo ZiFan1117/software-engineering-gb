@@ -128,7 +128,9 @@ def j2_evidence(repo):
                 continue
             toks = re.findall(r"`([^`]+)`", m.group(1))
             if not toks:
-                bad.append("%s:%d —— 证据行里没有反引号包起来的 token" % (rel(repo, spec), i))
+                bad.append("%s:%d —— 证据行里没有反引号包起来的 token。"
+                           "**若本条尚无断言，请改用 `- **证据（待补）**：` 并写明落点**——"
+                           "用「证据」这个标记而不给 token，形态上等于声称存在" % (rel(repo, spec), i))
                 continue
             for tok in toks:
                 ok, why = check_token(repo, tok)
