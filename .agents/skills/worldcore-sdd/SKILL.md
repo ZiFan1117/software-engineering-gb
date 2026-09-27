@@ -215,6 +215,21 @@ description: 语义世界／world-core 的**软件开发 skill**（我们自己�
 
 ## 十四、并行作业（多智能体/多人同时改）
 
+**★ 事故一例（2026-09-28，我造成的）：`git add <path>` 会把别人的在飞改动一起提交，而 `HEAD` 就此编译不过。**
+我修评审席那七条时，`src/lib.rs` 是**我的目标文件之一**（改一处调用点数注释），于是 `git add world-core/src/lib.rs` ——
+而**同一文件里还有另一工区的在飞接线**（`read_model()` 递"已声明格"进读模型）；定义那两样东西的
+`src/readmodel.rs`／`src/ontology.rs` **当时还没提交** ⇒ 提交出去的 `HEAD` 上：`lib.rs` 引用 `readmodel::DeclaredCells`／
+`Ontology::envelope_required`，而那两个文件里**各 0 处** ⇒ **`HEAD` 编译不过**（`cargo check --lib` rc=101，`error[E0433]: cannot find DeclaredCells in readmodel`）。
+同一次，`tasks.md` 里另一工区的三勾也被卷走 ⇒ **`HEAD` 上 tasks 声称某条已落地，而实现不在 `HEAD`**。
+
+**规矩（血的）**：
+1. **暂存前先 `git diff <path>` 看一眼**——那个路径下的内容**不只属于我**；
+2. **提交前验"我提交出去的这棵树自洽"**：按 `HEAD` 重建一棵树再编译（`git archive HEAD` → 推到 VM → `cargo check --all-targets`），
+   **不要在带在飞件的工作区里验**（那验的是工作区，不是 HEAD——这是"我跑的是哪一棵树"的第 N 个化身）；
+3. **发现 `HEAD` 坏了，先把缺的半个改动补齐**（让 HEAD 自洽），**不要靠回退**——回退会把已批准的接线一起撤掉；
+4. 并行作业里，**"按路径暂存"是唯一可用手段，但不是安全手段**。
+
+
 - **一个工区独占一组文件**，边界写进任务书；跨了就是事故（哪怕改得对）。
 - 别人的文件里发现问题：**只登记，不动手**（写进自己的回报，让对应的工区改）。
 - 交件时**必须报**：改了哪些文件（`git status --porcelain` 逐字）、每个读数带时点与提交号、**没做的事逐条给原因**。
