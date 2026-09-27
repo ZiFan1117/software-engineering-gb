@@ -1024,7 +1024,7 @@
 | `check` | 全局选项 | 5 行摘要 + **`  READY`**（末行）；链状态行三选一 | `[FAIL] <上游错误>` | 成功 `0`；上游错误 **`2`**；`--owner-uid` 不符 **`2`**；`--require-chain` + 有事件无链 **`2`** | `:99-162` |
 | `kinds` | 全局选项 | `world=<n>  家族: <k1, k2, …>` | `[FAIL] <本体错误>` | `0` / **`2`** | `:235-250` |
 | `policy` | 全局选项 | 策略路径/版本/白名单/能力表（**只读，不改任何文件**） | `[FAIL] <策略错误>` | `0` / **`2`** | `:165-191` |
-| `append` | `<kind> <json-body> [actor]` | 落笔后的事件（**一行 JSON**） | 参数不足 ⇒ `用法: world-core append <kind> <json-body>`；body 不是合法 JSON ⇒ `[FAIL] body 不是合法 JSON: …`；其余 ⇒ `[FAIL] <错误码>` | 参数不足 **`1`**；body 非法 **`1`**；门禁/法律/账本错误 **`2`** | `:252-286` |
+| `append` | `<kind> <json-body> [actor] [--trace <id>] [--flag <名>]...` | 落笔后的事件（**一行 JSON**） | 参数不足 ⇒ `用法: world-core append <kind> <json-body> [actor] [--trace <id>] [--flag <名>]...>`；body 不是合法 JSON ⇒ `[FAIL] body 不是合法 JSON: …`；其余 ⇒ `[FAIL] <错误码>` | 参数不足 **`1`**；body 非法 **`1`**；门禁/法律/账本错误 **`2`** | `:252-286` |
 | `read` | `[from_seq]` | 事件逐行 JSON Lines | `[FAIL] <错误码>` | `0` / **`2`** | `:349-370` |
 | `state` | `[--json]` | 不带 `--json`：摘要 + 指纹 + `subject#path = value` 逐行；带 `--json`：**规范形式 JSON 一行** | `[FAIL] <上游错误>` / `[FAIL] 读模型拒绝折叠：…` | `0` / **`2`** | `:197-233` |
 | `project` | `language` \| `visual` \| `check` | `language`/`visual`：投影文本；`check`：同源核对摘要 + `✅` | `[FAIL] <错误码>`；未知投影 ⇒ `未知投影 \`<x>\`（可用：language / visual / check）` | 投影成功 `0`；同源核对失败 **`2`**；**未知投影 `1`** | `:292-347` |

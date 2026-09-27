@@ -34,7 +34,7 @@
 | `check` | 加载本体 ＋ 门禁策略 ＋ 账本 → 打印 `READY`（冒烟判据） |
 | `kinds` | 列出本体已知的**家族** |
 | `policy` | 打印门禁策略（能力表 ＋ 主体白名单） |
-| `append <kind> <json-body> [actor]` | 追加一条事件（法律校验 → 门禁裁决 → 通过才落笔）。**`<json-body>` 是信纸本身，不要再包一层 `body`**；`[actor]` 省略时缺省 `world://user`（**该缺省是入口层约定，库 API 不设隐藏默认**） |
+| `append <kind> <json-body> [actor] [--trace <id>] [--flag <名>]...` | 追加一条事件（法律校验 → 门禁裁决 → 通过才落笔）。**`<json-body>` 是信纸本身，不要再包一层 `body`**；`[actor]` 省略时缺省 `world://user`（**该缺省是入口层约定，库 API 不设隐藏默认**） |
 | `read [from_seq]` | 按序打印事件（JSON Lines） |
 | `state [--json]` | 从账本**重算**状态（读模型；**不缓存、不写盘**） |
 | `project language` | 语言投影（结构化出口，给程序读） |

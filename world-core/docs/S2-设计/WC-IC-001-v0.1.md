@@ -796,7 +796,7 @@
 | `check` | 无 | 三行摘要（本体 / 门禁 / 账本）+ 链状态 + `READY` | `[FAIL] <消息>` | `0` / `2` |
 | `kinds` | 无 | `world=<n>  家族: a, b, c` | `[FAIL] <消息>` | `0` / `2`。⚠ **只加载本体**，不读账本与策略（`src/main.rs:82`） |
 | `policy` | 无 | 策略路径 / 版本 / 主体白名单 / 能力表 | `[FAIL] <消息>` | `0` / `2`。⚠ **只加载策略**（`src/main.rs:83`） |
-| `append <kind> <json-body> [actor]` | `actor` 缺省 `world://user` | 落笔后的**事件 JSON 一行** | 参数 < 3 个 ⇒ 用法（**`1`**）；`body` 非法 JSON ⇒ `[FAIL] body 不是合法 JSON: …`（**`1`**）；加载或裁决失败 ⇒ `[FAIL] <消息>`（**`2`**） | `0` / `1` / `2` |
+| `append <kind> <json-body> [actor] [--trace <id>] [--flag <名>]...` | `actor` 缺省 `world://user` | 落笔后的**事件 JSON 一行** | 参数 < 3 个 ⇒ 用法（**`1`**）；`body` 非法 JSON ⇒ `[FAIL] body 不是合法 JSON: …`（**`1`**）；加载或裁决失败 ⇒ `[FAIL] <消息>`（**`2`**） | `0` / `1` / `2` |
 | `read [from_seq]` | `from_seq` 缺省 `1`；⚠ **解析失败也静默取 `1`**（`src/main.rs:350`） | 逐行事件 JSON | `[FAIL] <消息>` | `0` / `2` |
 | `state [--json]` | 无 `--json` 即人读形态 | `--json`：`State::to_json()` 的紧凑 JSON 一行；否则：账本路径 + 已折叠条数 + 指纹 + 逐条 `主体#路径 = 值` + "未缓存、未写盘"说明 | `[FAIL] <消息>` / `[FAIL] 读模型拒绝折叠：<消息>` | `0` / `2` |
 | `project language` | — | 语言投影全文（`print!`，**不加**额外换行） | `[FAIL] <消息>` | `0` / `2` |

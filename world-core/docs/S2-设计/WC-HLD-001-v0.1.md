@@ -937,7 +937,7 @@ ontology.json ──规范化(剔 _键)──► vocab_hash ─┐
 
 #### 6.2 入口接口（CLI）
 
-`check` / `kinds` / `policy` / `append <kind> <json-body> [actor]` / `read [from]` /
+`check` / `kinds` / `policy` / `append <kind> <json-body> [actor] [--trace <id>] [--flag <名>]...` / `read [from]` /
 `state [--json]` / `project {language|visual|check}`。
 
 #### 6.3 跨进程通道（**已实现**：`src/channel.rs`，项目 Step 6）
