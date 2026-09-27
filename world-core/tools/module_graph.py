@@ -517,7 +517,54 @@ def build_edges(wc, rows, source, shared=None):
 
 
 # ────────────────────────── 环检测 ──────────────────────────
-def find_cycles(nodes, edges):
+def find_cycles(nodes, edges, label_edges=None):
+    """Kahn 拓扑排序；排不完 ⇒ 有环。
+
+    返回 (是否有环, 环路径或节点集合, 是否为**真环路径**)。
+    ★ 2026-09-28 修（评审席·乙 发现）：旧实现在"走不下去"时 `break`，
+    于是 `path=[cur]` 会退化成 **自环**（打印成 `M01 → M01`，而图上根本没有这条边）。
+    现在**只在路径首尾确实相接时**才把它当"环路径"报出去；否则退化为"环上节点集合"并标注。
+    """
+    nodes = sorted(nodes)
+    indeg = {n: 0 for n in nodes}
+    adj = {n: set() for n in nodes}
+    for u in nodes:
+        for v in edges.get(u, ()):
+            if v in indeg and v not in adj[u]:
+                adj[u].add(v)
+                indeg[v] += 1
+    queue = [n for n in nodes if indeg[n] == 0]
+    seen = 0
+    while queue:
+        u = queue.pop()
+        seen += 1
+        for v in sorted(adj[u]):
+            indeg[v] -= 1
+            if indeg[v] == 0:
+                queue.append(v)
+    if seen == len(nodes):
+        return False, [], False
+    left = [n for n in nodes if indeg[n] > 0]
+    # 从剩余节点里走出一条**真环**：走不动就换起点，全都走不动才退化
+    for start in left:
+        path, cur, guard = [], start, 0
+        while cur not in path and guard <= len(nodes) + 1:
+            path.append(cur)
+            nxt = [v for v in sorted(adj[cur]) if indeg[v] > 0]
+            if not nxt:
+                break
+            cur = nxt[0]
+            guard += 1
+        if cur in path:
+            cyc = path[path.index(cur):] + [cur]
+            # ★ 验一遍：每段都真有边、且收尾相接——**没验过的不许叫"环"**
+            ok = len(cyc) >= 2 and all(cyc[i + 1] in adj.get(cyc[i], ()) for i in range(len(cyc) - 1))
+            if ok:
+                return True, cyc, True
+    return True, left, False          # 找不到可打印的真环 ⇒ 只报节点集合，并标注"路径未定"
+
+
+def _find_cycles_old(nodes, edges):
     """Kahn 拓扑排序；排不完 ⇒ 有环（报出环上模块号）。返回 (是否有环, 环上节点列表)。"""
     nodes = sorted(nodes)
     indeg = {n: 0 for n in nodes}
@@ -763,16 +810,45 @@ def j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres):
                        % (rel(wc, reg_path), row["line"], mid, ",".join(extra),
                           "{%s}" % ",".join(sorted(col)) or "{}",
                           "{%s}" % ",".join(sorted(real)) or "{}"))
-    # 无环：判**声明边 ∪ 真实 import 边**（两面任一面成环都是"依赖不是单向 DAG"）
+    # 无环：**分别**判「真实 import 边」与「声明边 ∪ 真实边」，并把每条边的来源标出来。
+    # ★ 2026-09-28 修（评审席·乙 发现）：
+    #   旧实现只报并集环，读者极易把它读成"源码循环依赖"；且它**漏报**真实源码环（`M04 ↔ M09`）。
+    #   现在两条线各报一次，并给"来自未校验声明边"的边打标——那种环**改代码也消不掉**。
     nodes = sorted(rows)
+    real_only = {mid: set(prod_edges.get(mid, set())) for mid in nodes}
+    cyc_real, path_real, real_is_cycle = find_cycles(nodes, real_only)
     union = {mid: set(rows[mid]["deps"]) for mid in nodes}
     for mid in nodes:
         union.setdefault(mid, set())
         union[mid] |= prod_edges.get(mid, set())
-    cyc, path = find_cycles(nodes, union)
+    cyc, path, is_cycle = find_cycles(nodes, union)
+
+    def _edge_src(u, v):
+        """这条边从哪来：真实 import ／ 声明 ／ 两者都有。"""
+        r = v in prod_edges.get(u, set())
+        d = v in rows[u]["deps"]
+        return "真实" if (r and not d) else ("声明" if (d and not r) else ("真实＋声明" if (r and d) else "?"))
+
+    def _fmt(path):
+        if not path:
+            return "—"
+        return " → ".join("%s-[%s]-> %s" % (path[i], _edge_src(path[i], path[i + 1]), path[i + 1])
+                          for i in range(len(path) - 1)) if len(path) > 1 else "、".join(path)
+
+    _cyc_note = []
+    if cyc_real:
+        _cyc_note.append("**源码 import 环**（只看真实 import 边，工具独立判定）："
+                         + ("　".join(path_real) if real_is_cycle else "节点集合 " + "、".join(path_real)))
+    _cyc_note.append("**声明边 ∪ 真实边 的环**：" + _fmt(path)
+                     + ("" if is_cycle else "　（⚠ 工具未能打印出一条逐段可验的真环路径，只报节点集合："
+                        + "、".join(path) + "）"))
+    # 兼容旧调用：下面仍用 `cyc` 与 `path`
+
     if cyc:
+        # 环的两种口径都写进 offender（评审席·乙 的建议④）
+        path_desc = " ／ ".join(_cyc_note)
         bad.append("依赖图**有环**（拓扑排序失败，Kahn 剩余节点）：%s —— "
-                   "`WC-ATOM-001` §二 A-4 要求单向 DAG" % " → ".join(path or ["?"]))
+                   "`WC-ATOM-001` §二 A-4 要求单向 DAG" % path_desc)
     for w in unres:
         bad.append("依赖抽取告警（不静默跳过）：%s" % w)
     return bad
