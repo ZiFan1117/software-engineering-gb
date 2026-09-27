@@ -6,34 +6,60 @@
 
 ## 2. 补断言 · 通道身份与信封（依 delta 的"需补断言"标注）
 
-- [ ] 2.1 在 `world-core/tests/contract.rs` 的 `c14` 内补一条断言：`serve_once` 路径**不读对端凭证**（例如断言 `Listener` 的 `uid` 字段在受理路径上不参与判定）。**验收**：新增断言会随"受理层改为读对端凭证"的变异**变红**（先证会红）。
+- [x] 2.1 在 `world-core/tests/contract.rs` 的 `c14` 内补一条断言：`serve_once` 路径**不读对端凭证**（例如断言 `Listener` 的 `uid` 字段在受理路径上不参与判定）。**验收**：新增断言会随"受理层改为读对端凭证"的变异**变红**（先证会红）。
+      **断言在哪**：`world-core/tests/contract.rs:792`（判据 4 的夹具：把映射里的 `uid` 换成 `me+12345`）＋ `:808` 的 `.expect("受理路径不得读对端凭证：uid 对不上也必须受理（uid 只在 bind() 用）")`；非空夹具前提在 `:798`（`assert_ne!(alien.uid, me)`）。
+      **变异怎么变红**：在 `world-core/src/channel.rs` 的 `serve_once` 里（`let mut out = stream;` 之后）插一句对端 uid 比对（读 `/proc/self/status`）。原始输出：`test c14_channel_takes_identity_from_kernel_not_from_request ... FAILED` ／ `panicked at tests/contract.rs:808: 受理路径不得读对端凭证：uid 对不上也必须受理（uid 只在 bind() 用）: "ext.world.Channel.Impersonation: 对端 uid 0 与本套接字身份 uid 12345 不符，拒绝"` ／ `MUT_RC=101`。
 
-- [ ] 2.2 在 `world-core/tests/cli.rs` 补一条断言：`channel bind` 对**不在身份映射里**的套接字报 `ext.world.Channel.NotConfigured` 且 `rc=2`。**验收**：`cargo test --locked --test cli` 通过；变异（删掉 `None` 分支的拒绝）⇒ 变红。
+- [x] 2.2 在 `world-core/tests/cli.rs` 补一条断言：`channel bind` 对**不在身份映射里**的套接字报 `ext.world.Channel.NotConfigured` 且 `rc=2`。**验收**：`cargo test --locked --test cli` 通过；变异（删掉 `None` 分支的拒绝）⇒ 变红。
+      **断言在哪**：`world-core/tests/cli.rs:327`（`cli08_channel_bind_refuses_socket_not_in_identity_map`）＋ `:353` 的 `assert_eq!(code, 2, "不在身份映射里的套接字必须拒绝（rc=2）…")`、其后 `err.contains("ext.world.Channel.NotConfigured")` 与 `!unmapped.exists()`。
+      **变异怎么变红**：把 `world-core/src/main.rs` 的 `cmd_channel` 里 `None` 分支的拒绝改成 `None => conf.listeners()[0].clone(),`。原始输出：`test cli08_channel_bind_refuses_socket_not_in_identity_map ... FAILED` ／ `panicked at tests/cli.rs:355: 拒绝理由必须点名错误码，读流水的人才能程序判定；stderr=[FAIL] 通道目录 不可绕过检查未通过：所在目录 /tmp 的权限为 777…`（`NotConfigured` 这句**没了**，落到了 `bind` 的另一条错上）／ `MUT_RC=101`。
 
-- [ ] 2.3 在 `world-core/tests/contract.rs` 的 `c02` 内补一条**反假**断言：`field == "world"` 那一轮必须靠"报出字段名"之外的方式判真（例如断言错误串里 `MissingField` 之后紧邻的字段名 token 等于 `world`），使该轮不再是 `contains` 恒真。**验收**：把 `world-core/src/ontology.rs:32` 的 `{field}` 删掉 ⇒ 该断言变红。
+- [x] 2.3 在 `world-core/tests/contract.rs` 的 `c02` 内补一条**反假**断言：`field == "world"` 那一轮必须靠"报出字段名"之外的方式判真（例如断言错误串里 `MissingField` 之后紧邻的字段名 token 等于 `world`），使该轮不再是 `contains` 恒真。**验收**：把 `world-core/src/ontology.rs:32` 的 `{field}` 删掉 ⇒ 该断言变红。
+      **断言在哪**：`world-core/tests/contract.rs:105`（`fn named_field_in`：定位「缺少必填字段 \`<名字>\`」的反引号之间）＋ `:147` 的 `assert_eq!(named_field_in(&msg), field, …)`；反假对照在 `:154-174`（删 `seq` 时错误串**照样**含 `world`，因为码前缀 `ext.world.` 自带它 ⇒ `contains("world")` 恒真）。
+      **变异怎么变红**：把 `world-core/src/ontology.rs` 的 `MissingField` 显示串里 `` `{field}` `` 删掉（现文件 `:56`，任务原写 `:32` 是旧行号）。原始输出：`test c02_every_required_envelope_field_is_enforced ... FAILED` ／ `panicked at tests/contract.rs:109:28`（`named_field_in` 的"没有点名缺失字段的标记"分支）／ `MUT_RC=101`。
 
-- [ ] 2.4 在 `world-core/tests/acceptance.rs` 的 `t5` 内补"状态未被改动"的断言（照同文件 `:87-92` 的既有写法读回读模型比对）。**验收**：`cargo test --locked --test acceptance -- t5_` 通过；变异（让被拒事件仍落笔）⇒ 变红。
+- [x] 2.4 在 `world-core/tests/acceptance.rs` 的 `t5` 内补"状态未被改动"的断言（照同文件 `:87-92` 的既有写法读回读模型比对）。**验收**：`cargo test --locked --test acceptance -- t5_` 通过；变异（让被拒事件仍落笔）⇒ 变红。
+      **断言在哪**：`world-core/tests/acceptance.rs:250`（快照取自**两次被拒之前**）＋ `:267-278`（`s.get("world://notice/n","muted") == None`、`s.seen() == 0`、`assert_eq!(before, s.to_json().to_string(), "被拒的提交不得改动状态（逐字节比对，不是只看条数）")`）；正控在 `:300-310`。
+      **变异怎么变红**：在 `world-core/src/lib.rs` 的 `commit_verbatim` 里，让本体校验失败的事件**仍落笔**（`if let Err(e) = self.ontology.validate(&ev) { let _ = self.ledger.append(ev.clone()); return Err(e.to_string()); }`）。原始输出：`test t5_law_rejects_and_does_not_write ... FAILED` ／ `panicked at tests/acceptance.rs:267: called Result::unwrap() on an Err value: "ext.world.ReadModel.UnknownKind: 未知事件家族 \`bogus\`（seq=1）…"`（被拒的那条真进了账本 ⇒ 读模型拒绝折叠）／ `MUT_RC=101`。
 
-- [ ] 2.5 为"策略文件缺失"与"本体软链"各补一条断言（放入 `c03`/`c09` 或新增用例）。**验收**：两类各有一条会红的断言；`world-core/tools/system_acceptance.sh --self-test` rc=0 不变。
+- [x] 2.5 为"策略文件缺失"与"本体软链"各补一条断言（放入 `c03`/`c09` 或新增用例）。**验收**：两类各有一条会红的断言；`world-core/tools/system_acceptance.sh --self-test` rc=0 不变。
+      **断言在哪**：`world-core/tests/contract.rs:247`（`c03` 第 ⑥ 类）＋ `:250` 的 `assert!(e.contains("无法读取") && e.contains("no-such-policy.json"), …)`；② 本体软链 ⇒ `world-core/tests/contract.rs:490`（`c09` 内：`World::open(&ont_link, …).expect_err("指向别处的本体软链必须被拒绝")` ＋ 理由含「符号链接」「本体」），真实文件对照在 `:495-500`。
+      **变异怎么变红**：① 把 `world-core/src/gate.rs` 的 `Policy::load` 读文件失败吞掉（`.map_err(...)?` ⇒ `.unwrap_or_else(|_| "{}".to_string())`）⇒ 原始输出 `panicked at tests/contract.rs:249: 策略文件缺失必须报「无法读取 <路径>」，实得: 门禁策略缺少 \`policy\` 版本号`；② 删掉 `world-core/src/ontology.rs` 里 `crate::guard::assert_not_other_writable(path, "本体（法律·形状）")?;` 那一行 ⇒ 原始输出 `panicked at tests/contract.rs:490: 指向别处的本体软链必须被拒绝: World { … }`（软链本体竟然开起来了）。两条都 `MUT_RC=101`。
+      **另**：`bash tools/system_acceptance.sh --self-test` 在本工区改动前后均 `rc=0`（本工区只改 `tests/**`，不动该脚本）。
 
-- [ ] 2.6 为"已知无码出口"补断言：静态墙三条（符号链接／mode 位／属主）与策略版本不符，各自断言错误串**不含** `ext.world.` 前缀。**验收**：断言存在且当前为绿（它们固定的是边界，不是缺陷）；若某出口**确实**带码，该断言变红并据此改规格。
+- [x] 2.6 为"已知无码出口"补断言：静态墙三条（符号链接／mode 位／属主）与策略版本不符，各自断言错误串**不含** `ext.world.` 前缀。**验收**：断言存在且当前为绿（它们固定的是边界，不是缺陷）；若某出口**确实**带码，该断言变红并据此改规格。
+      **断言在哪**：`world-core/tests/contract.rs:1472`（新用例 `c24_known_codeless_outlets_carry_no_ext_world_prefix`）＋ `:1521` 的 `assert!(!has_code(msg), "{what} 今天**不带** \`ext.world.\` 码…")` 与 `:1527` 的 `assert!(!msg.contains("ext.world."))`；同用例 `:1544-1546` 是带码出口的**对照**（防"什么都判成无码"）。
+      **变异怎么变红**：给「策略版本不符」这条出口加上码（`"门禁策略版本不支持：…"` ⇒ `"ext.world.Gate.BadVersion: 门禁策略版本不支持：…"`）。原始输出：`panicked at tests/contract.rs:1521: ④ 策略版本不符 今天**不带** \`ext.world.\` 码（已知无码出口，任务 2.6）…实得：ext.world.Gate.BadVersion: 门禁策略版本不支持：期望 1，实得 2…` —— **红的正是 ④**，①②③ 仍绿（三条出口没被这次变异碰到）／ `MUT_RC=101`。
 
-- [ ] 2.7 为 `c15` 补一条**账本路径**的错误码断言（今天 `c15` 的七条来源无一条是账本路径），并把该用例纳入出厂可跑的路径。**验收**：新增断言指向 `world-core/tests/cli.rs:155` 同族的账本码；且在 `world-core/check.sh` 里**有一条会跑到它**（见 6.2 的步骤归属订正）。
+- [x] 2.7 为 `c15` 补一条**账本路径**的错误码断言（今天 `c15` 的七条来源无一条是账本路径），并把该用例纳入出厂可跑的路径。**验收**：新增断言指向 `world-core/tests/cli.rs:155` 同族的账本码；且在 `world-core/check.sh` 里**有一条会跑到它**（见 6.2 的步骤归属订正）。
+      **断言在哪**：`world-core/tests/contract.rs:841`（`c15`，来源由 7 条增至 9 条）—— ⑧ 缺号账本在 `:922`＋`:923` 的 `assert_eq!(code_of(&gap_err), Some("ext.world.Ledger.SeqGap"), …)`；⑨ 无链账本在 `:939`＋`:940-943` 的 `assert_eq!(code_of(&noc), Some("ext.world.Ledger.NoChain"), "…（与 tests/cli.rs:155 同码）…")`；聚合判据在 `:962-969`（账本域至少两个码）。
+      **变异怎么变红**：把 `world-core/src/ledger.rs` 里 `ext.world.Ledger.SeqGap` 那句的码去掉（改成「账本缺号：…」）。原始输出：`panicked at tests/contract.rs:923: assertion left == right failed: 缺号账本必须报账本域的点名码，实得: 账本缺号：第 2 行 seq=3，期望 2` ／ `left: None` ／ `right: Some("ext.world.Ledger.SeqGap")` ／ `MUT_RC=101`。
+      **出厂路径**：`world-core/check.sh:119` 的**步骤 ③b** 跑的是整个 `cargo test --locked --test contract`（无过滤器）⇒ `c15` 在内（本工区不新增步骤号）。
 
 ## 3. 补断言 · 门禁（含两条 P0 边界）
 
-- [ ] 3.1 补一条断言：`world://user`（出厂 `irreversible_actors` 的唯一成员）执行不可逆能力（`ledger.compact`）⇒ **放行**，且账本中**不出现**任何 `gate.*` 通告。**验收**：断言当前为绿；变异（让白名单主体也走 `AwaitApproval`）⇒ 变红。出处：`world-core/src/gate.rs:287-293`；`world-core/docs/理论/WC-THEORY-DEFECT-001-v0.2.md:55`（`D-20`）。 〔该件已按作者指示退场；解析根＝`git show bf2eae7:<原路径>`〕
+- [x] 3.1 补一条断言：`world://user`（出厂 `irreversible_actors` 的唯一成员）执行不可逆能力（`ledger.compact`）⇒ **放行**（账本里**不出现**任何 `gate.*` 通告），且那条 `act` 事件**必带** `gate.friction:<等级>` 旗标——等级取自载体清单 `cap.d/ledger.compact.json` 的 `risk`（出厂为 `high`）。**验收**：断言当前为绿；变异（让白名单主体也走 `AwaitApproval`）⇒ 变红。出处：`world-core/src/gate.rs` 的 `Friction`／`Policy::verdict`（摩擦挂在**动作的不可逆等级**上）；`world-core/docs/理论/WC-THEORY-DEFECT-001-v0.2.md:55`（`D-20`）。 〔该件已按作者指示退场；解析根＝`git show bf2eae7:<原路径>`〕
+      **断言在哪**：`world-core/tests/cli.rs:389`（`cli09_whitelisted_actor_may_run_irreversible_and_the_event_carries_friction`，走**真实二进制 ＋ 真实账本文件**）＋ `:410` 的 `assert_eq!(code, 0, "白名单主体执行不可逆动作必须**放行**…")`、`:428` 的 `assert_eq!(lines.len(), 1, "① 放行 ⇒ 账本里只该有那一条 act…")`、`:444` 的 `assert!(flags.iter().any(|f| f == &want_flag), "② …**必带**摩擦旗标…")`（`want_flag` 由 `cap.d/ledger.compact.json` 的 `risk` 在 `:424` 现算）。
+      **变异怎么变红**：把 `world-core/src/gate.rs` 的 `decide` 里那条白名单放行改成 `if false`（白名单主体也走 `AwaitApproval`）。原始输出：`panicked at tests/cli.rs:410: assertion left == right failed: 白名单主体执行不可逆动作必须**放行**（v1 无审批通道，否则该能力是死号）；stderr=[FAIL] ext.world.Gate.AwaitingApproval: 门禁加摩擦：能力 \`ledger.compact\` **不可逆**（verb=do；载体清单声明的风险等级：high），而 \`world://user\` 不在 irreversible_actors 白名单内。` ／ `left: 2` ／ `right: 0` ／ `MUT_RC=101`。
 
-- [ ] 3.2 补一条断言：保留前缀通告被拒**那条路径**写下的流水也带 `refused`（`fnv1a64:` 前缀）指纹——今天只有不可逆加摩擦路径有该断言（`c23_gate_notice_says_what_it_refused` 走的是 `:1167` 的 `gate.awaiting-approval`）。**验收**：断言存在且会红（删掉 `refused` 字段即红）。
+- [x] 3.2 补一条断言：保留前缀通告被拒**那条路径**写下的流水也带 `refused`（`fnv1a64:` 前缀）指纹——今天只有不可逆加摩擦路径有该断言（`c23_gate_notice_says_what_it_refused` 走的是 `:1167` 的 `gate.awaiting-approval`）。**验收**：断言存在且会红（删掉 `refused` 字段即红）。
+      **断言在哪**：`world-core/tests/contract.rs:1290` 的 `c23_notice_with_reserved_prefix_is_refused_for_outsiders` **判据③**（`:1321-1336`）：从账本里找出 `gate.notice-not-allowed` 那条流水，断言 `payload.refused` 以 `fnv1a64:` 开头、`payload.refused_subject == "world://user"`，并在 `:1338-1360` 复算第二次尝试的指纹必须**相同**。
+      **变异怎么变红**：删掉 `world-core/src/lib.rs` 的 `record_gate_notice` 里 `"refused": refused,` 那一行。原始输出：`test c23_notice_with_reserved_prefix_is_refused_for_outsiders ... FAILED` ／ `panicked at tests/contract.rs:1327`（`.expect("保留前缀拒绝流水同样必须带 \`refused\` 字段（D-14）")`）／ `MUT_RC=101`。
 
-- [ ] 3.3 **重写后**：断言 `risk` 的**实际角色**——它**不**单独决定放行/拒绝（那由 `reversible` 与 `irreversible_actors` 裁决），但**决定摩擦的轻重与拒绝流水里的等级**（`gate.friction:low/medium/high/unlisted`）。
+- [x] 3.3 **重写后**：断言 `risk` 的**实际角色**——它**不**单独决定放行/拒绝（那由 `reversible` 与 `irreversible_actors` 裁决），但**决定摩擦的轻重与拒绝流水里的等级**（`gate.friction:low/medium/high/unlisted`）。
       **为什么不是原措辞**：原条目写「`risk` 不参与门禁裁决」，而实现已改为"参与摩擦、不参与放行"（`gate.rs:574-582`）；照搬会写成一条与实现相反的断言。
       **验收**：断言存在且会红（变异：把 `:544` 的 `level` 换成常量 ⇒ 变红）
+      **断言在哪**：`world-core/tests/atom_reversibility.rs:351`（`a06_risk_sets_friction_weight_but_not_the_verdict`，判别性夹具：`notice.mute` 可逆+low ／ `ledger.compact` 不可逆+low ／ `world.migrate` 不可逆+high）——「摩擦轻重由 risk 定」在 `:382`／`:400`／`:410`，「risk 相同而结论相反」在 `:386-393`，「reversible 相同而等级不同」在 `:438`／`:443`（且各自断言**不含**对方的等级），等级落进账本在 `:458`／`:466`／`:476`。
+      **变异怎么变红**：把 `world-core/src/gate.rs` 的 `decide` 里 `level = self.level_name(c)` 换成 `level = "常量"`（现文件 `:546`，任务原写 `:544`）。原始输出：`panicked at tests/atom_reversibility.rs:438: 实得：能力 \`ledger.compact\` **不可逆**（verb=do；载体清单声明的风险等级：常量），而 \`world://agent/1\` 不在 irreversible_actors 白名单内。` ／ `MUT_RC=101`。
 
-- [ ] 3.4 断言**载体撤销点（`undo: before-each`）不参与互校**、也不被当作世界可逆的依据（`src/carrier/mod.rs:32`；互校的载体侧由 `risk`/`confirm` 导出）。
+- [x] 3.4 断言**载体撤销点（`undo: before-each`）不参与互校**、也不被当作世界可逆的依据（`src/carrier/mod.rs:32`；互校的载体侧由 `risk`/`confirm` 导出）。
       **验收**：断言存在且会红（变异：把 `gate.rs:270` 的判据换成读 `undo` ⇒ 变红）
+      **断言在哪**：`world-core/tests/atom_reversibility.rs:511`（`a07_carrier_undo_is_neither_cross_checked_nor_a_proof_of_world_reversibility`）—— 两份清单**只差 `undo`**（`before-each` / `never`），断言：`:539` 夹具 A 的 `undo` 字段、`:541` 夹具 B 的、`:543` 两者**确实不同**（防"两份其实一样"）、`:534` 两份**都能启动**、`:554`／`:560` 两份给出的 `risk`／`decision`／`friction` **完全相同**（世界可不可逆由 `policy.json` 说了算）。
+      **变异怎么变红**：把 `world-core/src/gate.rs` 的 `cross_check_reversibility` 判据从 `risk`/`confirm` 换成读 `undo`（`let carrier_says_reversible = m.undo == crate::carrier::capd::Undo::BeforeEach;`，现文件 `:272`，任务原写 `:270`）。原始输出：`panicked at tests/atom_reversibility.rs:537: 世界侧可逆 + 载体侧不留撤销点 ⇒ 同样必须能启动: "ext.world.Gate.ReversibilityMismatch: 出厂配置**两处对不上**，拒绝启动。… 能力 \`job.start\`：… 载体侧（…job.start.json）声明 risk=low、confirm=never⇒ 推出载体侧不可逆。…"` ／ `MUT_RC=101`。
 
 - [ ] 3.5 为"门禁不可绕过的未做部分"（祖先链遍历、通道层、Landlock 自缚）在本 change 的 `review.md` R5 节写明**不可机核、由评审签字承担**。**验收**：`review.md`（由人填）里有该声明；本组不产出测试。
+      **未做（截至本工区交件时点，如实登记）**：`openspec/changes/fc-2026-004-assertions/review.md` **尚不存在**——`openspec status --change fc-2026-004-assertions` 现文逐字 `[ ] review`。**缺的就是它**：三句话（祖先链遍历／通道层／Landlock 自缚各一句「不可机核、由评审签字承担」）写进 `review.md` 的 R5 节后本条才可勾。该件**由人备料与签署**（本仓口径：签字只在评审通过后、按作者指示落笔），本工区**不代建、不代签**。
+
 
 ## 4. 补断言 · 账本与证据链
 
@@ -57,6 +83,10 @@
       **★ 订正**：本条原引「`design.md` §排除清单第 7 条」——**该条不存在**（该节只有 2 条：不改 `src/**` 行为／不动书与规格），系**假引用**（由断言工区 B 实测发现，执行者复核成立）。**故本条不是"范围外而搁置"，而是"已由判据② 承担"。**
       **验收**：`python world-core/tools/spec_bridge.py --self-test` ⇒ rc=0 且含上列两条反例；`spec_bridge.py` 正跑判据② **[OK]**。
 
+- [x] 5.1 补一条断言固定 `project check` 的**判据只剩头部四项**：让两份投影在内容上不一致（一方少渲一半主体）而头部四项相同 ⇒ 命令**仍然报绿**。**验收**：断言存在且为绿（它固定的是边界）；出处 `world-core/src/project/mod.rs` 的 `assert_same_source`。
+      **断言在哪**：`world-core/tests/cli.rs:495`（`cli13_project_check_criterion_reads_only_the_header`）——正文取自命令自己的 `project language` 输出、砍掉一半主体行、头部一字不动 ⇒ `assert_same_source(&a,&b).is_ok()`；另配正控（改 `state=` ⇒ 必报「状态不同」）。
+      **变异怎么变红**：在 `src/project/mod.rs` 的 `assert_same_source` 里加一条正文/行数比较 ⇒ 该用例变红。
+      **★ 本条曾被我误删**：执行者在 `26fcd6a` 改 4.8 时把它连同相邻行一起吃掉，由断言工区 A 发现（"`tasks.md` 的 5.1 不见了"），**现按 `2669173` 的原文逐字恢复**——删条目与删代码一样是损坏，**必须留痕**。
 - [ ] 5.2 补一条断言固定"三个不等分支在命令路径上不可达"：断言 `project check` 的两份投影取自同一 `state` 与同一 `vocab`。**验收**：断言存在；出处 `world-core/src/main.rs:408-410`。
 
 - [ ] 5.3 补一条断言：`Checkpoint::FORMAT` 版本不符 ⇒ 报 `ext.world.Checkpoint.BadFormat`（今天该分支零断言）。**验收**：断言存在且会红（删掉 `world-core/src/checkpoint.rs:94-99` 的判定即红）。
@@ -68,6 +98,7 @@
 - [ ] 5.6 **待人填**（作者／评审席）：为 `REQ-N-008`（带检查点续算 ≤ 全量重算的 1/2）在 `fc-2026-004-assertions` 的 `review.md` R5 节登记为**范围外、未实现、无断言**。
       **★ 订正（2026-09-28）**：本条原文自己写着「`review.md`（**由人填**）」——而该 change 目录下**没有 `review.md`**（只有 `.openspec.yaml`／`design.md`／`proposal.md`／`tasks.md`），且评审记录按本仓口径**由人备料与签署**。
       ⇒ **它不是 agent 能完成的活**：**保持未勾**，等人在 `review.md` 落笔后由签署人勾。**不许代填。**
+
 ## 6. 验证与取证（跨组的整体验收）
 
 - [ ] 6.1 形态门禁：在仓库根跑 `openspec validate fc-2026-002-spec-revisions --strict`，把**原始输出**抄回。**验收**：输出为 `Change 'fc-2026-002-spec-revisions' is valid`、`rc=0`。

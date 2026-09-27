@@ -326,3 +326,245 @@ fn a05_non_whitelisted_actor_gets_friction_and_the_level_shows_in_the_flow() {
         "流水里要读得到等级，实得：{reason}"
     );
 }
+
+/// **a06**（任务 3.3，按实现改写后的措辞）：`risk` 的**实际角色**——
+/// 它**不**单独决定放行/拒绝（那由 `reversible` 与 `irreversible_actors` 裁决），
+/// 但**决定摩擦的轻重与拒绝流水里的等级**（`gate.friction:low/medium/high/unlisted`）。
+///
+/// ## 判别性夹具（三格，逐格可核）
+///
+/// | 能力 | 世界侧 `reversible` | 清单 `risk`/`confirm` | 载体侧推出 | `world://user` | `world://agent/1` |
+/// |---|---|---|---|---|---|
+/// | `notice.mute` | `true` | **low** / never | 可逆 | Allow、**无**摩擦 | Allow（可逆 ⇒ 免检） |
+/// | `ledger.compact` | `false` | **low** / required | 不可逆 | Allow ＋ `gate.friction:low` | AwaitApproval，流水写 **low** |
+/// | `world.migrate` | `false` | **high** / never | 不可逆 | Allow ＋ `gate.friction:high` | AwaitApproval，流水写 **high** |
+///
+/// 两句合起来才说明"`risk` 不决定放行"：
+/// - `notice.mute` 与 `ledger.compact` 的 **`risk` 相同（都 low）而结论相反** ⇒ 差别只能来自 `reversible`；
+/// - `ledger.compact` 与 `world.migrate` 的 **`reversible` 相同（都不可逆）而等级不同** ⇒ 差别只能来自 `risk`。
+///
+/// ## 变异
+///
+/// 把 `gate.rs` 里 `decide` 的 `level = self.level_name(c)` 换成常量
+/// ⇒ 流水里的等级不再随 `risk` 变 ⇒ 本条变红（"闸读得到风险等级"就没有对外痕迹了）。
+#[test]
+fn a06_risk_sets_friction_weight_but_not_the_verdict() {
+    use world_core::gate::Decision;
+
+    let d = tmpdir("a06");
+    let pol = write_policy(
+        &d,
+        json!({
+            "notice.mute":    { "reversible": true },
+            "ledger.compact": { "reversible": false },
+            "world.migrate":  { "reversible": false }
+        }),
+    );
+    // 可逆 + 低危：与下面那项 **risk 相同**，用来证明"risk 不决定放行"。
+    write_manifest(&d, "notice.mute", "low", "never", "never");
+    // 不可逆 + 低危（`confirm: required` ⇒ 载体侧同判不可逆，互校一致）。
+    write_manifest(&d, "ledger.compact", "low", "never", "required");
+    // 不可逆 + 高危：与上面那项 **reversible 相同**，用来证明"等级来自 risk"。
+    write_manifest(&d, "world.migrate", "high", "never", "never");
+
+    let lp = d.join("ledger.jsonl");
+    let mut w = World::open(&factory_ontology(), &lp, &pol)
+        .expect("夹具两处必须互校一致，否则本用例测的是拒启而不是等级");
+
+    {
+        let p = w.policy();
+
+        // ① 摩擦的**轻重**由动作的 risk 决定
+        let rev = p.verdict(
+            "world://user",
+            &json!({"capability": "notice.mute", "verb": "do"}),
+        );
+        assert_eq!(rev.decision, Decision::Allow);
+        assert!(
+            rev.friction.is_none(),
+            "可逆动作免检：不得带摩擦，实得 {:?}",
+            rev.friction
+        );
+        let low = p.verdict(
+            "world://user",
+            &json!({"capability": "ledger.compact", "verb": "do"}),
+        );
+        assert_eq!(
+            low.decision,
+            Decision::Allow,
+            "白名单主体仍放行——**放行不吃 risk 这一档**"
+        );
+        assert_eq!(
+            low.friction.as_ref().map(|f| f.flag()),
+            Some("gate.friction:low".to_string()),
+            "摩擦轻重来自动作的 risk=low"
+        );
+        let high = p.verdict(
+            "world://user",
+            &json!({"capability": "world.migrate", "verb": "do"}),
+        );
+        assert_eq!(high.decision, Decision::Allow);
+        assert_eq!(
+            high.friction.as_ref().map(|f| f.flag()),
+            Some("gate.friction:high".to_string()),
+            "同一主体、同一「不可逆」档，只因 risk 不同 ⇒ 旗标不同"
+        );
+
+        // ② **risk 不决定放行/拒绝**（同一个 risk=low，两项结论相反）
+        assert_eq!(
+            p.decide(
+                "world://agent/1",
+                &json!({"capability": "notice.mute", "verb": "do"})
+            ),
+            Decision::Allow,
+            "可逆 ⇒ 白名单外也放行（risk 相同的那一项却不行，差别只能来自 reversible）"
+        );
+
+        // ③ **等级出现在拒绝流水里**，且是这一项自己的等级
+        let m_low = match p.decide(
+            "world://agent/1",
+            &json!({"capability": "ledger.compact", "verb": "do"}),
+        ) {
+            Decision::AwaitApproval(m) => m,
+            other => panic!("不可逆 + 白名单外 ⇒ 加摩擦到拒绝，实得 {other:?}"),
+        };
+        let m_high = match p.decide(
+            "world://agent/1",
+            &json!({"capability": "world.migrate", "verb": "do"}),
+        ) {
+            Decision::AwaitApproval(m) => m,
+            other => panic!("不可逆 + 白名单外 ⇒ 加摩擦到拒绝，实得 {other:?}"),
+        };
+        assert!(m_low.contains("风险等级：low"), "实得：{m_low}");
+        assert!(
+            !m_low.contains("high"),
+            "等级必须来自**这一项**的 risk，不许混进别人的：{m_low}"
+        );
+        assert!(m_high.contains("风险等级：high"), "实得：{m_high}");
+        assert!(
+            !m_high.contains("low"),
+            "等级必须来自**这一项**的 risk，不许混进别人的：{m_high}"
+        );
+    }
+
+    // ④ 等级要**落进账本**（不只是内存里的一个字段）
+    let e_low = w
+        .commit(
+            "act",
+            "world://agent/1",
+            event::act_body("ledger.compact", "do", "r-a06-low", json!({})),
+        )
+        .unwrap_err();
+    assert!(e_low.contains("风险等级：low"), "实得：{e_low}");
+    let e_high = w
+        .commit(
+            "act",
+            "world://agent/1",
+            event::act_body("world.migrate", "do", "r-a06-high", json!({})),
+        )
+        .unwrap_err();
+    assert!(e_high.contains("风险等级：high"), "实得：{e_high}");
+
+    let all = w.ledger().read_all().unwrap();
+    let flows: Vec<String> = all
+        .iter()
+        .filter(|ev| ev["body"]["type"] == json!("gate.awaiting-approval"))
+        .map(|ev| format!("{}", ev["body"]["payload"]["reason"]))
+        .collect();
+    assert_eq!(flows.len(), 2, "两次加摩擦各留一条流水：{all:?}");
+    assert!(
+        flows[0].contains("low") && !flows[0].contains("high"),
+        "第一条流水的等级必须是 low：{}",
+        flows[0]
+    );
+    assert!(
+        flows[1].contains("high") && !flows[1].contains("low"),
+        "第二条流水的等级必须是 high：{}",
+        flows[1]
+    );
+}
+
+/// **a07**（任务 3.4）：**载体撤销点（`undo: before-each`）不参与互校，
+/// 也不被当作世界可逆的依据**。
+///
+/// ## 夹具
+///
+/// 同一项能力、同一份世界侧声明（`job.start` 世界侧 `reversible: true`），
+/// 两份载体清单**只差 `undo` 一个字段**（`before-each` / `never`）。
+///
+/// ## 三件事一起断言
+///
+/// 1. 两份夹具的 `undo` 字段**确实不同**（否则"结论相同"可能只是因为两份一样）；
+/// 2. 两份**都能启动**——`undo` 不参与互校：留了撤销点**不等于**"载体侧判不可逆"；
+/// 3. 两份给出的世界侧等级与裁决**完全相同**，都等于 `policy.json` 里写的那句——
+///    `undo` **不是**"世界可不可逆"的依据。
+///
+/// 依据：`src/carrier/mod.rs:32` 的表格逐字——载体撤销撤的是**文件系统上的字节**，
+/// 「不是世界状态；只作工程兜底，**不得**用于满足『坏了能回滚』」；
+/// 书 §5.5 逐字「两个轴各自成立，谁也不能推出谁」。
+///
+/// ## 变异
+///
+/// 把 `cross_check_reversibility` 的判据从 `risk`/`confirm` 换成读 `undo`
+/// ⇒ 两份夹具里必有一份被判冲突 ⇒ 那一份**拒启** ⇒ 本条变红（同族的 `a02` 亦红）。
+#[test]
+fn a07_carrier_undo_is_neither_cross_checked_nor_a_proof_of_world_reversibility() {
+    use world_core::carrier::capd::Undo;
+    use world_core::gate::Decision;
+
+    let mk = |tag: &str, undo: &str| -> (PathBuf, PathBuf) {
+        let d = tmpdir(tag);
+        let pol = write_policy(&d, json!({ "job.start": { "reversible": true } }));
+        write_manifest(&d, "job.start", "low", undo, "never");
+        (d, pol)
+    };
+    let (da, pol_a) = mk("a07-undo-before-each", "before-each");
+    let (db, pol_b) = mk("a07-undo-never", "never");
+
+    fn undo_of(w: &World) -> Undo {
+        w.policy()
+            .carrier_manifest()
+            .iter()
+            .find(|c| c.name == "job.start")
+            .expect("清单里必须有 job.start")
+            .undo
+    }
+
+    let wa = World::open(&factory_ontology(), &da.join("ledger.jsonl"), &pol_a).expect(
+        "世界侧可逆 + 载体侧留了撤销点 = **书明说的正常形态**，必须能启动（undo 不参与互校）",
+    );
+    let wb = World::open(&factory_ontology(), &db.join("ledger.jsonl"), &pol_b)
+        .expect("世界侧可逆 + 载体侧不留撤销点 ⇒ 同样必须能启动");
+
+    assert_eq!(undo_of(&wa), Undo::BeforeEach, "夹具 A 的 undo 字段");
+    assert_eq!(undo_of(&wb), Undo::Never, "夹具 B 的 undo 字段");
+    assert_ne!(
+        undo_of(&wa),
+        undo_of(&wb),
+        "两份夹具必须**只差** undo 这一格，否则第 2/3 条断言证明不了任何事"
+    );
+
+    for (tag, w) in [("undo=before-each", &wa), ("undo=never", &wb)] {
+        let cap = w
+            .policy()
+            .carrier_manifest()
+            .iter()
+            .find(|c| c.name == "job.start")
+            .expect("清单里必须有 job.start");
+        assert_eq!(cap.risk, Risk::Low, "{tag}：等级仍取自清单的 risk");
+        let v = w.policy().verdict(
+            "world://user",
+            &json!({"capability": "job.start", "verb": "do"}),
+        );
+        assert_eq!(
+            v.decision,
+            Decision::Allow,
+            "{tag}：世界侧说可逆 ⇒ 免检放行（世界可不可逆由 policy.json 说了算，不由 undo 推出）"
+        );
+        assert!(
+            v.friction.is_none(),
+            "{tag}：可逆动作不得带摩擦旗标，实得 {:?}",
+            v.friction
+        );
+    }
+}

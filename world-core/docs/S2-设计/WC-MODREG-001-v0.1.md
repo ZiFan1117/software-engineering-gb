@@ -27,16 +27,29 @@
 
 | 模块号 | 模块名 | 职责（一句话） | 源码路径 | 提供接口 | 依赖模块 |
 |---|---|---|---|---|---|
-| **M01** | 本体（Ontology） | 世界的**法律**：规定一条事件长什么样、什么算合法变更，并给出词表身份（`vocab_hash`）。 | `src/ontology.rs`（`ontology.json` 为其入参） | **IF-005** 词表身份 | `M05`（静态墙，仅校验不写） |
+| **M01** | 本体（Ontology） | 世界的**法律**：事件形状、合法变更的判据。 | `src/ontology.rs`（`ontology.json` 为其入参） | **IF-005** 词表身份 | `M05`（静态墙，仅校验不写） |
 | **M02** | 账本（Ledger） | 世界的**事实**：只追加的语义事件日志，分配 `seq`，处理崩溃尾迹。 | `src/ledger.rs` | **IF-001** 账本读写 | `M05`（静态墙） |
 | **M03** | 读模型（Read Model） | **状态 = fold(账本)**：纯派生物，可随时删掉重算。 | `src/readmodel.rs` | **IF-009** 状态折叠与重建 | **无**（生产代码零出边） |
-| **M04** | 运行时（Runtime） | 装配与启动，并持有**唯一写入口** `World::commit`（取号→造事件→法律→门禁→落笔）。 | `src/lib.rs`、`src/main.rs`（CLI 入口见 `src/main.rs:7-9`） | **IF-008** 运行时入口（CLI） | `M01`、`M02`、`M03`、`M05`、`M06`、`M07`、**`M08`**（`src/main.rs:506 use world_core::checkpoint::…`）、**`M09`**（`:622 use world_core::channel::…`）、**`M10`**（`:752-754 use world_core::carrier::…`） |
-| **M05** | 门禁（Gate） | 一件事**现在能不能做**：默认拒绝 + 按不可逆性加摩擦 + 拒绝留痕；含**静态墙**。 | `src/gate.rs`、`src/guard.rs`（`policy.json` 为能力表数据） | **IF-002** 门禁裁决 | **`M10`**（`src/gate.rs:32 use crate::carrier::capd::{Manifest as CarrierManifest, Risk as CarrierRisk};`） |
+| **M04** | 运行时（Runtime） | 装配启动，持有**唯一写入口** `World::commit`。 | `src/lib.rs`、`src/main.rs`（CLI 入口见 `src/main.rs:7-9`） | **IF-008** 运行时入口（CLI） | `M01`、`M02`、`M03`、`M05`、`M06`、`M07`、**`M08`**（`src/main.rs:506 use world_core::checkpoint::…`）、**`M09`**（`:622 use world_core::channel::…`）、**`M10`**（`:752-754 use world_core::carrier::…`） |
+| **M05** | 门禁（Gate） | 一件事**现在能不能做**：默认拒绝，按不可逆性加摩擦。 | `src/gate.rs`、`src/guard.rs`（`policy.json` 为能力表数据） | **IF-002** 门禁裁决 | **`M10`**（`src/gate.rs:32 use crate::carrier::capd::{Manifest as CarrierManifest, Risk as CarrierRisk};`） |
 | **M06** | 语言投影（Language Projection） | 结构化出口：逐行 JSON，给程序读。 | `src/project/language.rs` | **IF-003** 语言投影出口 | `M03` |
 | **M07** | 视觉投影（Visual Projection） | 渲染出口：终端可读，**排版仍可被审计**。 | `src/project/visual.rs` | **IF-004** 视觉投影出口 | `M03` |
 | **M08** | 检查点（Checkpoint） | **带 `base_seq` 的缓存**，非真相；删掉后重算结果必须相同。 | `src/checkpoint.rs` | **IF-010** 检查点读写与核验 | `M03`、`M05` |
 | **M09** | 通道（Channel） | 跨进程入口：**一个套接字一个身份**，权限即身份。 | `src/channel.rs`（`channel.json` 为其入参；**本仓 `world-core/` 根目录无此文件**，实测仅有 `ontology.json`、`policy.json`） | **IF-006** 跨进程通道 | `M04`、`M05` |
-| **M10** | 载体适配器（Carrier Adapter） | **载体侧的手**：按执行清单调载体（设备/包管理/进程）、做载体级撤销、在高危动作前等人工确认；**只执行、不裁决**。 | `src/carrier/`（计划：`mod.rs`、清单解析、`device.rs`、`package.rs`、`job.rs`、`undo.rs`、`confirm.rs`）；执行清单 `cap.d/*.yaml` 为其入参，**与门禁策略同名对齐** | **IF-011** 载体动作执行 | `M05`（**只请求裁决**，不得自行放行）、`M09`（经通道提交请求） |
+| **M10** | 载体适配器（Carrier Adapter） | **载体侧的手**：按清单调载体，只执行不裁决。 | `src/carrier/`（计划：`mod.rs`、清单解析、`device.rs`、`package.rs`、`job.rs`、`undo.rs`、`confirm.rs`）；执行清单 `cap.d/*.yaml` 为其入参，**与门禁策略同名对齐** | **IF-011** 载体动作执行 | **无**（源码 import 面没有兄弟模块引用——三条"设计意图"见本表下的说明） |
+
+> **「职责」列就是 A-1 的 `intent`**（登记表没有单独的 `intent` 列）：**一句话、≤30 字、不许并列两事**
+> （`WC-ATOM-001` §二 A-1）。**展开描述不在这里**——每个模块的完整职责、接口、不变量、依赖见
+> `WC-IC-001-v0.1.md` 的对应模块节。⇒ 本列**只回答"这个模块是什么"**，不回答"它怎么做"。
+
+
+> **M10 的三条"设计意图"为什么不在依赖列里**：A-4 的依赖列是**代码有印证**的边
+> （`WC-ATOM-001` §二逐字：`deps 必须等于真实 import`）。`src/carrier/**` 的 7 个实现文件里
+> **没有** `crate::gate`（M05）／`crate::channel`（M09）的引用；`src/pairing.rs` 是
+> §2.1 登记的**共同模块（不占号）**，按口径**不作边目标**。⇒ 那三条是**设计意图**：
+> 「只请求裁决、不得自行放行」与「经通道提交请求」是**协议面**的约束，不是 import 面的边。
+> **它们不改行为就被取消**——它们改记在此说明里，依赖列只留可被机核的边。
+
 
 **依赖列的订正记录**（说明写在表下、**不写进依赖列**——依赖列必须机器可解析：门禁 `ic_books_check.py` 是**文本式**取边，列里出现 `Mxx` 字样就会被当成一条边）：
 
@@ -61,7 +74,9 @@
 |---|---|---|---|
 | `src/event.rs` | **不占号** | 属 `M01` 的机制面（信封与信纸构造） | 附录 A §二「共同模块（不占模块号）」；文件内 `pub const WORLD_VERSION: u64 = 1;`（`src/event.rs:16`）、`pub fn new_event(...)`（`src/event.rs:26`） |
 | `src/project/mod.rs` | **不占号** | 横跨 `M06`/`M07`（同源判定：`header_line`、`parse_header`、`assert_same_source`，`src/project/mod.rs:77/86/124`） | 同上 |
-| `src/error.rs` | **不占号，且未被任何模块登记为部件** | **登记缺口**：该文件定义错误码契约（`pub const PREFIX`、`pub fn code_of`、`pub fn has_code`，`src/error.rs:37/43/57`），是**跨全部模块**的机读面，但既不在九行登记表内，也不在「共同模块」两行内 | 本版核对（证据：`Select-String -Path world-core\src\*.rs -Pattern 'error.rs'` **零命中**；`src/error.rs` 自身不含 `crate::` 依赖） |
+| `src/delivery.rs` | **不占号** | 横跨 `M04`（`World::commit_requested`：经它把 `to` 写进信封）与 `M06`/`M07`/`M09`（三个出口读同一个判据）：**一条记录给谁**——带 `to` 只送该收件人、无 `to`（或空）＝广播。**只读派生**，不给 `World` 加字段、不写盘 | 本体 `ontology.json:18`（`"to": "string  # 目的地；空 = 广播"`）；书 §4.6；`openspec/changes/cover-unimplemented-capabilities/specs/delivery-and-resources/spec.md:11` |
+| `src/pairing.rs` | **不占号** | 属 `M02` 的机制面（**账本里的事后核对**），并由 `M10` 复用其中"什么算一次 `act` 的结果"这一条判据：**请求与应答的配对**——配对键 `request_id` ＋因果 `trace`。`M10` 因此对 `M02` 有一条真实依赖边（登记见 §2 `M10` 行） | 本体 `ontology.json:33`（`act` 必填 `request_id`）、`:19`（`trace`）；书 §4.6；`openspec/changes/cover-unimplemented-capabilities/specs/delivery-and-resources/spec.md:11` |
+| `src/error.rs` | **不占号** | **横跨全部模块**：错误码契约（`pub const PREFIX`、`pub fn code_of`、`pub fn has_code`）。它不属任何单个模块——每个模块都`s use` 它，**它是共同模块，不是缺口** | 附录 A §二「共同模块（不占模块号）」；**2026-09-28 由"登记缺口"改判为共同模块**：判据③ 与依赖抽取告警都点过它，处置是**规范登记**而不是继续挂着 |
 | `src/project/language.rs`、`src/project/visual.rs` | 各占一（`M06`/`M07`） | 各自契约在文件头 | 附录 A §一 决定理由第 1 条 |
 | 注册表列出的 `ontology.json` / `policy.json` | 数据文件，不占号 | 实存（`world-core/ontology.json` 1928 字节、`world-core/policy.json` 2385 字节） | `Get-ChildItem world-core -File` 实测 |
 | **九个模块之间无循环依赖** | — | 判定面与证据见 §4.2 | — |
@@ -183,7 +198,7 @@ main.rs       → world_core::World（外部使用方，非模块内边）
 
 | # | 不一致 | 证据 | 影响面 |
 |---|---|---|---|
-| 1 | `src/error.rs` **未登记**进任何模块号，也不在「共同模块」两行内 | `Select-String world-core\src\*.rs -Pattern 'error.rs'` ⇒ **0** 命中 | 模块清单与源码 14 文件**不是一一对应**：登记的源码路径覆盖 13 个 `.rs`（`M01`–`M09` 9 个模块文件 + 2 个共同模块 + `main.rs` 并入 `M04`），余 1 个（`error.rs`）无归属 |
+| — | `src/error.rs` **已登记为共同模块**（2026-09-28 改判；原记作"登记缺口"） | `WC-MODREG-001` §2.1 共同模块表；`module_graph.py` 的"未被任何模块号登记"告警随之消失 | 错误码契约被**每个模块**共用 ⇒ 它是共同模块，不是缺口 |
 | 2 | `M09` 源码路径中的 `channel.json` **本仓不存在** | `world-core/` 根目录仅 `ontology.json`、`policy.json`（`Get-ChildItem world-core -File`） | 登记表述已就地标注为「入参形态」
 | 3 | `M03` 行的依赖含「可选 `M08`」，`M08` 行的依赖含 `M03` —— **登记口径上互为依赖** | 附录 A §二 `M03`/`M08` 两行的「依赖模块」列 | 非源码循环（实现里 `M08→M03` 单向，`M03` 不引用 `Checkpoint`），但登记口径需一次澄清 |
 | 4 | `M08` 行的依赖写 `M02`（读账本），源码面 `src/checkpoint.rs` **不含** `use crate::ledger` | `Select-String -Path world-core\src\checkpoint.rs -Pattern 'use crate::'` ⇒ 仅 `crate::guard`、`crate::readmodel::State` 两条 | 实际是「调用方把账本事件切片传进来」（`src/checkpoint.rs:122` 签名），不是模块间依赖 |

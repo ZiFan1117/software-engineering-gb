@@ -98,10 +98,35 @@ fn c01_change_is_gated_and_cannot_smuggle_an_act() {
     assert_eq!(all[1]["body"]["subject"], json!("world://agent/1"));
 }
 
+/// 从信封错误串里**定位**「缺少必填字段 `<名字>`」点到的那个名字。
+///
+/// 取不到标记、或反引号没闭合 ⇒ **当场 panic**（不返回空串当通过）：
+/// 一条"读不到就当成没问题"的判据正是本项目反复判红的那种装饰。
+fn named_field_in(msg: &str) -> &str {
+    const MARK: &str = "缺少必填字段 `";
+    let start = msg
+        .find(MARK)
+        .unwrap_or_else(|| panic!("错误串没有点名缺失字段的标记 `{MARK}`：{msg}"))
+        + MARK.len();
+    let rest = &msg[start..];
+    let end = rest
+        .find('`')
+        .unwrap_or_else(|| panic!("字段名没有闭合的反引号：{msg}"));
+    &rest[..end]
+}
+
 /// **c02**：信封的 8 个必填字段**逐字段**被拦，且报出字段名。
 ///
 /// 此前 `ontology.rs` 的信封必填循环**零覆盖**（该文件单元测试只测 `vocab_hash`），
 /// 而 RTM 把 `REQ-F-002` 记为"已实现"并引用了两条不相干的用例。
+///
+/// ## 2.3 的反假（这一条原来是个恒真判据）
+///
+/// 原断言是 `msg.contains("MissingField") && msg.contains(field)`。
+/// 对 `field == "world"` 而言，**前半段本身就含 `world`**——错误码前缀
+/// `ext.world.Ontology.MissingField` 里那个 `world` 让后半段**恒真**：
+/// 无论删的是哪个字段，`contains("world")` 都成立（本用例末尾的对照把它钉住）。
+/// 现在改成**定位那个 token**：反引号之间必须逐字等于被删的字段名。
 #[test]
 fn c02_every_required_envelope_field_is_enforced() {
     let ont = world_core::ontology::Ontology::load(&ontology()).unwrap();
@@ -117,11 +142,36 @@ fn c02_every_required_envelope_field_is_enforced() {
         ev.as_object_mut().unwrap().remove(field);
         let e = ont.validate(&ev).unwrap_err();
         let msg = format!("{e}");
-        assert!(
-            msg.contains("MissingField") && msg.contains(field),
-            "删除 `{field}` 应被拒且指明字段，实得: {msg}"
+        assert!(msg.contains("MissingField"), "实得: {msg}");
+        // 2.3：**不许用 contains**——必须定位到「缺少必填字段 `<名字>`」里的那个 token。
+        assert_eq!(
+            named_field_in(&msg),
+            field,
+            "错误串点名的字段必须**逐字**是被删掉的那个，实得: {msg}"
         );
     }
+
+    // 上面那条判据的**反假证据**：删掉 `seq`（与 `world` 无关的字段），
+    // 错误串**照样**含 `world`——因为码前缀 `ext.world.` 自带它。
+    // ⇒ `contains("world")` 在这一格恒真，它证明不了"报出了字段名"。
+    let mut other = event::new_event(
+        1,
+        "change",
+        "world://user",
+        event::change_body("world://s", "p", json!(null), json!(1)),
+    );
+    other.as_object_mut().unwrap().remove("seq");
+    let msg_other = format!("{}", ont.validate(&other).unwrap_err());
+    assert!(
+        msg_other.contains("world"),
+        "本对照的前提是「码前缀里含 world」：{msg_other}"
+    );
+    assert_ne!(
+        named_field_in(&msg_other),
+        "world",
+        "删的是 `seq`，点名的却是 `world` ⇒ token 定位没在读那个位置：{msg_other}"
+    );
+    assert_eq!(named_field_in(&msg_other), "seq", "实得: {msg_other}");
 
     // 对照：完整信封必须通过（否则上面的断言可能因"什么都拒"而假通过）
     let ok = event::new_event(
@@ -141,7 +191,10 @@ fn c02_every_required_envelope_field_is_enforced() {
     assert!(format!("{}", ont.validate(&unknown).unwrap_err()).contains("UnknownKind"));
 }
 
-/// **c03**：`Policy::load` 的 5 类拒启分支（此前该方法在测试中**从未被调用**）。
+/// **c03**：`Policy::load` 的 6 类拒启分支（此前该方法在测试中**从未被调用**）。
+///
+/// 第 ⑥ 类（**策略文件缺失**）由任务 2.5 补：它此前零断言，而它正是
+/// "法律读不到就不许起"这条纪律的入口。
 ///
 /// 原第 ⑤ 类"可逆与需批准矛盾 ⇒ 拒载"已随 `WC-R4-DISP-001` §三 **E-5**
 /// 裁定①（**删 `requires_approval` 字段**）一并删除；未知/多余键改为
@@ -183,6 +236,20 @@ fn c03_policy_load_rejects_every_malformed_shape() {
     let p = write_policy(&d, "no-writes.json", &v);
     let e = Policy::load(&p).unwrap_err();
     assert!(e.contains("writes"), "实得: {e}");
+
+    // ⑥ **策略文件缺失**（任务 2.5）：`Policy::load` 的"读不到"分支此前零断言。
+    //
+    // 为什么要断言**理由**而不是只断言 `is_err()`：这条出口的错误**不带**
+    // `ext.world.` 码（属"已知无码出口"，见 `c24`），所以能判的东西只剩"它说了什么"。
+    // 只写 `is_err()` 的判据在**fail-open 变异**下是假的绿：把读取失败吞掉
+    // （`unwrap_or_else(|_| "{}")` 之类）之后，加载照样会失败——只是**理由换了**，
+    // 于是 `is_err()` 仍为真，而"文件缺失"这件事已经没人报了。
+    let missing = d.join("no-such-policy.json");
+    let e = Policy::load(&missing).unwrap_err();
+    assert!(
+        e.contains("无法读取") && e.contains("no-such-policy.json"),
+        "策略文件缺失必须报「无法读取 <路径>」，实得: {e}"
+    );
 
     // 对照①：合法策略必须能加载（否则"什么都拒"会假通过）
     let p = write_policy(&d, "ok.json", &valid_policy_json());
@@ -379,6 +446,13 @@ fn c08_stale_lock_is_reclaimed() {
 ///
 /// 为什么：`fs::metadata` 跟随链接 ⇒"检查的"与"真正读的"可能不是同一个文件，
 /// 静态墙被绕过。
+///
+/// ## 2.5 补的那一半：**本体**软链
+///
+/// 原来只走 `policy.json`（法律之**权限**）；**本体**（法律之**形状**）软链那条路径
+/// 一次都没人走过。两条路径调的是同一个 `guard::assert_not_symlink`，但
+/// "同一个函数"不等于"两条调用点都在"——把 `Ontology::load` 里那次调用整行删掉，
+/// 原来这个用例**照样全绿**（本文件末尾这两条断言就是为了让它变红）。
 #[cfg(unix)]
 #[test]
 fn c09_symlinked_law_is_refused() {
@@ -401,6 +475,30 @@ fn c09_symlinked_law_is_refused() {
     assert!(
         World::open(&ontology(), &lp, &copy).is_ok(),
         "真实文件不应被拒"
+    );
+
+    // ── 2.5 的另一半：**本体**是软链也必须拒启（法律之形状，与上面策略同一条墙）──
+    //
+    // 专用账本：上面对照已经用过 `lp`，这里换个路径，免得"起不来"的理由
+    // 与"账本被另一个写者占着"混在一起（那会让本断言失去判别力）。
+    let lp2 = d.join("ledger2.jsonl");
+    let real_ont = d.join("real-ontology.json");
+    fs::copy(ontology(), &real_ont).unwrap();
+    let ont_link = d.join("ontology-link.json");
+    symlink(&real_ont, &ont_link).unwrap();
+
+    let err = World::open(&ont_link, &lp2, &policy()).expect_err("指向别处的本体软链必须被拒绝");
+    assert!(err.contains("符号链接"), "实得: {err}");
+    assert!(
+        err.contains("本体"),
+        "理由必须点名是本体这条（法律·形状），实得: {err}"
+    );
+    // 对照：把内容**真放**到该路径上，同一次启动必须成功（证明上面拒的是"链接"这件事）
+    let real_copy = d.join("ontology-real.json");
+    fs::copy(ontology(), &real_copy).unwrap();
+    assert!(
+        World::open(&real_copy, &lp2, &policy()).is_ok(),
+        "真实本体文件不应被拒"
     );
 }
 
@@ -618,10 +716,13 @@ fn c13_bad_checkpoints_are_refused() {
 
 /// **c14**：通道的身份来自**内核**，请求自称无效。
 ///
-/// 三条判据：
+/// 四条判据：
 /// 1. 同 uid 连接 → 落笔成功，且事件的 `actor` 取自**套接字映射**（不是请求里的字符串）；
 /// 2. 请求**自称**别的 actor → 拒绝，且**没有落笔**；
-/// 3. 请求未声明 actor → 允许（身份本就由内核给出，无需自称）。
+/// 3. 请求未声明 actor → 允许（身份本就由内核给出，无需自称）；
+/// 4. **受理路径不读对端凭证**（任务 2.1）：`Listener.uid` 只在 `bind()` 里用
+///   （"权限即身份"：套接字 `chown` + `0600` ⇒ 只有那个 uid 连得上），
+///    `serve_once` 一处都不读它。
 #[cfg(unix)]
 #[test]
 fn c14_channel_takes_identity_from_kernel_not_from_request() {
@@ -677,6 +778,39 @@ fn c14_channel_takes_identity_from_kernel_not_from_request() {
     .unwrap();
     c3.write_all(b"\n").unwrap();
     serve_once(&mut w, &listener, &expect).expect("未自称 actor 应当被允许");
+
+    // 判据 4（2.1）：**受理路径不读对端凭证**。
+    //
+    // 怎么断言到"不读"这件事本身（而不是只断言"收到了一条"）：把映射里的 `uid`
+    // 换成**绝不等于本进程 uid** 的值，再走一次完整受理。若受理层哪天被改成
+    // "取对端凭证再与 uid 比对"，对端 uid 必然对不上 ⇒ 这条当场变红
+    // （变异：在 `serve_once` 里加一句对端 uid 比对，实测见任务回报）。
+    //
+    // 为什么这条要紧：`uid` 一旦被受理层读，两处口径就分叉了——
+    // `bind()` 靠**文件权限**在 `connect()` 时就挡住别人（更早、更硬），
+    // 而受理层再比一次，等于把"身份"重新变成一次**运行时可被绕过的判断**。
+    let alien = Listener {
+        socket: sock.clone(),
+        actor: "world://agent/1".to_string(),
+        uid: me.wrapping_add(12345),
+    };
+    assert_ne!(
+        alien.uid, me,
+        "夹具前提：这个 uid 必须与本进程 uid 不同，否则本判据恒真"
+    );
+    let mut c4 = UnixStream::connect(&sock).unwrap();
+    c4.write_all(
+        br#"{"kind":"act","body":{"capability":"notice.mute","verb":"do","request_id":"r-c14d"}}"#,
+    )
+    .unwrap();
+    c4.write_all(b"\n").unwrap();
+    let ev4 = serve_once(&mut w, &listener, &alien)
+        .expect("受理路径不得读对端凭证：uid 对不上也必须受理（uid 只在 bind() 用）");
+    assert_eq!(
+        ev4["actor"],
+        json!("world://agent/1"),
+        "身份仍取自套接字映射，而不是别处"
+    );
 }
 
 /// 取本进程 uid（不引 libc：用 /proc/self/status）。
@@ -700,6 +834,9 @@ fn libc_uid() -> u32 {
 /// 为什么这条测试才是 `DEBT-01` 的实质：光有 `code_of()` 只是"能解析"，
 /// **有人新加一个不带码的错误**照样能过。本测试逐条走真实失败路径，
 /// 把"错误码契约"从**声明**变成**会失败的检查**。
+///
+/// 来源共 **9 条**（任务 2.7 补了 ⑧ 缺号账本 / ⑨ 无链账本）：
+/// 前七条覆盖本体、门禁三条、法律、通道、读模型，**账本路径原先一条都没有**。
 #[test]
 fn c15_errors_carry_machine_readable_codes() {
     use world_core::error::{code_of, has_code};
@@ -766,6 +903,47 @@ fn c15_errors_carry_machine_readable_codes() {
     )];
     codes.push(world_core::readmodel::State::fold(&gap).unwrap_err());
 
+    // ⑧ 账本路径：**缺号账本**（seq 从 1 跳到 3）⇒ 拒绝启动，且码属账本域。
+    //    2.7：原七条来源里**没有一条**走账本路径——"账本也会拒启"这件事
+    //    在错误码契约这一格上一直没人走过。
+    let gap_ledger = d.join("gap.jsonl");
+    fs::write(
+        &gap_ledger,
+        concat!(
+            r#"{"world":1,"kind":"notice","id":"g1","seq":1,"at":1,"actor":"world://user","#,
+            r#""flags":[],"body":{"type":"t","subject":"world://s"}}"#,
+            "\n",
+            r#"{"world":1,"kind":"notice","id":"g3","seq":3,"at":1,"actor":"world://user","#,
+            r#""flags":[],"body":{"type":"t","subject":"world://s"}}"#,
+            "\n"
+        ),
+    )
+    .unwrap();
+    let gap_err = World::open(&ontology(), &gap_ledger, &policy()).unwrap_err();
+    assert_eq!(
+        code_of(&gap_err),
+        Some("ext.world.Ledger.SeqGap"),
+        "缺号账本必须报账本域的点名码，实得: {gap_err}"
+    );
+    codes.push(gap_err);
+
+    // ⑨ 账本路径：**无链账本** ⇒ `ext.world.Ledger.NoChain`。
+    //    与 `tests/cli.rs:155`（`--require-chain` 拒启）断言的是**同一个码**：
+    //    那条走 CLI、这条走库内核验，两处合起来才说明这个码不是某一层的私货。
+    let chainless = vec![event::new_event(
+        1,
+        "notice",
+        "world://user",
+        event::notice_body("t", "world://s", json!({})),
+    )];
+    let noc = world_core::ledger::verify_chain(&chainless).unwrap_err();
+    assert_eq!(
+        code_of(&noc),
+        Some("ext.world.Ledger.NoChain"),
+        "无链账本必须报 `ext.world.Ledger.NoChain`（与 tests/cli.rs:155 同码），实得: {noc}"
+    );
+    codes.push(noc);
+
     // 全部必须带码
     for c in &codes {
         assert!(has_code(c), "错误缺少 `ext.world.<域>.<原因>` 前缀：{c}");
@@ -774,6 +952,23 @@ fn c15_errors_carry_machine_readable_codes() {
     let unique: std::collections::BTreeSet<&str> =
         codes.iter().filter_map(|c| code_of(c)).collect();
     assert!(unique.len() >= 6, "错误码区分度不足，只拿到 {unique:?}");
+
+    // 2.7：**账本路径**必须有自己的码（`ext.world.Ledger.*`）。
+    // 今天这条路径在原七条来源里**一条都没有**，而 `tests/cli.rs:155` 恰恰断言的是
+    // 同族的 `ext.world.Ledger.NoChain`：库侧与 CLI 侧不能一边有一边没有。
+    let ledger_codes: std::collections::BTreeSet<&str> = codes
+        .iter()
+        .filter_map(|c| code_of(c))
+        .filter(|c| c.starts_with("ext.world.Ledger."))
+        .collect();
+    assert!(
+        ledger_codes.len() >= 2,
+        "账本路径至少要有两个可判定的码（缺号 / 无链），实得 {ledger_codes:?}"
+    );
+    assert!(
+        ledger_codes.contains("ext.world.Ledger.NoChain"),
+        "`tests/cli.rs:155` 断言的那个码必须与库侧**同一个**：{ledger_codes:?}"
+    );
 
     // 反例：散文式错误**必须**判为不符合契约（防契约被悄悄放宽）
     assert_eq!(code_of("门禁拒绝：能力未声明"), None);
@@ -1116,6 +1311,53 @@ fn c23_notice_with_reserved_prefix_is_refused_for_outsiders() {
         .filter(|ev| ev["body"]["type"] == json!("gate.rejected"))
         .count();
     assert_eq!(forged, 0, "伪造的 gate.rejected 绝不允许进账本");
+
+    // 判据③（任务 3.2）：**这条路径写下的流水也带 `refused` 指纹**。
+    //
+    // 为什么单列：`c23_gate_notice_says_what_it_refused` 走的是不可逆加摩擦那条
+    // （`gate.awaiting-approval`，`lib.rs` 的 `Decision::AwaitApproval` 分支）；
+    // 保留前缀这条走的是另一个分支（`adjudicate_notice`）——同一个字段、
+    // 两条不同的拒绝路径。只测一条时，另一条可以整段失效而全绿。
+    let flow = evs
+        .iter()
+        .find(|ev| ev["body"]["type"] == json!("gate.notice-not-allowed"))
+        .expect("保留前缀被拒必须留下内核自己的流水（拦得住，也记得下）");
+    let refused = flow["body"]["payload"]["refused"]
+        .as_str()
+        .expect("保留前缀拒绝流水同样必须带 `refused` 字段（D-14）");
+    assert!(
+        refused.starts_with("fnv1a64:"),
+        "`refused` 必须是可复算的规范形式指纹，实得：{refused}"
+    );
+    assert_eq!(
+        flow["body"]["payload"]["refused_subject"],
+        json!("world://user"),
+        "流水要点名它在拒绝**哪一次尝试**（被拒信纸的 subject），实得：{flow}"
+    );
+    // 可复算：同一次尝试（同 actor + 同信纸）⇒ 同一指纹
+    let e2 = w
+        .commit(
+            "notice",
+            "world://stranger",
+            event::notice_body("gate.rejected", "world://user", json!({ "reason": "伪造" })),
+        )
+        .expect_err("第二次同样必须被拒");
+    assert!(e2.contains("NoticeNotAllowed"), "实得：{e2}");
+    let refused2 = w
+        .ledger()
+        .read_all()
+        .unwrap()
+        .iter()
+        .filter(|ev| ev["body"]["type"] == json!("gate.notice-not-allowed"))
+        .nth(1)
+        .expect("第二条保留前缀拒绝流水")["body"]["payload"]["refused"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        refused, refused2,
+        "同一次尝试的指纹必须可复算（同输入同输出）"
+    );
 }
 
 /// 反例 ②：**不在册的主体**不许写普通通告。
@@ -1193,5 +1435,443 @@ fn c23_gate_notice_says_what_it_refused() {
     assert_eq!(
         refused, refused2,
         "同一次尝试的指纹必须可复算（同输入同输出）"
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// c24 —— **已知无码出口**（任务 2.6）：把"没有 `ext.world.` 码"钉成边界
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// **c24**：四条**已知无码出口**的错误串**不含** `ext.world.` 前缀——这是**边界**，不是缺陷。
+///
+/// | # | 出口 | 实现 | 今天的话 |
+/// |---|---|---|---|
+/// | ① | 静态墙·**符号链接** | `guard::assert_not_symlink` | 「…是一个**符号链接**」 |
+/// | ② | 静态墙·**mode 位** | `guard::assert_not_other_writable` | 「…对 group/other 可写」 |
+/// | ③ | 静态墙·**属主** | `guard::assert_owned_by` | 「…属主断言未通过」 |
+/// | ④ | 策略**版本不符** | `Policy::load` | 「门禁策略版本不支持：期望 1，实得 2」 |
+///
+/// ## 为什么"没有码"也要有断言
+///
+/// `c15` 断言的是"**可编程判定**的错误都必须带码"，它**只走带码的那几条路径**。
+/// 于是"哪些出口**还没有**码"在仓里没有落点：谁哪天给某条出口加一个码，
+/// 或者把某条出口的码删掉，**两边都不会红**——而"哪些错误可编程判定"这件事
+/// 是 `WC-IC-001` §三 的契约面，不能靠没人看。
+///
+/// ## 这条断言红的时候该怎么办（2.6 的验收口径）
+///
+/// 它红 **≠** 实现错了：`ext.world.` 前缀多出来只会让契约更严。红的意思是
+/// **"边界形状变了"**——那时按实际情况改规格/清单，而不是把断言改绿了事。
+///
+/// ## 变异（把边界形状改掉）
+///
+/// 给任一条出口加上 `ext.world.<域>.<原因>` 前缀 ⇒ 对应那一条断言变红
+///（实测见任务回报：只加 ④ 的前缀，①②③ 仍绿，④ 红）。
+#[cfg(unix)]
+#[test]
+fn c24_known_codeless_outlets_carry_no_ext_world_prefix() {
+    use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
+    use world_core::error::has_code;
+    use world_core::guard;
+
+    let d = tmpdir("c24");
+    fs::set_permissions(&d, fs::Permissions::from_mode(0o700)).unwrap();
+
+    // ① 符号链接：内容真放一份在别处，法律用一个指向它的软链
+    let real = d.join("real-policy.json");
+    fs::copy(policy(), &real).unwrap();
+    let link = d.join("policy-link.json");
+    symlink(&real, &link).unwrap();
+    let e_symlink = world_core::gate::Policy::load(&link).unwrap_err();
+    assert!(e_symlink.contains("符号链接"), "实得：{e_symlink}");
+
+    // ② mode 位：内容合法，只是对 group/other 可写
+    let writable = write_policy(&d, "writable-policy.json", &valid_policy_json());
+    fs::set_permissions(&writable, fs::Permissions::from_mode(0o666)).unwrap();
+    let e_mode = world_core::gate::Policy::load(&writable).unwrap_err();
+    assert!(
+        e_mode.contains("对 group/other 可写"),
+        "必须走到 mode 这条（不是别的失败），实得：{e_mode}"
+    );
+
+    // ③ 属主：断言一个**不是本进程**的 uid
+    let mine = fs::metadata(&real).unwrap().uid();
+    let e_owner = guard::assert_owned_by(&real, mine.wrapping_add(1), "门禁策略（法律）")
+        .expect_err("属主不符必须被拒");
+    assert!(e_owner.contains("属主断言未通过"), "实得：{e_owner}");
+
+    // ④ 策略版本不符：其余一切都合法，只有 `policy` 不是 1
+    let mut v = valid_policy_json();
+    v["policy"] = json!(2);
+    let badver = write_policy(&d, "bad-version-policy.json", &v);
+    let e_badver = world_core::gate::Policy::load(&badver).unwrap_err();
+    assert!(e_badver.contains("版本不支持"), "实得：{e_badver}");
+
+    // ── 断言：四条都**没有** `ext.world.` 码（这是当前的边界形状）──
+    for (what, msg) in [
+        ("① 静态墙·符号链接", &e_symlink),
+        ("② 静态墙·mode 位", &e_mode),
+        ("③ 静态墙·属主", &e_owner),
+        ("④ 策略版本不符", &e_badver),
+    ] {
+        assert!(
+            !msg.trim().is_empty(),
+            "{what} 的理由不得为空——空串会让「没有码」这条断言变成假绿"
+        );
+        assert!(
+            !has_code(msg),
+            "{what} 今天**不带** `ext.world.` 码（已知无码出口，任务 2.6）。\
+             若它现在带了码，说明边界形状已变：请按实际情况订正规格/清单，而不是把这条断言改绿。实得：{msg}"
+        );
+        assert!(
+            !msg.contains("ext.world."),
+            "{what} 连字面都不该出现 `ext.world.`（半截前缀不算带码，但仍是形状变化）。实得：{msg}"
+        );
+    }
+
+    // 对照（防"什么都判成无码"）：同一次运行里，**带码**的出口必须仍被判为带码。
+    // 没有这条，"四条都无码"可能只是因为 `has_code` 坏了。
+    let mut w = World::open(&ontology(), &d.join("l.jsonl"), &policy()).unwrap();
+    let e_coded = w
+        .commit(
+            "act",
+            "world://agent/1",
+            event::act_body("world.hack", "do", "r-c24", json!({})),
+        )
+        .unwrap_err();
+    assert!(
+        e_coded.contains("ext.world.Gate.Rejected"),
+        "对照项必须是带码出口，实得：{e_coded}"
+    );
+    assert!(has_code(&e_coded), "带码出口必须被判为带码：{e_coded}");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// c29–c33 —— **账本与证据链**（`fc-2026-004-assertions` 组 4）
+//
+// 五条各自固定**一件事**，且各自有一个「改坏哪一行 ⇒ 它变红」的变异点：
+// - `c29`（4.1）`K-3` 的**修复判据**：无链账本做一次合法 append 后**仍可被打开**
+//   ⇒ 当下**必然为红**，故取 `#[ignore]` ＋ 理由（选择理由见该用例的文档）
+// - `c30`（4.2）`K-3` 的**当下边界**：无链账本 ＋ 一次合法 append ⇒ 下次打开报 `MixedChain`
+// - `c31`（4.3）无链账本的「能打开」**只到只读为止**：打开后写入必败，且字节不动
+// - `c32`（4.6）行边界：末行是**完整合法 JSON 但缺末尾换行** ⇒ **被截掉**且 `seq` 被复用
+// - `c33`（4.7）单写者锁的**反向失效**：pid 号被复用（号活着、持有者已不在）⇒ 陈锁**不回收**
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// 造一份 **v1 无链账本**：`n` 条合法 `notice` 事件逐行落盘，**一行 `chain` 都没有**。
+///
+/// 手工造的理由：今天**没有任何生产路径**能写出无链账本（`append` 无条件加链），
+/// 而 v1 兼容路径要的正是这种历史账本。
+fn write_v1_ledger(path: &Path, n: u64) {
+    let mut text = String::new();
+    for seq in 1..=n {
+        let ev = event::new_event(
+            seq,
+            "notice",
+            "world://user",
+            event::notice_body("probe.v1", "world://s", json!({ "seq": seq })),
+        );
+        text.push_str(&serde_json::to_string(&ev).unwrap());
+        text.push('\n');
+    }
+    fs::write(path, text).unwrap();
+}
+
+/// 一次**合法**的 `change`：`world://user` 写自己世界里的 `world://notice/n-1#muted`
+/// （主体与字段都在出厂本体与出厂策略里声明过 ⇒ 法律与门禁都放行）。
+fn legal_change(w: &mut World) -> Result<Value, String> {
+    w.commit(
+        "change",
+        "world://user",
+        event::change_body("world://notice/n-1", "muted", json!(null), json!(true)),
+    )
+}
+
+/// **c29**（`4.1`）：`K-3` 的**修复判据** —— 在**无链（v1）账本**上做一次**合法** `append`
+/// 之后，账本**仍可被打开**。
+///
+/// ## 为什么取 `#[ignore] ＋ 理由`，而不是把它改写成「当下边界」
+///
+/// `4.1` 的验收逐字是「该断言当前**必然为红**」。而「当下边界」（混用 ⇒ `MixedChain`）
+/// 已由 `c30` **单独**钉住，且它是绿的。若把 `c29` 也写成「断言 `MixedChain`」，
+/// 则「**修复后应当能打开**」这条判据**没有任何东西在看**：修复落地那天不会有任何断言
+/// 由红转绿，`K-3` 的修复判据就退化成一句散文。故这里**保留判据原样**
+/// （去掉 `#[ignore]` 即应转绿），而「它当下确实是红的」用 `--ignored` 现场证明：
+///
+/// ```text
+/// cargo test --locked --test contract -- --ignored c29_     ⇒ 1 failed（读数见交付说明）
+/// ```
+///
+/// ## 会红的根因（实测，非推测）
+///
+/// `Ledger::append` 给**每一条**新事件加 `chain`（`src/ledger.rs:430-434`），
+/// 而它读的 `last_chain` 在无链账本上仍是创世种子；`chained`（`src/ledger.rs:146`）
+/// **只被 `load_chain` 写、从不被 `append` 读**（`4.1` 出处 `src/ledger.rs:506` 同族）
+/// ⇒ v1 账本追加一条后变成「前半无链、后半有链」，下次打开 `verify_chain` 报 `MixedChain`、
+/// `load_chain` 视之为 `Err` ⇒ **世界拒启**。这就是 `K-3`。
+#[test]
+#[ignore = "K-3 未修（src/ledger.rs:146 的 chained 只写不读）：无链账本 append 一条后被判 MixedChain、世界拒启；修复落地后去掉本 ignore 即应转绿"]
+fn c29_k3_chainless_ledger_survives_one_legal_append() {
+    let d = tmpdir("c29-k3");
+    let lp = d.join("legacy.jsonl");
+    write_v1_ledger(&lp, 1);
+
+    // ① 前提：v1 无链账本今天**能**打开 —— 否则下面测的不是 `K-3` 而是别的
+    let mut w = World::open(&ontology(), &lp, &policy()).expect("v1 无链账本应能打开");
+    assert!(
+        !w.ledger().is_chained(),
+        "v1 账本必须被判为无链（未校验要说出来）"
+    );
+
+    // ② 前提：这一次 append 是**合法**的（法律与门禁都放行，且真的落了笔）
+    let ev = legal_change(&mut w).expect("world://user 写 world://notice/n-1#muted 应当合法");
+    assert_eq!(ev["seq"], json!(2), "v1 账本上的第 2 条应当取到 seq=2");
+    drop(w); // ← 必须释放单写者锁：否则第 ③ 步会被锁挡下，掩盖本条的判据
+
+    // ③ `K-3` 判据：**仍可被打开**
+    if let Err(e) = World::open(&ontology(), &lp, &policy()) {
+        panic!("K-3 未修：无链账本做一次合法 append 之后，账本**仍应可被打开**；实得拒绝：{e}");
+    }
+}
+
+/// **c30**（`4.2`）：固定 `K-3` 的**当下边界** —— 无链账本 ＋ 一次合法 `append`
+/// ⇒ 下次打开报 `ext.world.Ledger.MixedChain`。
+///
+/// 这条**在修复落地前为绿**：它证明的是**边界形状**，不是缺陷。与 `c29` 的分工写死在
+/// 两边的文档里：修复落地时，**`c30` 应当变红、`c29` 应当变绿**；若只有一条变色，
+/// 说明修复方向与判据不一致 —— 那本身就是发现。
+///
+/// 判据不止比错误串：还要**逐行看账本文件**，确认「半链」这个机制成立
+/// （第 1 行无 `chain`、第 2 行有 `chain`）—— 否则「报 MixedChain」可能出自别的原因。
+#[test]
+fn c30_k3_boundary_chainless_ledger_plus_one_append_reports_mixed_chain() {
+    let d = tmpdir("c30-k3-boundary");
+    let lp = d.join("legacy.jsonl");
+    write_v1_ledger(&lp, 1);
+    {
+        let mut w = World::open(&ontology(), &lp, &policy()).unwrap();
+        assert!(!w.ledger().is_chained(), "v1 账本必须被判为无链");
+        legal_change(&mut w)
+            .expect("这一条 append 必须成功 —— 否则下面的 MixedChain 就不是「追加造成的」");
+    }
+
+    // 机制：盘上第 1 行无 chain、第 2 行有 chain —— 半链就是这么来的
+    let text = fs::read_to_string(&lp).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "应当是 1 条 v1 事件 ＋ 1 条 append 事件");
+    let l0: Value = serde_json::from_str(lines[0]).unwrap();
+    let l1: Value = serde_json::from_str(lines[1]).unwrap();
+    assert!(l0.get("chain").is_none(), "v1 那一行不得带 chain");
+    assert!(
+        l1.get("chain").is_some(),
+        "append 写入的那一行必须带 chain（半链由此而来）"
+    );
+
+    // 判据：下次打开 ⇒ 拒启，且点名 MixedChain、理由说清为什么半链更危险
+    let err = World::open(&ontology(), &lp, &policy())
+        .expect_err("无链账本 ＋ 一次合法 append ⇒ 修复落地前必须报 MixedChain 并拒启");
+    assert!(err.contains("ext.world.Ledger.MixedChain"), "实得: {err}");
+    assert!(
+        err.contains("比无链更危险"),
+        "理由必须说清为什么半链更危险：{err}"
+    );
+}
+
+/// **c31**（`4.3`）：`c21` 的「无链账本仍能打开」**只到只读为止** —— 打开之后**写入必败**。
+///
+/// 与 `c30` 是同一件事的两侧：`c30` 说「追加会把账本变成半链，下次打开拒启」；
+/// 本条说「**在本进程内**，从只读口径打开的无链账本上写入，不是悄悄成功，而是当场失败」。
+/// 三条判据一起才成立：① 写入返回错误且点名 `ext.world.Ledger.ReadOnly`；
+/// ② 账本字节**一个都不变**（`REQ-F-012`）；③ `seq` 不被消耗。
+/// 出处：`tests/contract.rs` 的 `c21` ③「无链账本仍应能打开（v1 兼容）」。
+#[test]
+fn c31_chainless_ledger_opens_readonly_and_refuses_writes() {
+    let d = tmpdir("c31-readonly");
+    let lp = d.join("legacy.jsonl");
+    write_v1_ledger(&lp, 1);
+    let before = fs::read(&lp).unwrap();
+
+    let mut w = World::open_readonly(&ontology(), &lp, &policy()).expect("无链账本只读口径应能打开");
+    assert!(!w.ledger().is_chained(), "无链账本必须被判为 false");
+    assert_eq!(w.ledger().last_seq(), 1, "无链账本仍应能**读**（v1 兼容）");
+
+    // ★ 判据：只到只读为止 —— 写入必败
+    let e = legal_change(&mut w).expect_err("只读口径打开的账本上写入必须失败");
+    assert!(
+        e.contains("ext.world.Ledger.ReadOnly"),
+        "错误必须点名「只读口径」这件事：{e}"
+    );
+    assert!(e.contains("禁止落笔"), "理由必须说清是「禁止落笔」：{e}");
+    assert_eq!(
+        fs::read(&lp).unwrap(),
+        before,
+        "只读口径下被拒的写入**不得改动任何一个字节**（REQ-F-012）"
+    );
+    assert_eq!(
+        w.ledger().last_seq(),
+        1,
+        "被拒的写入不得消耗 seq（否则只读路径会「吃掉」一个号）"
+    );
+}
+
+/// **c32**（`4.6`）：行边界 —— 末行是**完整合法 JSON 但缺末尾换行** ⇒ **被截掉**，
+/// 且 `seq` 被复用。
+///
+/// ## 为什么这条边界必须写成断言
+///
+/// 启动口径是「**截到最后一个 `\n`**」（`src/ledger.rs:276-289`），而 `append` 的整套加固
+/// 都建立在「末尾永远是完整行」这个前提上（`src/ledger.rs:385` 的自述）。
+/// 代价是：一条**内容完全合法**、只是**没来得及写末尾换行**的事件会被当成「半行」**删掉**，
+/// 它的 `seq` 会被下一条复用。这不是要辩解的事，而是要**固定成断言**的当下边界：
+/// 谁将来把 `keep` 改成「整文件」，本用例立刻变红（见变异证明）。
+#[test]
+fn c32_last_line_without_trailing_newline_is_cut_and_seq_is_reused() {
+    let d = tmpdir("c32-line-boundary");
+    let lp = d.join("ledger.jsonl");
+    // ── 夹具：第 1 行带换行；第 2 行**完整合法 JSON**、但**没有末尾换行** ──
+    let l1 = serde_json::to_string(&event::new_event(
+        1,
+        "notice",
+        "world://user",
+        event::notice_body("probe.n1", "world://s", json!({})),
+    ))
+    .unwrap();
+    let l2 = serde_json::to_string(&event::new_event(
+        2,
+        "notice",
+        "world://user",
+        event::notice_body("probe.n2", "world://s", json!({})),
+    ))
+    .unwrap();
+    fs::write(&lp, format!("{l1}\n{l2}")).unwrap();
+
+    // 夹具自证：两行**都是完整合法 JSON**，只是缺末尾换行（否则本用例测的是别的事）
+    assert!(
+        !fs::read(&lp).unwrap().ends_with(b"\n"),
+        "夹具必须缺末尾换行"
+    );
+    for (idx, line) in [l1.as_str(), l2.as_str()].into_iter().enumerate() {
+        let v: Value = serde_json::from_str(line)
+            .unwrap_or_else(|e| panic!("夹具第 {} 行不是完整 JSON：{e}", idx + 1));
+        assert_eq!(
+            v["seq"],
+            json!(idx as u64 + 1),
+            "夹具第 {} 行的 seq 应为 {}",
+            idx + 1,
+            idx + 1
+        );
+    }
+
+    // ── 判据 ①：可写口径打开 ⇒ 第 2 行**被截掉**（不是「读不到」，是**盘上没了**） ──
+    {
+        let w = World::open(&ontology(), &lp, &policy()).unwrap();
+        assert_eq!(
+            w.ledger().last_seq(),
+            1,
+            "完整但缺末尾换行的末行被截掉 ⇒ 只剩 1 条"
+        );
+        assert_eq!(
+            w.ledger().next_seq(),
+            2,
+            "那一号未落笔 ⇒ 必须可复用（next_seq 回到 2）"
+        );
+    }
+    assert_eq!(
+        fs::read(&lp).unwrap(),
+        format!("{l1}\n").as_bytes(),
+        "「截到最后一个换行」必须**落到盘上**（逐字节等于第 1 行加换行）"
+    );
+
+    // ── 判据 ②：复用确实发生在**账本**上（不只是内存里的 next_seq） ──
+    {
+        let mut w = World::open(&ontology(), &lp, &policy()).unwrap();
+        let ev = legal_change(&mut w).unwrap();
+        assert_eq!(
+            ev["seq"],
+            json!(2),
+            "被截掉的那一号必须被下一条合法事件复用"
+        );
+    }
+    let after = fs::read_to_string(&lp).unwrap();
+    assert_eq!(after.lines().count(), 2, "复用后仍应是 2 条完整行");
+    assert!(after.ends_with('\n'), "追加之后末行必须回到「以换行结尾」");
+
+    // ── 判据 ③（对照）：**只读**口径下同一个文件**一个字节都不动**，只是读边界停在完整行 ──
+    let lp2 = d.join("readonly.jsonl");
+    fs::write(&lp2, format!("{l1}\n{l2}")).unwrap();
+    let before = fs::read(&lp2).unwrap();
+    {
+        let r = World::open_readonly(&ontology(), &lp2, &policy()).unwrap();
+        assert_eq!(r.ledger().last_seq(), 1, "只读口径同样只认完整行");
+        assert_eq!(r.ledger().next_seq(), 2);
+        assert_eq!(r.ledger().read_all().unwrap().len(), 1, "读回也只有 1 条");
+    }
+    assert_eq!(
+        fs::read(&lp2).unwrap(),
+        before,
+        "只读口径**不得**截断文件（P-01 / REQ-F-012）：截断是写路径的特权"
+    );
+}
+
+/// **c33**（`4.7`）：单写者锁的**反向失效** —— pid 号被复用时，持有者已不存在却**不会被回收**。
+///
+/// ## 这条固定的是「锁的失效方向」，不是「锁有效」
+///
+/// `acquire_lock` 判「陈锁」只看 `/proc/<pid>` 存不存在（`src/ledger.rs:182-184`）。
+/// 于是有**反向**的一格：原来的写者早已结束，但它的 **pid 号被另一个无关进程复用**
+/// ⇒ 锁文件被判为「仍被持有」⇒ **世界永远起不来**，而账本本身是好的。
+/// 这一格今天的处置只有人工（`Locked` 的理由串里就写着「确认它已崩溃则删除锁文件」），
+/// 本用例把它钉成断言：**不许**有人在没有替代判据（例如 pid ＋ 启动时间 ＋ 锁内写者标识）
+/// 之前，把「陈锁判定」改成「一律回收」（那会让两个写者并存），
+/// 也**不许**假装这一格不存在。
+///
+/// 正控（同一判据的另一侧）：pid 号**确实不存在**时，陈锁**必须**被回收、世界**必须**能开。
+#[test]
+fn c33_stale_lock_with_a_reused_live_pid_is_never_reclaimed() {
+    let d = tmpdir("c33-lock");
+    let lp = d.join("ledger.jsonl");
+    // 先把账本本身做成「好的」：有内容、带链 —— 使「拒启」只可能出自锁
+    {
+        let mut w = World::open(&ontology(), &lp, &policy()).unwrap();
+        legal_change(&mut w).unwrap();
+    }
+    let lock = lp.with_extension("lock");
+    assert!(
+        !lock.exists(),
+        "正常释放后不得留下锁文件（否则下面的反例不成立）"
+    );
+
+    // ★ 反例：锁文件里的 pid 号**活着**，而持有者早已不在 —— 这正是「pid 被复用」的形状
+    let me = std::process::id();
+    fs::write(&lock, format!("{me}\n")).unwrap();
+    let err = World::open(&ontology(), &lp, &policy())
+        .expect_err("锁文件声称持有者仍存活 ⇒ 世界必须拒启（这就是本条的边界形状）");
+    assert!(err.contains("ext.world.Ledger.Locked"), "实得: {err}");
+    assert!(
+        err.contains("仍存活"),
+        "拒启理由必须说清它认为持有者还活着：{err}"
+    );
+    assert!(
+        err.contains(&format!("pid=Some({me})")),
+        "理由里必须报出它认的持有者 pid（否则人工无法处置）：{err}"
+    );
+    assert!(
+        lock.exists(),
+        "陈锁**不得**被自动回收：本条的边界正是「世界起不来，需人工删锁」"
+    );
+
+    // 正控：同一个锁文件、一个**确实已不存在**的 pid ⇒ 必须回收陈锁并放行
+    let mut child = std::process::Command::new("true")
+        .spawn()
+        .expect("无法启动 `true`（正控需要一个已结束的真 pid）");
+    let dead = child.id();
+    child.wait().expect("等待子进程结束");
+    fs::write(&lock, format!("{dead}\n")).unwrap();
+    let w = World::open(&ontology(), &lp, &policy())
+        .expect("持有者确实不存在时，陈锁必须被回收、世界必须能打开（否则判据变成「一律拒启」）");
+    assert_eq!(
+        w.ledger().last_seq(),
+        1,
+        "回收陈锁之后应当看到原有的那 1 条事件"
     );
 }

@@ -7,10 +7,17 @@
 
 ## 1. 投递与应答（`REQ-F-023`）
 
-- [ ] 1.1 让 `to` 字段真的投递：事件带 `to` 时 SHALL 只送指定收件人，无 `to` 时按广播处理
+- [x] 1.1 让 `to` 字段真的投递：事件带 `to` 时 SHALL 只送指定收件人，无 `to` 时按广播处理
       **验收**：新增契约测试，断言"带 `to` 的事件只出现在该收件人的出口上"；改坏投递即变红
-- [ ] 1.2 请求与应答配对：`act` 的应答 SHALL 能追回它的请求（同一 `request_id`）
+      **已落地**：`world-core/src/delivery.rs`（`recipient_of`／`delivered_to`／`outbox`——无 `to` 或空串＝广播，否则只送那一个；**读侧派生**，不给 `World` 加字段、不写盘）；
+      断言 `world-core/tests/delivery.rs::d01`（带 `to` 只到指定收件人，别人出口为空）、`::d02`（无 `to`＝广播，且不写 `to` 键）、`::d03`（空串＝广播）、`::d07`（**账本原文**里显式 `"to":""` 也当广播）、正控 `::d04`（逐条对出口，多一条少一条都红）
+      **变异证明**：`delivery.rs:93` 的 `.filter(|ev| delivered_to(ev, recipient))` 换成 `.filter(|_ev| true)` ⇒ d01/d04 变红（`to` 指定的那条跑到别人出口上）；`.filter(|s| !s.is_empty())` 删掉 ⇒ d07 变红（空串不再当广播）
+- [x] 1.2 请求与应答配对：`act` 的应答 SHALL 能追回它的请求（同一 `request_id`）
       **验收**：新增测试，断言"给定 `request_id` 能取到配对的两条事件"；删掉配对标即变红
+      **已落地**：`world-core/src/pairing.rs`（`request_id_of`／`is_result`／`find_pair`／`pairs`——配对键＝`act` 信纸必填的 `request_id`，另核 `trace` 是否指回意图的 `id`；"有意图无结果／有结果无请求／因果指错／两半齐全"**四态各自可判**，不合并成一句"查到了"）；
+      断言 `world-core/tests/delivery.rs::d05`（意图＋结果落账后只用账本取回两半，`pair.results[0].trace == pair.intents[0].id`）、`::d06`（换请求号⇒`Unpaired`／应答无请求⇒`Unrequested`／因果指错⇒`Mistraced`／`notice` 不参与配对）
+      **变异证明**：`pairing.rs` 的 `is_result` 恒 `false` ⇒ d05/d06 变红；`find_pair` 里不看 `trace`（改成 `match None::<&str>`）⇒ d06 变红而 d05 仍绿
+      **注**：`src/carrier/recover.rs` 的"什么算一次 `act` 的结果"改为复用 `pairing::is_result`／`pairing::request_id_of`——**同一判据全项目一份实现**（该文件原有 9 条单测仍绿）
 
 ## 2. 通道资源边界（`REQ-F-026`）
 

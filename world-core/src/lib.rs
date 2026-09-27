@@ -19,12 +19,14 @@
 pub mod carrier;
 pub mod channel;
 pub mod checkpoint;
+pub mod delivery;
 pub mod error;
 pub mod event;
 pub mod gate;
 pub mod guard;
 pub mod ledger;
 pub mod ontology;
+pub mod pairing;
 pub mod project;
 pub mod readmodel;
 

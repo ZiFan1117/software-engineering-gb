@@ -78,9 +78,93 @@ fn t1_append_then_read_back() {
         "change 必带 before —— 这是回滚的依据"
     );
     assert_eq!(evs[2]["kind"], json!("notice"));
+
+    // ── `4.4`（`fc-2026-004-assertions`）：**逐字段**一致 ─────────────────────
+    // 此前只比 len / seq / world / kind / body.before。为什么逐字段比、而不是「整行字节比」：
+    // 整行比在**任何**字段变化时都会红，但红了不知道去哪查；逐字段才是「一条断言一个事实」。
+    //
+    // ① `actor`：三家族各带各的发起者（**不是常量**）
+    assert_eq!(evs[0]["actor"], json!("world://user"), "① change 的 actor");
+    assert_eq!(evs[1]["actor"], json!("world://user"), "① act 的 actor");
+    assert_eq!(
+        evs[2]["actor"],
+        json!("world://core"),
+        "① notice 的 actor —— 必须与上面两条**不同**，否则 actor 是常量"
+    );
+    // ② `id`：事件身份 —— 非空、以 `e` 开头（`e<纳秒>-<计数>`），且三条**互不相同**
+    let ids: Vec<&str> = evs
+        .iter()
+        .map(|e| e["id"].as_str().expect("id 必须是字符串"))
+        .collect();
+    for (i, id) in ids.iter().enumerate() {
+        assert!(!id.is_empty(), "② 第 {} 条的 id 不得为空", i + 1);
+        assert!(id.starts_with('e'), "② 第 {} 条的 id 形状不对：{id}", i + 1);
+    }
+    assert_eq!(
+        ids.iter().collect::<std::collections::BTreeSet<_>>().len(),
+        3,
+        "② 三条事件的 id 必须互不相同（同 id 再提交即为重复提交，W-01）：{ids:?}"
+    );
+    // ③ `at`：落在**本次测试**的时间窗口内（不是 0、不是常量、不是别的单位）
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    for (i, ev) in evs.iter().enumerate() {
+        let at = ev["at"].as_u64().unwrap_or(0);
+        assert!(
+            at > 1_700_000_000 && at <= now + 60,
+            "③ 第 {} 条的 at={at} 不在合理窗口内（now={now}）",
+            i + 1
+        );
+    }
+    // ④ `flags`：这三条都不带摩擦 ⇒ 必须是**空数组**（不是缺字段、不是 null）
+    for (i, ev) in evs.iter().enumerate() {
+        assert_eq!(
+            ev["flags"],
+            json!([]),
+            "④ 第 {} 条的 flags 必须是空数组",
+            i + 1
+        );
+    }
+    // ⑤ `body.subject`（change 改的是谁 / notice 关于谁）
+    assert_eq!(
+        evs[0]["body"]["subject"],
+        json!("world://notice/n-42"),
+        "⑤ change 的 body.subject"
+    );
+    assert_eq!(
+        evs[2]["body"]["subject"],
+        json!("world://job/t-7"),
+        "⑤ notice 的 body.subject"
+    );
+    // ⑥ `body.path`
+    assert_eq!(
+        evs[0]["body"]["path"],
+        json!("muted"),
+        "⑥ change 的 body.path"
+    );
+    // ⑦ `body.after`
+    assert_eq!(
+        evs[0]["body"]["after"],
+        json!(true),
+        "⑦ change 的 body.after"
+    );
 }
 
 /// 验收测试 2：**重启进程 → 事件还在**（持久化真的生效）
+///
+/// ## ⚠️ 证据层级（`4.5` 订正：把「真跨进程」那一层挂到 `TC-070`）
+///
+/// 本用例里的「重启」是**同一进程内** `drop(world)` 再 `World::open` —— 它证明的是
+/// 「事件落了盘、重开能读回」，**不是**「换一个进程还能读到」（同进程的文件句柄与
+/// 页缓存状态都可能掩盖问题）。**不要把这条当成跨进程证据。**
+///
+/// **真跨进程那一层由 `tools/s1_sys_probe2.sh` 的 `TC-070`（`REQ-F-022`）承担**：
+/// 那一步用**两个独立的 `world-core read` 进程**读同一本账（本工程的命令一条一个新进程），
+/// 断言 ① 两次读回的事件序列**逐字节相同**、② 条数与账本行数一致、③ `seq` 严格递增无缺号；
+/// 它由 `check.sh` 的**步骤 ⑦**（`S1 需求验证面补建` 里 `run_tail … bash tools/s1_sys_probe2.sh`）执行。
+/// 复现：`cd world-core && bash tools/s1_sys_probe2.sh`。
 #[test]
 fn t2_events_survive_restart() {
     let d = tmpdir("t2");
@@ -147,12 +231,23 @@ fn t4_seq_gap_refuses_to_start() {
     assert!(err.contains("SeqGap"), "应报 SeqGap，实得: {err}");
 }
 
-/// **法律在前、落笔在后**：校验不过绝不写账本，也不消耗 seq
+/// **法律在前、落笔在后**：校验不过绝不写账本，也不消耗 seq。
+///
+/// 判据（任务 2.4 补的那一条）：**被拒的写入不得改动状态**——
+/// 把读模型**读回来比对**，而不是只断言"账本条数没变"。
+/// 两者不是一回事：`seq` 没前进而状态被改，账本照样"看起来没写"。
 #[test]
 fn t5_law_rejects_and_does_not_write() {
     let d = tmpdir("t5");
     let lp = d.join("ledger.jsonl");
     let mut w = World::open(&ontology(), &lp, &policy()).unwrap();
+
+    // ★ 状态未被改动（任务 2.4）：基准快照取自**两次被拒之前**。
+    //
+    // ⚠️ 顺序刻意如此：下面"词表版本不符"那一段里有一条**合法** `change` 会真的落笔
+    //（它写的正是 `world://notice/n#muted` 这一格），快照晚取一步，
+    // 这条断言就会把"合法写入"算成"被拒却改了状态"——那是我夹具写错了，不是实现错。
+    let before = w.read_model().unwrap().to_json().to_string();
 
     // 未知家族
     let e1 = w.commit("bogus", "world://user", json!({})).unwrap_err();
@@ -167,6 +262,20 @@ fn t5_law_rejects_and_does_not_write() {
         )
         .unwrap_err();
     assert!(e2.contains("MissingField"), "实得: {e2}");
+
+    // 两次被拒之后：读模型必须**逐字节**还是原来的状态，而且那一格仍是"没有值"。
+    let s = w.read_model().unwrap();
+    assert_eq!(
+        s.get("world://notice/n", "muted"),
+        None,
+        "两次被拒的提交都不得改动状态（尤其那条缺 before 的 change：它写的正是这一格）"
+    );
+    assert_eq!(s.seen(), 0, "被拒的事件不得进入读模型");
+    assert_eq!(
+        before,
+        s.to_json().to_string(),
+        "被拒的提交不得改动状态（逐字节比对，不是只看条数）"
+    );
 
     // 词表版本不符
     let mut bad = w
@@ -185,6 +294,20 @@ fn t5_law_rejects_and_does_not_write() {
 
     // 三次都被拒 ⇒ 账本一条都没写（只有第 3 条通过校验并落笔）
     assert_eq!(w.ledger().last_seq(), 1, "被拒的事件绝不允许落笔");
+
+    // 正控：那条合法 change **确实**改了状态——否则上面那句"没改"
+    // 可能只是因为读模型什么都不做（假绿）。
+    let ok = w.read_model().unwrap();
+    assert_eq!(
+        ok.get("world://notice/n", "muted"),
+        Some(&json!(true)),
+        "合法的 change 必须真的改状态（正控）"
+    );
+    assert_ne!(
+        before,
+        ok.to_json().to_string(),
+        "合法写入前后的状态必须**不同**（否则这条读模型比对没有判别力）"
+    );
 }
 
 /// 本体文件缺失 / 损坏 ⇒ 拒绝启动（法律不对，带病跑比不跑更危险）

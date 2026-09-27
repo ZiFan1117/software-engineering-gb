@@ -21,6 +21,7 @@
 //! （那条请求到底做没做、做到哪一步），而不是由一个自动程序猜。
 //! 本模块给出的 `hint` 只说明"需要人工判断"，**不构成"可以安全重试"的结论**。
 
+use crate::pairing::is_result;
 use serde_json::Value;
 use std::path::Path;
 
@@ -87,24 +88,12 @@ impl Orphan {
     }
 }
 
-/// 一条 `act` 是不是"结果"（而不是"意图"）。
+/// 事件信纸上的请求号——见 [`crate::pairing::request_id_of`]。
 ///
-/// 判据唯一且机械：**结果的信纸里带 `params.result`**（`ok`/`failed`/`refused`），
-/// 意图不带。这条口径由载体适配器写入结果时保证（见其结果信纸的构造）。
-fn is_result(ev: &Value) -> bool {
-    ev.get("body")
-        .and_then(|b| b.get("params"))
-        .and_then(|p| p.get("result"))
-        .and_then(Value::as_str)
-        .map(|r| r == "ok" || r == "failed" || r == "refused")
-        .unwrap_or(false)
-}
-
+/// 与 [`is_result`] 同上：这两条"什么算一次请求的哪一半"的判据**全项目只有一份实现**
+/// （在 [`crate::pairing`] 里），本模块只把它们接到原有的调用点上。
 fn request_id_of(ev: &Value) -> Option<&str> {
-    ev.get("body")
-        .and_then(|b| b.get("request_id"))
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
+    crate::pairing::request_id_of(ev)
 }
 
 fn str_field(ev: &Value, name: &str) -> String {

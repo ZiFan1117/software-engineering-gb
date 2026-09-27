@@ -57,10 +57,15 @@ r"""module_graph.py —— 机核层的守卫：把 `WC-ATOM-001` §四 机核�
      · **只抽生产路径**：`#[cfg(test)]` 起始的 `mod` 块内的 `use` **不计入**（`WC-MODREG-001`
        §4.2 自己就是这么划界的：「两条看似回边、实为测试内」）。`tests/*.rs` 整文件视为测试侧，
        是 `WC-ATOM-001` §三 的「测试」落点，不是实现依赖面。
-     · 无环：对**声明边 ∪ 真实 import 边**分别跑 Kahn 拓扑排序（排不完即有环），
+     · 无环：对**真实 import 边**与**声明边 ∪ 真实边**分别跑 Kahn 拓扑排序（排不完即有环），
        再用**强连通分量**把**每一条**真环各打印一条逐段可验的环路径（不是因为"报不出路径"才退化成节点集合）。
+       并集那一条是**设计面**的环：环上凡有「只在登记表里、源码里找不到」的边，**逐条标出来**——
+       那种环**改代码消不掉**（要先补实现或改声明），**不许混进"源码 import 环"**。
      · `deps == import`：登记表「依赖模块」列 → `{模块号: 出边集}`，与真实 import 边集**逐模块相等**；
        不一致时分别列出「声明了但代码里没有」与「代码里有但没声明」。
+       **目录型模块（`src/carrier/` → M10）也逐边核对**：只要它的实现文件（目录下真实的 `.rs`）
+       在磁盘上，就按同一套口径抽边、比对——**不整条跳过**（跳过＝"有声明、没人看"，
+       而环检测却照样拿它的声明边去凑环）。实现文件一个都没有才跳过（那是 A-2「实现缺」的事）。
 
 ③ **A-2 四件同夹**（`WC-ATOM-001` §二 A-2）
    登记表里每个模块，其**实现／测试／契约**三者都要有落点（本仓 `tests/` 与 `src/` 不同夹——
@@ -266,8 +271,12 @@ def read_shared_modules(text):
         if not path.startswith("src/"):
             continue
         ids = M_RE.findall(m.group(2))
-        if ids:
-            out.setdefault(path, ids[0])
+        # ★ 2026-09-28 修：**共同模块可以不只有一个归属，也可以没有单一归属**。
+        #   原来 `if ids:` ⇒ 那行里没有 `Mxx` 就整行跳过 ⇒ `src/error.rs`（登记为"横跨全部模块"）
+        #   仍被判成"没有被任何模块号登记"，而它**明明已在 §2.1 登记**——
+        #   那是**判据自己造出来的假告警**（登记表里写着"不占号"，工具却当它不存在）。
+        #   ⇒ 无单一归属时记空串：**它是已登记的共同模块，但不作任何模块的边目标**（也不归属任何模块号）。
+        out.setdefault(path, ids[0] if ids else "")
     return out
 
 
@@ -612,8 +621,10 @@ def seg_owner(wc, rows, source, seg, shared=None):
     if mid is None:
         # `WC-MODREG-001` §2.1 明示的共同模块（"不占号"）：**不作边目标**（理由见 docstring）
         if rel(wc, path) in shared:
-            return None, "", ("共同模块 `%s`（§2.1 登记「不占号」，名义归属 %s）不作边目标"
-                              % (rel(wc, path), shared[rel(wc, path)]))
+            _owner = shared[rel(wc, path)]
+            return None, "", ("共同模块 `%s`（§2.1 登记「不占号」；%s）不作边目标"
+                              % (rel(wc, path),
+                                 ("名义归属 %s" % _owner) if _owner else "**无单一归属**（横跨全部模块）"))
         return None, "`%s` 的宿主文件 %s 没有被任何模块号登记" % (seg, rel(wc, path)), ""
     if n > 1:
         return mid, "`%s` 的宿主文件 %s 同时命中多个登记行" % (seg, rel(wc, path)), ""
@@ -982,9 +993,36 @@ def j_a1_intent(wc, rows, reg_path, reg_text):
     return bad
 
 
-def j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres):
+def module_impl_files(wc, row, source):
+    """某模块**落在磁盘上的实现文件**（登记表「源码路径」列 → 真实的 `.rs`，路径相对 world-core 根）。
+
+    ★ 为什么需要它（本轮修 ⑤）：判据② 原来只看 `row["src_files"]`（列里**逐字写成 `.rs`** 的那些），
+    于是 `src/carrier/` 这种**目录列法** ⇒ 列表为空 ⇒ 模块被**整条跳过**：
+    声明一条都不核对，而环检测照样拿它的声明边去凑环——**"有声明、没人看"**。
+    现在：目录型模块按**前缀**收它底下的 `.rs`（与 `owning_module` 同一套归属规则），
+    列了 `.rs` 的按**文件存在**收；一个实现文件都没有时才跳过
+    （那种情况是"尚未落成"，归 A-2「实现缺」报，不在此重复）。
+    """
+    out = []
+    for sp in row["src_all"]:
+        if sp.endswith("/"):
+            for f in source["files"]:
+                r = rel(wc, f)
+                if r.startswith(sp):
+                    out.append(r)
+        elif os.path.isfile(os.path.join(wc, sp)):
+            out.append(sp)
+    return sorted(set(out))
+
+
+def j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres, source=None, judged_out=None):
     """② A-4 依赖单向 DAG，且 `deps == import`（逐模块逐边相等）。
 
+    **目录型模块也逐边核对**（`src/carrier/` → M10）：只要它的实现文件真的在磁盘上，
+    声明集就与真实 import 集逐边比——**不再整条跳过**（跳过＝"有声明、没人看"）。
+    `judged_out`（可选集合）：把**本次真的核对过**的模块号记进去。报告里的 `deps_judged`
+    直接读它、**不另算一遍**——否则"报告写已核对、判据其实跳过了"这种假绿没人发现
+    （实测：变异体 N1 就是靠这条漏过正控附条⑤ 的）。
     「按口径跳过的边」（共同模块不作边目标）**不进这里**：它是口径、不是缺陷——
     算成 offender 会让"红"失去意义。它由 `check()` 收进报告、正跑单独打印一段（不静默）。
     """
@@ -992,14 +1030,17 @@ def j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres):
     if not rows:
         return ["%s —— §2 模块登记表取不到行，「依赖模块」列**一条边都取不到**："
                 "依赖判据不得因取不到而静默通过" % rel(wc, reg_path)]
+    source = source or {"files": []}
+    judged = set()
     for mid, row in sorted(rows.items()):
         col = row["deps"]
         for d in sorted(col):
             if d not in rows:
                 bad.append("%s:%d —— %s 的「依赖模块」列写了 %s，但登记表里没有这一行"
                            % (rel(wc, reg_path), row["line"], mid, d))
-        if not row["src_files"]:
-            continue                                   # 源码未落成：归 A-2「实现缺」，不在此重复报
+        if not module_impl_files(wc, row, source):
+            continue                                   # 实现文件一个都没有：归 A-2「实现缺」，不在此重复报
+        judged.add(mid)
         real = prod_edges.get(mid, set())
         missing = sorted(col - real)
         extra = sorted(real - col)
@@ -1013,11 +1054,15 @@ def j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres):
                        % (rel(wc, reg_path), row["line"], mid, ",".join(extra),
                           "{%s}" % ",".join(sorted(col)) or "{}",
                           "{%s}" % ",".join(sorted(real)) or "{}"))
+    if judged_out is not None:
+        judged_out.update(judged)
     # 无环：**分别**判「真实 import 边」与「声明边 ∪ 真实边」，并把每条边的来源标出来。
     # ★ 2026-09-28 修（评审席·乙 发现）：
     #   旧实现只报并集环，读者极易把它读成"源码循环依赖"；且它**漏报**真实源码环（`M04 ↔ M09`）。
     #   现在两条线各报一次，并给"来自未校验声明边"的边打标——那种环**改代码也消不掉**。
-    # ★ 本轮修：两条线都改成**列出全部真环**（强连通分量分解），不再"只报碰巧先走到的那一条"。
+    # ★ 上一轮修：两条线都改成**列出全部真环**（强连通分量分解），不再"只报碰巧先走到的那一条"。
+    # ★ 本轮修（⑤）：并集环里**逐条标出"未印证的声明边"**——那种环不是源码环，
+    #   是"照声明算出来的设计环"，它**改代码消不掉**（要先补实现或改声明），不许混进"真环"里。
     nodes = sorted(rows)
     real_only = {mid: set(prod_edges.get(mid, set())) for mid in nodes}
     cyc_real, cycles_real, real_is_cycle = find_cycles(nodes, real_only)
@@ -1033,6 +1078,11 @@ def j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres):
         d = v in rows[u]["deps"]
         return "真实" if (r and not d) else ("声明" if (d and not r) else ("真实＋声明" if (r and d) else "?"))
 
+    def _unproven(cycle):
+        """这条环上**没有代码印证**的边（只在「依赖模块」列里、源码里找不到）。"""
+        return [(cycle[i], cycle[i + 1]) for i in range(len(cycle) - 1)
+                if cycle[i + 1] not in prod_edges.get(cycle[i], set())]
+
     def _fmt(items, verified):
         """把环列表印成人能核的样子：`M04-[真实]-> M09 → M09-[真实]-> M04`（逐段标来源）。
 
@@ -1044,16 +1094,28 @@ def j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres):
         if not verified:
             return ("节点集合 " + "、".join(items)
                     + "（⚠ 工具未能打印出逐段可验的环路径：这些是 Kahn 剩余节点，**含环的下游**，不等于环上模块）")
-        return "；".join(
-            " → ".join("%s-[%s]-> %s" % (c[i], _edge_src(c[i], c[i + 1]), c[i + 1])
-                       for i in range(len(c) - 1))
-            for c in items)
+        out = []
+        for c in items:
+            seg = " → ".join("%s-[%s]-> %s" % (c[i], _edge_src(c[i], c[i + 1]), c[i + 1])
+                             for i in range(len(c) - 1))
+            # ★ 本轮修（⑤）：并集环**逐条标出**"没有代码印证的声明边"——
+            #   这种环不是源码环（`真环` 那一行里不会出现它），它**改代码消不掉**。
+            un = _unproven(c)
+            if un:
+                seg += ("　⚠ **这条环靠「未印证的声明边」才成立**："
+                        + "、".join("%s-[声明·代码里没有]-> %s" % e for e in un)
+                        + "　⇒ 先补实现或改声明；**改代码消不掉它**")
+            else:
+                seg += "　（环上每条边都有代码印证）"
+            out.append(seg)
+        return "；".join(out)
 
     _cyc_note = []
     if cyc_real:
         _cyc_note.append("**源码 import 环**（只看真实 import 边，工具独立判定）："
                          + _fmt(cycles_real, real_is_cycle))
-    _cyc_note.append("**声明边 ∪ 真实边 的环**：" + _fmt(cycles_union, is_cycle))
+    _cyc_note.append("**声明边 ∪ 真实边 的环**（设计面：照登记表算会不会成环）："
+                     + _fmt(cycles_union, is_cycle))
 
     if cyc:
         # 环的两种口径都写进 offender（评审席·乙 的建议④）
@@ -1138,11 +1200,14 @@ def check(wc, intent_column="职责", base=None):
     anchors = test_anchor(wc, rows, source, spec_idx, real_tokens)
     prod_edges, test_edges, unres, skipped = build_edges(wc, rows, source, shared)
 
+    # 判据② 真核对了哪些模块：**由判据自己填**（`judged_out`），报告只读它——
+    # 见 `j_a4_dag_deps` docstring（"报告说已核对、判据其实跳过了"是实测踩过的假绿）。
+    a4_judged = set()
     judgments = [
         ("① A-1 单意图原子性（每模块有且只有一句 intent，≤%d 字，无并列两事）" % INTENT_MAX_CHARS,
          "a1_intent", j_a1_intent(wc, rows, reg_path, reg_text)),
         ("② A-4 依赖单向 DAG 且 deps == import（逐模块逐边相等）",
-         "a4_dag_deps", j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres)),
+         "a4_dag_deps", j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres, source, a4_judged)),
         ("③ A-2 四件同夹（实现／测试／契约三件齐备，＋源码文件全覆盖）",
          "a2_four_in_one", j_a2_four_in_one(wc, rows, reg_path, source, anchors, spec_idx, shared)),
     ]
@@ -1154,6 +1219,7 @@ def check(wc, intent_column="职责", base=None):
     modules = []
     for mid, row in sorted(rows.items()):
         present = [p for p in row["src_all"] if os.path.exists(os.path.join(wc, p))]
+        impl = module_impl_files(wc, row, source)
         modules.append({
             "id": mid,
             "line": row["line"],
@@ -1162,9 +1228,15 @@ def check(wc, intent_column="职责", base=None):
             "intent_chars": visual_len(row["intent"]),
             "src_declared": row["src_all"],
             "impl_present": present,
+            # 实现文件（目录型模块＝目录下真实的 .rs）：空 ⇔ 判据② 不逐边核对（归 A-2「实现缺」）
+            "impl_files": impl,
             "ifs": row["ifs"],
             "deps_declared": sorted(row["deps"]),
             "deps_import": sorted(prod_edges.get(mid, set())),
+            # **逐边**的两侧：声明了但代码里没有／代码里有但没声明（机器可读，便于登记表订正）
+            "deps_declared_unverified": sorted(row["deps"] - prod_edges.get(mid, set())),
+            "deps_undeclared": sorted(prod_edges.get(mid, set()) - row["deps"]),
+            "deps_judged": mid in a4_judged,
             "deps_import_tests_only": sorted(test_edges.get(mid, set()) - prod_edges.get(mid, set())),
             "test_anchors": anchors.get(mid, []),
         })
@@ -1217,6 +1289,7 @@ SANDBOX_MODREG = """# WC-MODREG-001 模块清单与模块号登记表
 | **M03** | 读模型 | 状态由账本折叠而来 | `src/readmodel.rs` | **IF-009** | `M02` |
 | **M04** | 运行时 | 运行时的组装入口 | `src/lib.rs`、`src/main.rs` | **IF-008** | `M02`、`M03`、`M05` |
 | **M05** | 投影 | 出口只有一种说法 | `src/project/visual.rs` | **IF-004** | `M01` |
+| **M06** | 载体 | 只执行不裁决 | `src/carrier/` | **IF-011** | `M01` |
 
 ### §2.1 共同模块、未登记文件与模块号边界
 
@@ -1232,8 +1305,8 @@ SANDBOX_MODREG = """# WC-MODREG-001 模块清单与模块号登记表
 SANDBOX_SRC = {
     # ⚠️ `lib.rs` 必须写成**根级裸名 use**（`use gate::{…};`）——这是 `src/lib.rs:23-26` 的
     # 真实形态，也是抽取器最容易漏的一种；沙盒里不写它，就等于没在验这条。
-    "src/lib.rs": ("pub mod gate;\npub mod guard;\npub mod ontology;\npub mod project;\n"
-                   "pub mod readmodel;\n"
+    "src/lib.rs": ("pub mod carrier;\npub mod gate;\npub mod guard;\npub mod ontology;\n"
+                   "pub mod project;\npub mod readmodel;\n"
                    "use gate::{Decision, Policy};\nuse readmodel::State;\n"),
     # ⚠️ `main.rs` 里 `use world_core::project::{self, visual};` 是 **⑦ 的判据面**：
     #    · 首段 `project` 指向**共同模块** `src/project/mod.rs`（§2.1 不占号）⇒ 按口径**不产边**
@@ -1256,6 +1329,14 @@ SANDBOX_SRC = {
                            "\n"
                            "pub fn shared_helper() -> bool { true }\n"),
     "src/project/visual.rs": "use crate::ontology::Ontology;\n",
+    # ⚠️ **目录型模块**（⑤ 的判据面）：`src/carrier/` 是**目录**，登记表里没有逐字的 `.rs`。
+    #    它必须能被逐边核对：`kernel.rs` 里那句 `use crate::ontology::Ontology;` 就是 M06→M01 的
+    #    唯一证据（正控附条⑤）；删掉登记表里那条声明 ⇒ 必红"代码里有但没声明"（反例⑬）；
+    #    在登记表里多写一条代码里没有的 ⇒ 必红"声明了但代码里没有"（反例⑭）。
+    "src/carrier/mod.rs": "pub mod kernel;\n",
+    "src/carrier/kernel.rs": ("use crate::ontology::Ontology;\n"
+                              "\n"
+                              "pub fn run(_o: &Ontology) -> bool { true }\n"),
     # ⚠️ `gate.rs` 里指向 `ontology`(M01) 的**唯一**证据必须是**行内全限定路径**——
     #    这个文件里没有、也不许有 `use crate::ontology;`。它就是 ⑥ 的判据面：
     #    · 正控附条②：`M02 → M01` 必须**真的出现在生产边集里**，且判据② 不许红；
@@ -1302,6 +1383,11 @@ SANDBOX_TESTS = {
         "    let _ = world_core::project::visual::render();\n"
         "}\n"
         "\n"
+        "#[test]\n"
+        "fn c05_carrier_runs() {\n"
+        "    let _ = world_core::carrier::kernel::run;\n"
+        "}\n"
+        "\n"
         "fn fixture_helper() {}\n"
     ),
     "tests/cli.rs": (
@@ -1343,7 +1429,7 @@ def _build_sandbox(root, wc_name="world-core"):
         os.path.join(wc, IC_BOOK_REL),
         SANDBOX_BOOK % {"sections": "\n".join(
             SANDBOX_BOOK_SECTION % {"k": k, "mid": mid}
-            for k, mid in enumerate(("M01", "M02", "M03", "M04", "M05"), start=1))},
+            for k, mid in enumerate(("M01", "M02", "M03", "M04", "M05", "M06"), start=1))},
     )
     _write(
         os.path.join(root, SPECS_REL, "cap-a", "spec.md"),
@@ -1525,6 +1611,67 @@ def self_test():
             failures.append("反例⑫未变红：花括号里的模块项被漏抽（⑦ 的判据面是装饰）")
         _write(mainrs, SANDBOX_SRC["src/main.rs"])
 
+        # ── 正控附条⑤：**目录型模块（`src/carrier/` → M06）也要逐边核对**（⑤ 的判据面）──
+        # 沙盒里 M06 的「源码路径」列是**目录**（没有任何逐字的 `.rs`）：旧实现在这里 `continue`，
+        # 于是"有声明、没人看"。三件一起钉：
+        #   ① 它**真的被核对**（`deps_judged`——这个字段由**判据自己**填，不是报告另算一遍）；
+        #   ② 它的真实 import 集**真的抽到了** `M01`（`src/carrier/kernel.rs: use crate::ontology::…`）；
+        #   ③ 声明集（`M01`）== 真实集 ⇒ 判据② 不许红。
+        # ⚠ 这三件一起才有意义：单独看 ① 会漏掉"判据跳过了、报告却说核对了"（变异体 N1 实测）；
+        #   真正兜底的是反例⑬／⑭（声明与代码不一致时**必须**红）。
+        m06 = [m for m in base["modules"] if m["id"] == "M06"][0]
+        dir_ok = (m06["deps_judged"] and m06["impl_files"] == ["src/carrier/kernel.rs", "src/carrier/mod.rs"]
+                  and "M01" in m06["deps_import"] and a4_ok)
+        print("  正控附条⑤（目录型模块被逐边核对：已核对=%s／实现文件=%s／真实集含 M01=%s／判据②不红=%s）：%s"
+              % (m06["deps_judged"], ",".join(m06["impl_files"]), "M01" in m06["deps_import"], a4_ok,
+                 "OK" if dir_ok else "*失败 目录型模块又被整条跳过"))
+        if not dir_ok:
+            failures.append("目录型模块未被逐边核对（⑤ 未修：有声明、没人看）")
+
+        # ── 反例⑬（⑤ 的"改坏⇒红"之一）：删掉 M06 **真有印证**的那条声明 ──────────
+        # 期望：源码里 `use crate::ontology::…` 还在 ⇒ 判据② 报"M06：**代码里有但没声明**（M01）"。
+        # 这一条同时证明附条⑤ 的"不红"不是因为 M06 被跳过。
+        if _reg_edit(reg, "**IF-011** | `M01` |", "**IF-011** | 无 |", "反例⑬", failures):
+            red, off = is_red(run(), "a4_dag_deps")
+            hit = any("M06" in x and "代码里有但没声明" in x and "M01" in x for x in off)
+            print("  反例⑬（把 M06 真有印证的 `M01` 声明删掉 ⇒ 判据② 应红）：%s"
+                  % ("已红 OK" if (red and hit) else "*没红"))
+            if not (red and hit):
+                failures.append("反例⑬未变红：目录型模块的真边删了声明也不报（⑤ 仍是装饰）")
+        _write(reg, SANDBOX_MODREG)
+
+        # ── 反例⑭（⑤ 的"改坏⇒红"之二）：给 M06 声明一条**代码里没有**的 ──────────
+        if _reg_edit(reg, "**IF-011** | `M01` |", "**IF-011** | `M01`、`M02` |", "反例⑭", failures):
+            red, off = is_red(run(), "a4_dag_deps")
+            hit = any("M06" in x and "声明了但代码里没有" in x and "M02" in x for x in off)
+            print("  反例⑭（给 M06 多写一条代码里没有的 `M02` ⇒ 判据② 应红）：%s"
+                  % ("已红 OK" if (red and hit) else "*没红"))
+            if not (red and hit):
+                failures.append("反例⑭未变红：目录型模块的假声明不报（⑤ 仍是装饰）")
+        _write(reg, SANDBOX_MODREG)
+
+        # ── 反例⑮：**靠"未印证的声明边"撑起来的环必须单独标出来**（不许混进"真环"）──
+        # 造法：`src/gate.rs`(M02) 加一句 `use crate::carrier::kernel::Reply;` ⇒ M02→M06 是**真边**；
+        # 而 M06 的登记表写 `M02`（carrier 底下**没有任何文件** import gate）⇒ 那条是**未印证的声明边**。
+        # ⇒ 并集图成环 M02↔M06，真实图**无环**。期望：不出现"源码 import 环"，且并集环里逐条标出
+        # "M06-[声明·代码里没有]-> M02"。
+        keepg2 = read_text(gate)
+        _write(gate, keepg2 + "use crate::carrier::kernel::Reply;\n")
+        _reg_edit(reg, "**IF-011** | `M01` |", "**IF-011** | `M02` |", "反例⑮", failures)
+        rep15 = run()
+        red15, off15 = is_red(rep15, "a4_dag_deps")
+        txt15 = "\n".join(x for x in off15 if "有环" in x)
+        mark15 = "M06-[声明·代码里没有]-> M02" in txt15
+        real15 = "源码 import 环" not in txt15
+        print("  反例⑮（并集环靠未印证声明边成立 ⇒ 单独标出、且不得报成源码环）：%s"
+              "（未混进源码环=%s／已标注=%s）"
+              % ("已红 OK" if (red15 and mark15 and real15) else "*没红",
+                 real15, mark15))
+        if not (red15 and mark15 and real15):
+            failures.append("反例⑮：未印证的声明边撑起的环没有被单独标出（混进了'真环'）")
+        _write(gate, keepg2)
+        _write(reg, SANDBOX_MODREG)
+
         # ── 反例①：A-1 把 M03 的 intent 改成占位符 ──────────────────────
         if _reg_edit(reg, "| 状态由账本折叠而来 |", "| 待补 |", "反例①", failures):
             red, off = is_red(run(), "a1_intent")
@@ -1589,18 +1736,18 @@ def self_test():
         _write(book, keepb)
         _write(spec, keeps)
 
-        # ── 反例④b：A-2 一整行"只有身份、没有落点"（登记表新增 M06，实现/测试/契约都缺）──
+        # ── 反例④b：A-2 一整行"只有身份、没有落点"（登记表新增 M07，实现/测试/契约都缺）──
         # 这一条正对本项目的今天：`WC-MODREG-001` 登记了 `M10` 而 `src/carrier/` 曾不存在。
-        # （号取 M06 而不是 M05：沙盒里 M05 已占给投影模块 `src/project/visual.rs`。）
+        # （号取 M07：沙盒里 M05 已占给投影、M06 已占给目录型载体模块。）
         _write(reg, SANDBOX_MODREG.replace(
             "\n## §3 模块编号规则",
-            "| **M06** | 通道 | 一个套接字一个身份 | `src/channel.rs` | **IF-006** | 无 |\n"
+            "| **M07** | 通道 | 一个套接字一个身份 | `src/channel.rs` | **IF-006** | 无 |\n"
             "\n## §3 模块编号规则", 1))
         red, off = is_red(run(), "a2_four_in_one")
-        hit_impl = any("M06" in x and "实现缺" in x for x in off)
-        hit_test = any("M06" in x and "测试缺" in x for x in off)
-        hit_cont = any("M06" in x and "契约缺" in x for x in off)
-        print("  反例④b（登记表新增 M06 而三件都缺 => 判据③ 应红）：%s（实现缺=%s 测试缺=%s 契约缺=%s）"
+        hit_impl = any("M07" in x and "实现缺" in x for x in off)
+        hit_test = any("M07" in x and "测试缺" in x for x in off)
+        hit_cont = any("M07" in x and "契约缺" in x for x in off)
+        print("  反例④b（登记表新增 M07 而三件都缺 => 判据③ 应红）：%s（实现缺=%s 测试缺=%s 契约缺=%s）"
               % ("已红 OK" if (red and hit_impl and hit_test and hit_cont) else "*没红",
                  hit_impl, hit_test, hit_cont))
         if not (red and hit_impl and hit_test and hit_cont):
@@ -1799,6 +1946,14 @@ def main(argv=None):
               % (len(rep["modules"]),
                  ",".join(m["id"] for m in rep["modules"]),
                  ",".join(rep["planned_modules"]) or "无"))
+        # 目录型模块（「源码路径」列写的是**目录**）：把"它底下的实现文件"逐个数出来——
+        # 这是 ⑤ 的可见证据（旧实现整条跳过它，读者连"它有哪些文件"都看不到）。
+        for m in rep["modules"]:
+            if any(p.endswith("/") for p in m["src_declared"]):
+                print("   目录型模块：%-4s ← %s（实现文件 %d 件；判据② %s）"
+                      % (m["id"], "、".join(p for p in m["src_declared"] if p.endswith("/")),
+                         len(m["impl_files"]),
+                         "已逐边核对" if m["deps_judged"] else "**未核对**（实现文件 0 件）"))
         print("   真实 import 边（生产面）：")
         for mid, deps in rep["import_edges_production"].items():
             print("     %s → %s" % (mid, ",".join(deps) or "—"))
