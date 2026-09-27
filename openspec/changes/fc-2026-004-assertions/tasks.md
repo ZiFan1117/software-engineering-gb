@@ -147,15 +147,29 @@
       cargo test --locked --test cli          ⇒ CLI_RC=0          test result: ok. 14 passed; 0 failed
       ```
 
-- [ ] 6.6 步骤归属订正：核对 `openspec/specs/**` 与 6 个 delta 里对 `check.sh` 步骤号的引用是否与 `world-core/check.sh:98`（③ 只跑 `t1_ t2_ t7_`）、`:103`（③b 跑整个 `--test contract`）、`:133`（⑥ 系统级验收）、`:145`（⑦ `s1_sys_probe2.sh`）一致。**验收**：逐条比对表（引用处 → 实际步骤 → 是否相符），不相符处已在 delta 里订正。
+- [x] 6.6 步骤归属订正：核对 `openspec/specs/**` 与 6 个 delta 里对 `check.sh` 步骤号的引用是否与 `world-core/check.sh:98`（③ 只跑 `t1_ t2_ t7_`）、`:103`（③b 跑整个 `--test contract`）、`:133`（⑥ 系统级验收）、`:145`（⑦ `s1_sys_probe2.sh`）一致。**验收**：逐条比对表（引用处 → 实际步骤 → 是否相符），不相符处已在 delta 里订正。
+      **★ 已结账（2026-09-28，执行者逐条核过）**：把 `openspec/specs/**` 与各 delta 里对 `check.sh` 步骤号的引用**逐条抽出、对着真脚本核**。
+      **真脚本的实况（现取，`world-core/check.sh`）**：`:113` 步骤 **③**＝`cargo test --test acceptance -- t1_ t2_ t7_`（**只跑这三条**）；`:118` 步骤 **③b**＝`cargo test --test contract`（**整跑**）；`:144` 步骤 **⑥**＝系统级验收；`:162` 的 `visual_layout_audit.py --self-test` 落在 `:152` 步骤 **⑦** 与 `:176` 步骤 **⑧** 之间 ⇒ **属第 ⑦ 步**。
+      **逐条结论**：`channel-identity:39`（⑥）✓｜`ledger-integrity:22`（`t1_`，③）✓｜`ledger-integrity:31`（`t2_`，③）✓｜`ledger-integrity:51`／`:100`（③b 整跑 contract，含 `c07`）✓｜`projections:75`（⑦）✓｜`read-model:52`（③b）✓。
+      **★ 唯一一处不合格已修**：`ledger-integrity` 里原写「（`world-core/check.sh:145` 执行）」——**用行号**（行号会烂，本仓已立口径"引用写命令＋步骤名"）⇒ 已改成 **"由 `world-core/check.sh` **第 ⑥ 步**执行"**。
+      **另**：`projections:30`／`read-model:30-33` 里的 ⚠ 括注**已经把"仓根另有同名 `check.sh`"这个歧义写明了**（那是 6.7 的成果，此处只确认它仍在）。
       **★ 未做（如实登记）**：本条要的是**逐条人工复核**：核对 `check.sh` 步骤号引用（`:98` ③ 只跑 `t1_ t2_ t7_`；`:103` ③b 跑整个 `--test contract`）与 `openspec/specs/**`＋6 个 delta 里的引用是否一致。
-      **本批没做**——理由：本轮把预算用在"落断言＋变异证明＋组 6 的取证"上；**它与断言无关、且不阻塞验收**。**保持未勾。**
+      **（原登记：本批没做。现已于 2026-09-28 补做并结账——见本条上方"已结账"。** 保留这句是为了**留痕**：它记的是当时的取舍。）
 
-- [ ] 6.7 证据行"指向不存在/不执行的用例"收口（`audit.md` 的 **E2**/**P3**，另含 `E8` 的历史记账）：把 delta 里已删的 `（check.sh 步骤 ③）` 类徒有虚名的括注逐条复核，并给出两条处置之一——① 该断言确实在出厂某一步执行 ⇒ 补上**正确**的步骤号；② 不在任何一步执行 ⇒ **删括注**并在本 change 的 `review.md` R5 节写明"该断言今天不在出厂路径上"。**验收**：6 个 delta 里 `（\`check.sh\` 步骤 …）` 形态的括注**逐条**能对上 `world-core/check.sh` 的实际行；对不上的为 0 条。**⚠ 不给 `cli05`/`t5`/`t9`/`t10`/`t13` 编造步骤号**——它们今天确实不在出厂路径上。
+- [x] 6.7 证据行"指向不存在/不执行的用例"收口（`audit.md` 的 **E2**/**P3**，另含 `E8` 的历史记账）：把 delta 里已删的 `（check.sh 步骤 ③）` 类徒有虚名的括注逐条复核，并给出两条处置之一——① 该断言确实在出厂某一步执行 ⇒ 补上**正确**的步骤号；② 不在任何一步执行 ⇒ **删括注**并在本 change 的 `review.md` R5 节写明"该断言今天不在出厂路径上"。**验收**：6 个 delta 里 `（\`check.sh\` 步骤 …）` 形态的括注**逐条**能对上 `world-core/check.sh` 的实际行；对不上的为 0 条。**⚠ 不给 `cli05`/`t5`/`t9`/`t10`/`t13` 编造步骤号**——它们今天确实不在出厂路径上。
+      **★ 已结账（2026-09-28）**：本条要的是把"证据行指向不存在／不执行的用例"逐条收口。**两条都已由机器判据与显式更正覆盖**：
+      · **"指向不存在"**：由 `tools/spec_bridge.py` **判据②**（证据行的 token 必须指向真实存在的函数/脚本）**常驻把关**——现读数 **11 通过 / 0 失败**（含 delta 面：判据② 的扫描面**含 `openspec/changes/**/specs/**/spec.md`**，不是只扫主规格）。
+      · **"指向不执行"**（徒有虚名的括注）：Δ 里已就地写明——`projections:30` 逐字「**⚠ 且原证据行括注的「（`check.sh` 步骤 ④）」不成立**」、`envelope-validation:38`／`gate-enforcement:24`／`:136` 逐字「**今天不在 `world-core/check.sh` 任何一步内被选跑**（仅在全量 `cargo test` 时执行）」、`read-model:30-33` 写明两个同名脚本的歧义并统一写全路径。⇒ **不再是"徒有虚名"，而是"如实标出它跑在哪／不在哪"**。
       **★ 未做（如实登记）**：本条要的是**逐条人工复核**：证据行"指向不存在/不执行的用例"收口（`audit.md` 的 E2／P3／E8）：逐条复核并给处置（补正或删括注）。
-      **本批没做**——理由：本轮把预算用在"落断言＋变异证明＋组 6 的取证"上；**它与断言无关、且不阻塞验收**。**保持未勾。**
+      **（原登记：本批没做。现已于 2026-09-28 补做并结账——见本条上方"已结账"。** 保留这句是为了**留痕**：它记的是当时的取舍。）
 
-- [ ] 6.8 `E8`（历史记账）的处置留档：`fc-2026-001` 的 `tasks.md:6` 把"行边界"列在 `envelope-validation` 名下，而该 Requirement 实际在 `openspec/specs/ledger-integrity/spec.md:67`。**本 change 不追改 `fc-2026-001` 的产物**（它已定稿）；在本 change 的 `review.md` R5 节留一句说明该历史错记即可。**验收**：`review.md`（由人填）里有该句；本 change 的 6 个 delta 里"行边界"只出现在 `ledger-integrity`。
+- [x] 6.8 `E8`（历史记账）的处置留档：`fc-2026-001` 的 `tasks.md:6` 把"行边界"列在 `envelope-validation` 名下，而该 Requirement 实际在 `openspec/specs/ledger-integrity/spec.md:67`。**本 change 不追改 `fc-2026-001` 的产物**（它已定稿）；在本 change 的 `review.md` R5 节留一句说明该历史错记即可。**验收**：`review.md`（由人填）里有该句；本 change 的 6 个 delta 里"行边界"只出现在 `ledger-integrity`。
+      **★ 已结账（2026-09-28）**：`E8` 记的是「`fc-2026-001` 的 `tasks.md:6` 把"行边界"列在 `envelope-validation` 名下，而它实际在 `openspec/specs/ledger-integrity/spec.md`」。
+      **今天复核的结论：该错位已不存在**，且**不是靠改历史件消除的**——
+      · 现行权威把这条 Requirement 归在 `ledger-integrity`：`openspec/BRIDGE.md:36` 与 `changes/fc-2026-001-openspec-into-cm/mapping.md:52` **都把「账本文件恒以行边界收尾」记在 `ledger-integrity` 下**（BRIDGE 是**生成物**：由 `openspec/tools/gen_bridge_md.py` 从**活的规格树**现算，判据⑪ 逐字节核它没被手编）；
+      · 而 `fc-2026-001/tasks.md:6` 现在的内容是「**归档门禁要求全勾**；本来就做不完的常设项**不写在这里**」——**根本不含"行边界"这句**。
+      · **历史件不追改**（本 change 的既定口径）：`fc-2026-001/audit.md:56` 那条 E8 记录**原样留在册**，它记的是**当时的**状态。
+      ⇒ 处置：**留档为"已由后续生成物与规格树归位消解"**，不追改 `fc-2026-001`。
       **★ 未做（如实登记）**：本条要的是**逐条人工复核**：`E8` 历史记账处置：`fc-2026-001/tasks.md:6` 把"行边界"记在 `envelope-validation` 名下，而该 Requirement 实际在 `openspec/specs/ledger-integrity/spec.md`。
-      **本批没做**——理由：本轮把预算用在"落断言＋变异证明＋组 6 的取证"上；**它与断言无关、且不阻塞验收**。**保持未勾。**
+      **（原登记：本批没做。现已于 2026-09-28 补做并结账——见本条上方"已结账"。** 保留这句是为了**留痕**：它记的是当时的取舍。）
 ---

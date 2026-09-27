@@ -31,7 +31,7 @@ SHALL NOT 以"同进程内 drop 后 reopen"充当跨进程证据。
 - **证据**：`tests/acceptance.rs::t2_events_survive_restart`（由 `world-core/check.sh` 第 ③ 步执行）
       —— **⚠ 本证据是"同进程 drop + reopen"，不是"新进程"**（`world-core/tests/acceptance.rs:85-104`）；
       "新进程"这一层由 `world-core/tools/s1_sys_probe2.sh` 的 `TC-070` 承担
-      （`world-core/check.sh:145` 执行）。
+      （由 `world-core/check.sh` **第 ⑥ 步**执行——**写步骤名、不写行号**：行号会烂）。
 
 ### Requirement: 同一本账同时只有一个写者
 
