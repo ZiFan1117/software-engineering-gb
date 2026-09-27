@@ -24,9 +24,10 @@
 | 项 | 值 |
 |---|---|
 | 文件 | `语义世界-理论书-第一版-合订.md` |
-| 字节 / 行数 | 433 981 / 2 572 |
-| **sha256** | `e2e3de7bb317031e90be38830df1dda5e0bdb52b4ff2c32396609c946c8e9010` |
-| **装配器** | `D:\Code\book-build\build-book.ps1`（只做拼接与剥离，**不做改写**） |
+| 字节 / 行数 | 433 843 / 2 572（**已归一为 LF**；装配器原始输出是 433 981 字节的**混行尾**，见下） |
+| **入仓 sha256** | `588493dc5471c417c31da19da8267d4c4db01d47c48d07783f907e0871958161` |
+| **装配器原始输出 sha256** | `e2e3de7bb317031e90be38830df1dda5e0bdb52b4ff2c32396609c946c8e9010` |
+| **装配器** | `D:\Code\book-build\build-book.ps1`（只做拼接与剥离，**不改写**） |
 | **正件（读的是这里）** | `D:\Code\07-agent-native-os\world-core\docs\理论\` |
 | 本仓副本 | `world-core\docs\理论\`（与 07 **40/40 逐字节同源**，2026-09-27 核过） |
 
@@ -38,15 +39,30 @@
 powershell -File D:\Code\book-build\build-book.ps1
 ```
 
+### ★ 一条已知缺陷：装配器输出**混行尾**（登记，未改其脚本）
+
+实测装配器输出：**CRLF 138 处 ＋ 纯 LF 2 434 处**（混行尾）。根因在装配器第 143 行
+`[System.IO.File]::WriteAllText($Out, $sb.ToString(), $Utf8NoBom)`——标题／分隔行由 `$sb.AppendLine()` 拼（补 `\r\n`），
+而正文块按原文（LF）拼进去。本仓 `.gitattributes` 要求 `eol=lf`，故**入仓副本已按本仓规矩归一为 LF**（见上表两个哈希）。
+
+**没有去改装配器脚本**（它不在本仓受控面内，且属作者的工作件）；**登记在此，供作者决定**：
+若要两边哈希一致，最省事的改法是把第 143 行改成
+`[System.IO.File]::WriteAllText($Out, $sb.ToString().Replace("` + '`r`n' + `", "` + '`n' + `"), $Utf8NoBom)`。
+
 **规矩三条**：
 
-1. **改书要改正件，改正件后重新装配**；**不许手改本目录的合订本**（改了就与正件分叉，且下次装配会被覆盖）。
-2. **本仓这份是快照**：正件更新后，重新装配并重新拷入，**并更新上面的 sha256**。
-3. **对账命令**（判据：两边 sha256 相等）：
+1. **改书要改正件**（07 的 `world-core/docs/理论/`），改正件后**重新装配**；**不许手改本目录的合订本**。
+2. **本仓这份是快照，且已归一为 LF**：正件更新后 → 重新装配 → 拷入 → **按归一后的口径重算 sha256 并更新上表**。
+3. **对账命令**（判据：**归一之后**两边 sha256 相等）：
 
 ```powershell
-Get-FileHash D:\Code\book-build\语义世界-理论书-第一版-合订.md -Algorithm SHA256
-Get-FileHash D:\Code\08-worldcore-openspec\openspec\BOOK\语义世界-理论书-第一版-合订.md -Algorithm SHA256
+# 源（装配器原始输出，混行尾）→ 归一 → 取哈希
+$s = 'D:\Code\book-build\语义世界-理论书-第一版-合订.md'
+$t = [System.IO.File]::ReadAllText($s).Replace("`r`n","`n").Replace("`r","`n")
+$norm = [System.Text.Encoding]::UTF8.GetBytes($t)
+(Get-FileHash -InputStream ([System.IO.MemoryStream]::new($norm)) -Algorithm SHA256).Hash.ToLower()
+# 入仓副本（已归一，直接取）
+(Get-FileHash 'D:\Code\08-worldcore-openspec\openspec\BOOK\语义世界-理论书-第一版-合订.md' -Algorithm SHA256).Hash.ToLower()
 ```
 
 ---
