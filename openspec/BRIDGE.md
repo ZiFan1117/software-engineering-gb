@@ -164,7 +164,7 @@
 
 | # | 事实 | 权威值（现算） | 复算命令 |
 |---|---|---|---|
-| 1 | `WC-SRS-001-v0.1.md` 里 `REQ-[FN]-NNN` 的出现次数 | **390** | `[regex]::Matches((Get-Content -Raw <file>),'REQ-[FN]-\d{3}').Count` |
+| 1 | `WC-SRS-001-v0.1.md` 里 `REQ-[FN]-NNN` 的出现次数 | **392** | `[regex]::Matches((Get-Content -Raw <file>),'REQ-[FN]-\d{3}').Count` |
 | 2 | 同上，**唯一**需求号个数 | **41** | 同上去重 |
 | 3 | `WC-RTM-001.csv` 里同模式出现次数 | **72** | 同上换文件 |
 | 4 | `world-core/docs/` 下 `.md`＋`.csv` 文件数 | **49** | `Get-ChildItem -Recurse -File world-core/docs` 按扩展名过滤 |

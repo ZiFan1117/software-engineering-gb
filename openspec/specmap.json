@@ -2426,13 +2426,15 @@
    "c23_notice_from_unlisted_actor_is_refused",
    "c23_gate_notice_says_what_it_refused",
    "c24_known_codeless_outlets_carry_no_ext_world_prefix",
+   "write_raw_jsonl",
    "write_v1_ledger",
    "legal_change",
    "c29_k3_chainless_ledger_survives_one_legal_append",
    "c30_k3_boundary_chainless_ledger_plus_one_append_reports_mixed_chain",
    "c31_chainless_ledger_opens_readonly_and_refuses_writes",
    "c32_last_line_without_trailing_newline_is_cut_and_seq_is_reused",
-   "c33_stale_lock_with_a_reused_live_pid_is_never_reclaimed"
+   "c33_stale_lock_with_a_reused_live_pid_is_never_reclaimed",
+   "c33_envelope_field_types_are_checked_on_the_read_path"
   ],
   "tests/delivery.rs": [
    "tmpdir",
