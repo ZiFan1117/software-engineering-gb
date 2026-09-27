@@ -88,7 +88,20 @@
        "line": 13,
        "when": "写入一条带 `to` 的事件，再分别用两个收件人的读法取账本",
        "then": "该事件只出现在 `to` 指定的那一份读法里，另一份里没有它；不带 `to` 的事件两份都在",
-       "ev": []
+       "ev": [
+        "world-core/tests/delivery.rs",
+        "d01",
+        "d08",
+        "d04",
+        "to",
+        "TC-073",
+        "world-core/tools/s1_sys_probe2.sh",
+        "75dc0d6",
+        "cargo test --locked",
+        "wc -l",
+        "cargo test --locked --test delivery",
+        "rc=0"
+       ]
       }
      ]
     },
@@ -105,7 +118,15 @@
        "line": 24,
        "when": "逐项造出超过四个上限的请求",
        "then": "每一项都被拒，错误里能读出**是哪一个上限**、当前值是多少",
-       "ev": []
+       "ev": [
+        "world-core/tests/channel_bounds.rs",
+        "l01",
+        "l06",
+        "policy.json",
+        "channel_limits",
+        "TC-076",
+        "CT-08"
+       ]
       }
      ]
     }
@@ -3242,7 +3263,7 @@
   "caps": 9,
   "reqs": 48,
   "scns": 85,
-  "evs": 95,
+  "evs": 114,
   "srs": 41,
   "judges": 17,
   "booksecs": 46
