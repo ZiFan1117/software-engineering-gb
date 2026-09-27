@@ -17,6 +17,7 @@
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use world_core::{event, World};
 
@@ -2036,6 +2037,110 @@ fn c35_the_ledger_alone_reproduces_the_same_state_elsewhere() {
     assert_eq!(
         state_a, state_b,
         "只带账本换到另一个目录，复算出的状态**不同** ⇒ 账本不是自足的历史"
+    );
+
+    // ⑤ **本机依赖不许漏进状态**（SRS 的 `TC-078` 行里那条反例的**可判面**）：
+    //    那条反例逐字是「注入一个只在本机存在的依赖（缓存／检查点／绝对路径）后仍判『相同』⇒ 判据失效」。
+    //    本用例不伪造"注入"，而是**直接钉住它的反面**：状态 JSON 里**不得**出现甲地/乙地的目录，
+    //    也**不得**出现账本文件名——只要状态里没有本机路径，那条反例就**无从立足**；
+    //    哪天有人把本机路径（或缓存/检查点路径）写进状态，**这一条会红**。
+    let here_s = here.to_string_lossy().to_string();
+    let there_s = there.to_string_lossy().to_string();
+    for (tag, s) in [
+        ("甲地目录", here_s.as_str()),
+        ("乙地目录", there_s.as_str()),
+    ] {
+        assert!(
+            !state_b.contains(s),
+            "状态里出现了{tag} `{s}` ⇒ 复算结果**依赖本机路径**（本机依赖漏进来了），实得：{state_b}"
+        );
+    }
+    assert!(
+        !state_b.contains("history.jsonl"),
+        "状态里出现了账本文件名 ⇒ 复算结果**依赖本机文件名**，实得：{state_b}"
+    );
+
+    // ⑤ **进程维**（`REQ-N-009` 的口径逐字含「另一个目录／另一台机器／**另一个独立进程**」）：
+    //    上面 ② 的两次复算是**同一个测试进程内直调** `State::fold` —— 它抓得到"进程内的非确定性"，
+    //    **抓不到"本机文件依赖"**。所以这里补三段：独立进程跑、甲地放**本机缓存**（`checkpoint write`，
+    //    CLI 自己说它是「缓存，非真相」）、再**毒化对照**。
+    let bin = env!("CARGO_BIN_EXE_world-core");
+    let run_state = |ledger: &Path| -> String {
+        let out = Command::new(bin)
+            .arg("--ontology")
+            .arg(&on)
+            .arg("--ledger")
+            .arg(ledger)
+            .arg("--policy")
+            .arg(&po)
+            .arg("state")
+            .arg("--json")
+            .output()
+            .expect("跑真二进制");
+        assert!(
+            out.status.success(),
+            "`state --json` 必须成功，实得 rc={:?}；stderr={}",
+            out.status.code(),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).expect("stdout 必须是 UTF-8")
+    };
+
+    // 甲地：先落一份**本机缓存**（检查点）
+    let ckpt = here.join("cache.checkpoint.json");
+    let ck = Command::new(bin)
+        .arg("--ontology")
+        .arg(&on)
+        .arg("--ledger")
+        .arg(&lp_a)
+        .arg("--policy")
+        .arg(&po)
+        .arg("checkpoint")
+        .arg("write")
+        .arg(&ckpt)
+        .output()
+        .expect("跑 checkpoint write");
+    assert!(
+        ck.status.success(),
+        "`checkpoint write` 必须成功，实得 rc={:?}；stderr={}",
+        ck.status.code(),
+        String::from_utf8_lossy(&ck.stderr)
+    );
+    assert!(
+        ckpt.is_file(),
+        "甲地的本机缓存（检查点）必须真落盘 —— 没有它，下面那段「毒化对照」就无从谈起"
+    );
+
+    let proc_a = run_state(&lp_a);
+    let proc_b = run_state(&lp_b);
+    assert_eq!(
+        proc_a, proc_b,
+        "**两个独立进程**、乙地只带账本：`state --json` 的输出必须逐字节相同"
+    );
+
+    // **毒化对照**：把甲地那份本机缓存改坏 ⇒ 甲地再跑，结果**必须不变**
+    fs::write(&ckpt, b"{ \"poisoned\": true }").expect("毒化缓存");
+    let proc_a2 = run_state(&lp_a);
+    assert_eq!(
+        proc_a, proc_a2,
+        "本机缓存被改坏之后，甲地的 `state --json` **变了** ⇒ 状态是从**缓存**来的，不是从账本重算的（本机依赖成立 ✗）"
+    );
+    // 而"核验检查点"这条判据**必须**对坏缓存失败（否则它也是装饰）
+    let bad = Command::new(bin)
+        .arg("--ontology")
+        .arg(&on)
+        .arg("--ledger")
+        .arg(&lp_a)
+        .arg("--policy")
+        .arg(&po)
+        .arg("checkpoint")
+        .arg("verify")
+        .arg(&ckpt)
+        .output()
+        .expect("跑 checkpoint verify");
+    assert!(
+        !bad.status.success(),
+        "被毒化的检查点，`checkpoint verify` 竟判通过 ⇒ 那条核验是装饰"
     );
 
     // ④ 反假：改账本一个字节 ⇒ 结果必须变
