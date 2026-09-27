@@ -238,6 +238,31 @@ impl Ontology {
         &self.optional
     }
 
+    /// **信封已声明的必填格**（`envelope.required`，出厂本体实测 8 项）。
+    ///
+    /// 用途：读模型侧的**缺格判据**（`REQ-F-032`）要按"本体已声明的格"来判，而读模型
+    /// **不许** `use crate::ontology::…`——`WC-MODREG-001` §2 给 `M03` 的依赖列逐字是
+    /// 「**无**（生产代码零出边）」，机核层 `tools/module_graph.py` 判据② 逐边核对
+    /// 「声明集 ≡ 真实 import 集」⇒ 读模型加一条生产边就红。故本方法只交**纯数据**
+    /// （`Vec<String>`）出去，由**装配处**递给读模型：
+    /// `world_core::readmodel::DeclaredCells::new(ont.envelope_required(), ont.family_required())`；
+    /// 依赖方向留在装配处（`M04` 同时依赖 `M01` 与 `M03`），法律与读法仍读**同一份**本体。
+    pub fn envelope_required(&self) -> Vec<String> {
+        self.required.clone()
+    }
+
+    /// **各家族已声明的必填格**（`families.<家族>.required`；出厂本体实测 `change` 4／`act` 3／`notice` 2）。
+    ///
+    /// 与 [`Ontology::envelope_required`] 同一用途（读模型侧的缺格判据）；同样只交**纯数据**
+    /// （理由逐字同上：不让读模型多出一条生产依赖边）。
+    /// ⚠️ 这里**不含**各家族的 `optional`：可选格"没写"是法律允许的形态，不是缺格。
+    pub fn family_required(&self) -> BTreeMap<String, Vec<String>> {
+        self.families
+            .iter()
+            .map(|(k, f)| (k.clone(), f.required.clone()))
+            .collect()
+    }
+
     pub fn known_kinds(&self) -> Vec<&str> {
         self.families.keys().map(String::as_str).collect()
     }

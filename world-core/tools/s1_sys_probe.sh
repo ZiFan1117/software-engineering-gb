@@ -321,19 +321,23 @@ GOODOUT="$(WO2 "$SB/ontology.json" "$L" state --json 2>&1)"; RG=$?
 assert_rc "⑥ 反假：未变异的真实账本 ⇒ 必须通过（rc=0；证明上面不是恒红）" 0 "$RG"
 assert_eq "⑦ 反假：未变异账本的状态与基线逐字节相同" "$BASE_STATE" "$GOODOUT"
 
-# 登记⑧⑨：类型口径的**两处未落实**（现状为红，如实登记，不掩盖也不假装是断言失败）
+# 登记⑧：类型口径**仍未落实**的一处（现状为红，如实登记，不掩盖也不假装是断言失败）
 O="$(WO2 "$SB/ontology.json" "$SB/bad_world.jsonl" state 2>&1)"; R=$?
 if [ "$R" -eq 2 ]; then
   ok "⑧ world 为字符串（应 integer）⇒ 被拒（rc=2）"
 else
-  reg "⑧ world 为字符串（应 integer）竟**被接受**（rc=$R）：world 的类型断言在折叠层未落实 —— REQ-F-028 判据② 对本字段**不成立**"
+  reg "⑧ world 为字符串（应 integer）竟**被接受**（rc=$R）：world 的**类型**断言在折叠层未落实 —— REQ-F-028 判据② 对本字段**不成立**（缺格判据只判「这一格在不在」，不判类型）"
 fi
+# ⑨ 缺格即报错（REQ-F-032）：**2026-09-28 由登记项改为断言**。
+# 为什么能改：读模型侧的缺格判据落地（`src/readmodel.rs` 的 `DeclaredCells`／`State::fold_declared`），
+# 且装配处（`src/lib.rs::read_model`）把"已声明格"以纯数据递进读模型 ⇒ **命令这一级**也拒。
+# 该登记项此前逐字写着「缺必填信封字段 actor 竟**被接受**（rc=$R）：必填字段校验只在写入路径
+# （本体校验）上，折叠层不校验」——它兑现了：合上它的那次改动先把断言打红，再转绿
+# （§ 交付回执里有"改前红／改后绿"两条原始输出）。
 O="$(WO2 "$SB/ontology.json" "$SB/bad_missing_actor.jsonl" state 2>&1)"; R=$?
-if [ "$R" -eq 2 ]; then
-  ok "⑨ 缺必填信封字段 actor ⇒ 被拒（rc=2）"
-else
-  reg "⑨ 缺必填信封字段 actor 竟**被接受**（rc=$R）：**必填字段**校验只在写入路径（本体校验）上，折叠层不校验 —— REQ-F-028 判据② 对本字段**不成立**"
-fi
+assert_rc "⑨ 缺必填信封字段 actor ⇒ 被拒（rc=2；REQ-F-032 缺格即报错）" 2 "$R"
+assert_has "⑨a 拒绝理由**点名**缺的那一格 actor" "$O" 'actor'
+assert_has "⑨b 拒绝理由是读模型侧的缺格码（不是写入侧那条）" "$O" 'ext\.world\.ReadModel\.MissingCell'
 
 # ══ TC-048 · REQ-F-029 未知旗标必须忽略（与未知家族拒绝对偶）════════
 echo

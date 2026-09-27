@@ -16,6 +16,12 @@
 //!    补偿事件本身就是一条普通的 `change`，折叠照常前进。
 //! 3. **折叠必须报错而不是猜**。序号断裂、旧值不符、未知家族——一律拒绝折叠。
 //!    读模型若默默容忍坏账本，那么"账本是唯一真相"就成了一句空话。
+//! 4. **缺格即报错**（`REQ-F-032`）。书第五章 5.6 表 5.2 行的通过条件逐字是
+//!    「每个已声明的字段至少有一份读法可读，**缺格就报错**」，当日结果逐字是「**红**。未实现」
+//!    （合订本 `:737`）。本模块补的是**读模型这一侧**：一行账本少了**已声明的必填格**
+//!    ⇒ 拒绝折叠，并**点名缺的那一格**（[`DeclaredCells`] ＋ [`State::apply_declared`]）。
+//!    ⚠️ 它与「未知家族」**不是一回事**：不认识的家族仍旧报 `ReadModel.UnknownKind`
+//!    （那是 `REQ-F-029` 对偶的另一半），两处不许互相冒充〔本 change 的 delta `REQ-F-027`／`REQ-F-029`〕。
 //!
 //! 关于 `before` 的核对：`change` 事件按法律**必带旧值**（回滚所需信息当场留下）。
 //! 本模块因此在折叠时核对"事件声称的旧值 == 账本折叠出的当前值"——
@@ -27,6 +33,7 @@
 
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
+use std::fmt;
 
 /// 世界状态。**只能由 [`State::apply`] / [`State::fold`] 产生**。
 ///
@@ -101,7 +108,7 @@ impl State {
         let kind = ev
             .get("kind")
             .and_then(Value::as_str)
-            .ok_or_else(|| format!("事件 seq={seq} 缺少 kind"))?;
+            .ok_or_else(|| missing_cell_msg(seq, "envelope", "kind"))?;
 
         match kind {
             "change" => self.apply_change(seq, ev)?,
@@ -121,20 +128,38 @@ impl State {
     }
 
     fn apply_change(&mut self, seq: u64, ev: &Value) -> Result<(), String> {
-        let body = ev
-            .get("body")
-            .and_then(Value::as_object)
-            .ok_or_else(|| format!("change 事件 seq={seq} 缺少 body"))?;
-        let subject = body
-            .get("subject")
-            .and_then(Value::as_str)
-            .ok_or_else(|| format!("change 事件 seq={seq} 的 body 缺少 subject"))?;
-        let path = body
-            .get("path")
-            .and_then(Value::as_str)
-            .ok_or_else(|| format!("change 事件 seq={seq} 的 body 缺少 path"))?;
+        let body = match ev.get("body") {
+            Some(Value::Object(m)) => m,
+            Some(_) => {
+                return Err(format!(
+                    "ext.world.ReadModel.BadCell: change 事件 seq={seq} 的 body **不是对象**\
+                     ——它不是缺格，是形状不对（读模型不猜、也不修补）"
+                ))
+            }
+            None => return Err(missing_cell_msg(seq, "envelope", "body")),
+        };
+        let subject = match body.get("subject") {
+            Some(Value::String(s)) => s.as_str(),
+            Some(_) => {
+                return Err(format!(
+                    "ext.world.ReadModel.BadCell: change 事件 seq={seq} 的 body.subject **不是字符串**\
+                     ——它不是缺格，是形状不对"
+                ))
+            }
+            None => return Err(missing_cell_msg(seq, "body[change]", "subject")),
+        };
+        let path = match body.get("path") {
+            Some(Value::String(s)) => s.as_str(),
+            Some(_) => {
+                return Err(format!(
+                    "ext.world.ReadModel.BadCell: change 事件 seq={seq} 的 body.path **不是字符串**\
+                     ——它不是缺格，是形状不对"
+                ))
+            }
+            None => return Err(missing_cell_msg(seq, "body[change]", "path")),
+        };
         if !body.contains_key("after") {
-            return Err(format!("change 事件 seq={seq} 的 body 缺少 after"));
+            return Err(missing_cell_msg(seq, "body[change]", "after"));
         }
         let after = body.get("after").cloned().unwrap_or(Value::Null);
 
@@ -148,11 +173,7 @@ impl State {
                          但账本折叠出的当前值是 {current}。账本与事件不符——**拒绝折叠**"
                     ))
                 }
-                None => {
-                    return Err(format!(
-                        "change 事件 seq={seq} 缺少 before：回滚所需信息必须当场留下"
-                    ))
-                }
+                None => return Err(missing_cell_msg(seq, "body[change]", "before")),
             }
         }
 
@@ -199,10 +220,74 @@ impl State {
     }
 
     /// 从零折叠一串事件。
+    ///
+    /// ⚠️ 这是**无法律的折叠**：它只查读模型自己就要用的那几格（`seq`／`kind`／`change` 的四处）。
+    /// `World::read_model`（`src/lib.rs`）今天走的正是这一条 ⇒ **已声明的必填格缺了，
+    /// 在 `state --json` 上仍是静默通过**——这条缺口在 `tools/s1_sys_probe.sh` 的
+    /// `TC-047` ⑨ 里早就登记着，逐字：「缺必填信封字段 actor 竟**被接受**（rc=$R）：
+    /// 必填字段校验只在写入路径（本体校验）上，折叠层不校验」。
+    /// 要合上它，走 [`State::fold_declared`]（带法律的那条路）。
     pub fn fold(events: &[Value]) -> Result<Self, String> {
         let mut s = State::new();
         for ev in events {
             s.apply(ev)?;
+        }
+        Ok(s)
+    }
+
+    /// **带法律的折叠**（`REQ-F-032`）：先核"已声明的必填格"（缺格即报错），再折叠。
+    ///
+    /// ## 这条判据管什么（逐字对书）
+    ///
+    /// 书第五章 5.6 表 5.2 行（合订本 `:737`）逐字：
+    /// 「读的那一份每个格子都有人读得到 ｜ 每个已声明的字段至少有一份读法可读，缺格就报错
+    /// ｜ 缺格即报错 ｜ **红**。未实现」。本方法把"缺格就报错"这一格补成**可执行的**：
+    /// 一行账本少了[`DeclaredCells`] 里**已声明的必填格** ⇒ 返回
+    /// `ext.world.ReadModel.MissingCell`，并**点名缺的那一格**（"错误可读"不是形容词：
+    /// 错误里必须能读出是**哪一层**的**哪一格**，以及该层该有哪些格）。
+    ///
+    /// ## 与"未知家族"的分工（**不许互相冒充**）
+    ///
+    /// | 情形 | 判据 | 为什么不能混 |
+    /// |---|---|---|
+    /// | `kind` 不认识 | `ext.world.ReadModel.UnknownKind`（在 [`State::apply`] 里） | 那是**语义不认识** ⇒ 拒（`REQ-F-029` 对偶的另一半） |
+    /// | `kind` 认得、但这一行少了已声明的必填格 | `ext.world.ReadModel.MissingCell`（在本方法） | 那是**该有的格没读到** ⇒ 拒；它的家族是**认得的** |
+    ///
+    /// 故 [`DeclaredCells::missing_cell`] 对**不认识的家族一律不看**：
+    /// 让拒它的理由留在"家族不认识"那一条上，别把病因说错。
+    ///
+    /// ## 本层**不判**的（如实声明边界，不读作"已完备"）
+    ///
+    /// - **可选格**（`to`／`trace`／`params`／`payload`）不进 [`DeclaredCells`]：
+    ///   本体说它们可选，"没写"是这份法律允许的形态，不是缺格；
+    /// - **`concepts` 的字段**（`notice.muted`/`job.status`）归**写入侧**判
+    ///   （[`crate::ontology::Ontology::check_concepts`]），读模型侧不重复判；
+    /// - 读模型**不渲染**信封的 `id`／`at`／`actor`／`world`／`flags`：它们现在**被读**
+    ///   （缺了即拒），但**不进入状态**（`state --json` 里读不到它们）⇒ 书那句
+    ///   「每个已声明的字段至少有一份读法可读」在**必填格**这一半成立，另一半仍待补。
+    pub fn apply_declared(&mut self, cells: &DeclaredCells, ev: &Value) -> Result<(), String> {
+        // **空表不许上电**：没有清单 ⇒ 这条判据无从成立。若在这里默默放行，
+        // "一个格都没查"与"每个格都查过了"在**读数上一样**、在**结论上相反**——
+        // 那正是本项目最贵的一类错（把没做读成做到了）。与门禁那条「空策略拒绝启动」同一纪律。
+        if cells.is_empty() {
+            return Err(
+                "ext.world.ReadModel.NoDeclaredCells: 没有可比对的**已声明格清单**（空表）——\
+                 缺格判据无从成立，故拒绝折叠，而不是默默放行。\n\
+                 \x20 处置：把法律以数据递进来（`DeclaredCells::new(ont.envelope_required(), ont.family_required())`）"
+                    .to_string(),
+            );
+        }
+        if let Some(m) = cells.missing_cell(ev) {
+            return Err(m.to_string());
+        }
+        self.apply(ev)
+    }
+
+    /// 从零折叠一串事件（**带法律**；缺格即报错）。逐条等价于 [`State::apply_declared`]。
+    pub fn fold_declared(cells: &DeclaredCells, events: &[Value]) -> Result<Self, String> {
+        let mut s = State::new();
+        for ev in events {
+            s.apply_declared(cells, ev)?;
         }
         Ok(s)
     }
@@ -241,6 +326,142 @@ impl State {
         }
         format!("fnv1a64:{h:016x}")
     }
+}
+
+/// **读模型侧的"已声明格"清单**（`REQ-F-032` 判据①：「逐格可枚举」）。
+///
+/// 它只装**必填**格，且只装本体逐字声明的那两处：
+/// `envelope.required`（出厂本体 8 项）与 `families.<家族>.required`（出厂本体 4／3／2）。
+/// 可选格（`to`／`trace`／`params`／`payload`）**不进这张表**——本体说它们可选，
+/// "没写"是这份法律允许的形态，不是缺格（理由见 [`State::apply_declared`] 的边界一节）。
+///
+/// ## 为什么它是**数据**，而不是一个"法律"类型（这一条是刻意的）
+///
+/// 读模型**不许**在生产代码里 `use crate::ontology::…`：`WC-MODREG-001` §2 给 `M03` 的
+/// 依赖列逐字是「**无**（生产代码零出边）」，而机核层 `tools/module_graph.py` 判据②
+/// 逐边核对「声明集 ≡ 真实 import 集」——读模型加一条生产边就会让它变红。
+/// 故法律以**数据**递进来，依赖方向留在**装配处**（`M04` 同时依赖 `M01` 与 `M03`）：
+/// 谁递 = `World::read_model` 的调用点；数据从 [`crate::ontology::Ontology`] 取
+/// （`envelope_required`／`family_required`），**同一份出厂本体** ⇒ 同源。
+///
+/// ⚠️ 递进来的若是空表（[`DeclaredCells::is_empty`]），[`State::apply_declared`] **拒绝折叠**：
+/// 没有清单＝这条判据无从成立，"一个格都没查"不许被读成"检查通过"
+/// （与门禁那条「空策略拒绝启动」同一纪律）。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DeclaredCells {
+    envelope_required: Vec<String>,
+    family_required: BTreeMap<String, Vec<String>>,
+}
+
+impl DeclaredCells {
+    /// 用**纯数据**装配（调用方从本体取；见类型文档的"为什么是数据"）。
+    pub fn new(envelope_required: Vec<String>, family_required: BTreeMap<String, Vec<String>>) -> Self {
+        Self {
+            envelope_required,
+            family_required,
+        }
+    }
+
+    /// 一个格都没有 ⇒ 本层无从判（**不许**读成"检查通过"）。
+    pub fn is_empty(&self) -> bool {
+        self.envelope_required.is_empty() && self.family_required.is_empty()
+    }
+
+    /// 信封已声明的必填格（原顺序）。
+    pub fn envelope_required(&self) -> &[String] {
+        &self.envelope_required
+    }
+
+    /// 某家族已声明的必填格（`None` ＝ 法律里没有这个家族）。
+    pub fn family_required(&self, kind: &str) -> Option<&[String]> {
+        self.family_required.get(kind).map(Vec::as_slice)
+    }
+
+    /// **这一行缺了哪一格？** `None` ＝ 已声明的必填格齐备。
+    ///
+    /// 三处**刻意不判**（判了就会把病因说错）：
+    /// - **不认识的家族** ⇒ 一律返回 `None`：拒它的判据是
+    ///   [`State::apply`] 的 `UnknownKind`（`REQ-F-029` 对偶的另一半），不是"缺格"；
+    /// - **非对象的事件**、**非对象的 `body`** ⇒ 返回 `None`：那是**形状**问题，
+    ///   由 [`State::apply`] 报（`NotAnObject` 那一族的语义），缺格判据不抢它的错；
+    /// - **可选格**：它们根本不在表里（见类型文档）。
+    pub fn missing_cell(&self, ev: &Value) -> Option<MissingCell> {
+        let obj = ev.as_object()?;
+        let seq = obj.get("seq").and_then(Value::as_u64);
+        for f in &self.envelope_required {
+            if !obj.contains_key(f) {
+                return Some(MissingCell {
+                    at: "envelope".to_string(),
+                    field: f.clone(),
+                    declared: self.envelope_required.join(", "),
+                    seq,
+                });
+            }
+        }
+        let kind = obj.get("kind").and_then(Value::as_str).unwrap_or("");
+        let req = self.family_required.get(kind)?;
+        // 信纸不是对象 ⇒ 形状问题，交给 `apply`（见上文"三处刻意不判"）。
+        let body = obj.get("body").and_then(Value::as_object)?;
+        for f in req {
+            if !body.contains_key(f) {
+                return Some(MissingCell {
+                    at: format!("body[{kind}]"),
+                    field: f.clone(),
+                    declared: req.join(", "),
+                    seq,
+                });
+            }
+        }
+        None
+    }
+}
+
+/// 读模型侧的**缺格**（`REQ-F-032`）：一格"该在而不在"。
+///
+/// 为什么不复用 `Option<&Value>` 的"没读到就是 `None`"：那正是**静默通过**的形状。
+/// 缺格是一个**有名字的事实**，它必须能被打印、被点名、被断言——
+/// 否则"缺格即报错"只是一句口号（书第五章 5.6 表 5.2 行判的就是这一格）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingCell {
+    /// 缺在哪一层：`envelope`，或 `body[<家族>]`。
+    pub at: String,
+    /// 缺的那一格的名字（**错误可读**的判据就在这个字段上：不许只说"有缺格"）。
+    pub field: String,
+    /// 这一层**已声明的必填格**（逗号分隔）——报错要让人当场知道"该有哪些"，
+    /// 否则这条错误只说了"不行"、没说"怎么办"（与 `ontology.rs` 的 `UndeclaredEntity` 同一体例）。
+    pub declared: String,
+    /// 这一行的 `seq`（读不到就是 `None`——那本身也是一种缺格）。
+    pub seq: Option<u64>,
+}
+
+impl fmt::Display for MissingCell {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let seq = match self.seq {
+            Some(s) => s.to_string(),
+            None => "?".to_string(),
+        };
+        write!(
+            f,
+            "ext.world.ReadModel.MissingCell: 缺格：{} 少了**已声明的必填格** `{}`（seq={seq}）——\
+             读模型**不猜**\"没有就是空\"：已声明的格读不到，就拒绝折叠。\n\
+             \x20 该层已声明的必填格：{}\n\
+             \x20 处置：把这一格补进那一行再读；若它本就该是可选格，改的是**本体**（改法律＝走评审）",
+            self.at, self.field, self.declared
+        )
+    }
+}
+
+/// **无法律折叠**那条路上的缺格文案（[`State::apply`]／[`State::apply_change`] 用）。
+///
+/// 与 [`MissingCell`] 同一个错误码（`ext.world.ReadModel.MissingCell`）——"缺格"这件事
+/// 全项目一种说法；差别只在**能不能列出"该层已声明的必填格"**：无法律时列不出来，
+/// 故这里如实写明"只查读模型自己要用的那几格"，不假装手里有一份法律。
+fn missing_cell_msg(seq: u64, at: &str, field: &str) -> String {
+    format!(
+        "ext.world.ReadModel.MissingCell: 缺格：{at} 少了 `{field}`（seq={seq}）\
+         ——（无法律折叠：读模型只查它自己要用的那几格；\"该层已声明的必填格\"要由带法律的那条路给出，\
+         见 `State::apply_declared`）"
+    )
 }
 
 #[cfg(test)]
