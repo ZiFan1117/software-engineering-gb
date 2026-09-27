@@ -100,10 +100,30 @@
 ## 七、施行记录（含追认）
 
 > 流程侧硬条款 **H-14「追认出口」**：「先实施后补批」的**唯一出口＝事后追认（时点 ＋ 批准人 ＋ 回退点）**，且**不得成为默认路径**。
+> ⚠ **本节的两次追认都不完全合规**——评审席③ 已逐条核过（见 `tasks.md` 7.9），此处**如实登记、不掩盖**。
 
 | # | 时点 | 做了什么 | 谁指示 | 为什么先行 | 回退点 |
 |---|---|---|---|---|---|
-| 1 | 2026-09-27 22:12–22:18 | **改融合档文字**：主本 `D:\Code\10-openspec-swe-gb\schemas\` 的 `opsx-swe-gb/schema.yaml`（顶层 `description` ＋ `proposal`／`specs`／`design`／`review` 四条 instruction）与**新建主本 `README.md`**（整篇按分工判据重写）；随后**同步到本仓** `openspec/schemas/`。**七件逐文件 sha256 一致**（0 不一致）；另 5 个模板内容未变（同哈希同步） | **项目负责人**（当面对话中指示） | 这份文件是**下一件活的判据**：不改它，下一个 change 会照旧被指示"同一批文件双读、流程侧只留一行指针" | ① 本仓：`git checkout -- openspec/schemas`（旧哈希 `schema.yaml` `E58AF96448B1ABCF`、`README.md` `84A24BE93FB7B0DC`）② **主本无版本控制**（`10-openspec-swe-gb` 不是 git 仓）：`README.md` 原不存在，`schema.yaml` 旧内容可按上述哈希从本仓 git 取回 |
+| 1 | 2026-09-27 22:12–22:18 | **改融合档文字**：主本 `D:\Code\10-openspec-swe-gb\schemas\` 的 `opsx-swe-gb/schema.yaml`（顶层 `description` ＋ `proposal`／`specs`／`design`／`review` 四条 instruction）与**新建主本 `README.md`**；随后**同步到本仓** `openspec/schemas/`。**七件逐文件 sha256 一致** | **项目负责人**（当面对话中指示） | 这份文件是**下一件活的判据**：不改它，下一个 change 会照旧被指示"同一批文件双读、流程侧只留一行指针" | ① 本仓：`git checkout <本轮之前的提交> -- openspec/schemas`（旧哈希 `schema.yaml` `E58AF96448B1ABCF`、`README.md` `84A24BE93FB7B0DC`）② **主本无版本控制**（`10-openspec-swe-gb` 不是 git 仓）：`README.md` 原不存在，`schema.yaml` 旧内容可按上述哈希从本仓 git 取回 |
+| 2 | 2026-09-27 22:30–23:00 | **实施第 1–5 组任务**：① `config.yaml` 默认档切 `opsx-swe-gb` ② 造 `world-core/tools/spec_bridge.py`（五条判据 ＋ `--self-test` 五条反例）③ 接 `check.sh` **第 ⑧ 步** ④ 新增 `openspec/BRIDGE.md`（编号桥长期载体）⑤ 新增 `openspec/MAINTENANCE.md`（常设项出口）⑥ 为归档 change 补 `review.md`、把两条常设项移出其 `tasks.md` ⑦ 起草 `cover-unimplemented-capabilities`（保持不归档）⑧ `openspec/` 层 56 件同步到 VM | **项目负责人**（当面对话中指示"开始开发"） | 五席评审一致判定：**两道闸今天没有任何执行者**（实测 `review.md` 通篇"待签"而 `apply` 仍 `state=ready`；一个**没有** `review.md` 的 change 用 `archive --yes` 照样 rc=0 归档）——不先补执行者，后面所有改动都是纸面 | `git revert <本轮的提交>`（改动集中在文本 ＋ 一个新脚本；归档件那一步单独一个提交，可分开回退） |
+
+### 7.1 第 2 次施行的**结果**（原始读数）
+
+| 门禁 | 施行前 | 施行后 |
+|---|---|---|
+| `python3 world-core/tools/spec_bridge.py`（本 change 新造的守卫） | **不存在** | **5 通过 / 0 失败，rc=0** |
+| ├ 其 `--self-test`（五条反例必红） | — | **rc=0**：五条反例逐条"已红 OK"，正控全绿 |
+| `openspec validate --all --strict` | `9 passed / 1 failed`（红的是空壳 `fc-2026-002`） | **`9 passed / 0 failed`** |
+| `openspec validate --archived` | **`0 passed / 1 failed`**（`✗ 2 incomplete tasks (18/20)`，即 schema 自己预言过的"常设项永久挡住"） | **`1 passed / 0 failed`** |
+| VM `bash check.sh` | `RC=0`（无第 ⑧ 步） | **`RC=0`，含第 ⑧ 步**（日志 `/tmp/after-bridge.log`） |
+
+### 7.2 第 2 次施行**未做的事**（诚实边界）
+
+1. **`review.md` 仍一字未签**（§一 结论＝待签、§六 结论＝待签）。第 2 次施行是**作者在对话中指示**的，
+   按 H-14 第 6(ii) 条**不构成有效追认**（批准人在场且就是指示人 ⇒ 事前授权本可做到）——`tasks.md` 7.9 已列为整改项。
+2. **五席评审提出的 12 条整改项尚未落笔**（`tasks.md` 第 7 组）：含 `boundary.md` 三处硬伤、schema/README 的 `R-E` 与默认档说法、
+   模板引用路径、`review.md` 模板缺五栏、本件 R5 准入缺 `FC-1…FC-6`、旧"双读"技能文件未更新等。**逐条带 `path:line` 出处，不挂账。**
+3. **`spec-governance` 仍未进主规格**（tasks 2.1）——它的 delta 在本 change 内就绪，等 R5 签字后随归档合并。
 
 **如实登记两件事**：
 

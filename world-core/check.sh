@@ -157,4 +157,16 @@ run_tail 20 "表块行宽审计（转义感知）" python3 tools/table_width_aud
 #   (a)(b) 两类仍属无害噪声、**不改判据强度**，故保留。
 
 echo
-echo "== 结论：全通过（构建 / 冒烟 / 三条专属测试 / 契约测试 / 投影同源 / 纯文本审计 / 系统级验收 / S1 验证面补建）=="
+echo "── ⑧ 规格层守卫（OpenSpec 层：五条判据）─────────────────────"
+# 为什么放在这里：`openspec validate` 只判**形态**（结构、每个 Scenario 恰好 4 个 `#`、delta 语法），
+# 它**不查**：证据行指向的测试是否真的存在（改名即失锚，且不会变红）、归档目录有没有 `review.md`、
+# 默认档是不是融合档、编号桥有没有覆盖规格树下每条 Requirement、承载覆盖缺口的 change 还在不在。
+# 这五条此前**只写在 schema 的文字里，没有任何执行者**——实测：一个**没有** `review.md` 的 change
+# `openspec archive --yes` 照样 rc=0 归档。`tools/spec_bridge.py` 就是这五条的执行者。
+# 它自己也要能自证会红（`--self-test`：五条各造一个反例，反例不变红即判该守卫是装饰）。
+# 仓库根由脚本自身位置向上定位（world-core/tools/ → 仓库根）；VM 上已同步 `openspec/` 层，故两边都能跑。
+run_tail 2 "规格层守卫自证（五条判据各造反例，反例必红）" python3 tools/spec_bridge.py --self-test
+run_tail 8 "规格层守卫（归档硬前置／证据存在性／默认档／编号桥／覆盖在册）" python3 tools/spec_bridge.py
+
+echo
+echo "== 结论：全通过（构建 / 冒烟 / 三条专属测试 / 契约测试 / 投影同源 / 纯文本审计 / 系统级验收 / S1 验证面补建 / 规格层守卫）=="
