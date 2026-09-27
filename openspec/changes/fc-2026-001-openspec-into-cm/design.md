@@ -60,9 +60,9 @@
 |---|---|
 | **受影响模块** | ① `openspec/config.yaml`（默认档）② 新增 `openspec/specs/spec-governance/`（新能力进主规格）③ `openspec/schemas/**`（改掉"双读＋一行指针"的写法；主本 `10-openspec-swe-gb` 同步）④ `openspec/changes/archive/2026-09-27-baseline-verified-doctrine/**`（补 `review.md`、移常设项）⑤ 新增 `openspec/MAINTENANCE.md`（规格层自己的维护清单）⑥ `world-core/tools/spec_bridge.py`（新增）⑦ `world-core/check.sh`（加一步）⑧ `world-core/.scope-declaration.json`（范围门禁要求时按需收窄） |
 | **受影响需求** | 流程侧 **22 条**被映射（编号桥，见 `mapping.md`）；**5 条承诺取不到号**（登记为「无号」）；**9 条非绿需求无规格落点**（进覆盖 change） |
-| **需重跑的测试** | ① VM：`bash check.sh`（rc=0 为准出前提，本轮已跑）② 新增：`python3 world-core/tools/spec_bridge.py --self-test`（**五条判据各自的反例必须真红**）③ `openspec validate --all --strict`（6 项 → **7 项全绿**）④ `openspec validate --archived`（本 change 目标是**由红转绿**） |
+| **需重跑的测试** | ① VM：`bash check.sh`（rc=0 为准出前提，本轮已跑）② 新增：`python3 world-core/tools/spec_bridge.py --self-test`（**七条判据各自的反例必须真红**（条数以 `--json` 的 `passed`/`failed` 为准））③ `openspec validate --all --strict`（6 项 → **7 项全绿**）④ `openspec validate --archived`（本 change 目标是**由红转绿**） |
 | **回归范围** | 按流程侧权威四档（`附件三-评审与门禁.md:265`「R-A 冒烟回归 / R-B 模块回归 / R-C 契约回归 / R-D 全量回归」；**流程侧没有 R-E**）：<br>**R-A 冒烟**：6 份主规格的 **23 条 Requirement 一字不动** ⇒ 判据 = `git diff --stat fd9a892 HEAD -- openspec/specs` **只允许 3 files / 7 insertions(＋3)（即三段 `## Purpose`）**；**出现 Requirement 级改动即判失败**<br>**R-B 模块**：`spec_bridge.py` 新增并接 `check.sh` ⇒ 判据 = `--self-test` 七条反例全红 ＋ `check.sh` 第 ⑧ 步通过<br>**R-C 契约**：归档件补 `review.md`、移两条常设项 ⇒ 判据 = `validate --archived` 由 `0 passed/1 failed` 变 `1 passed/0 failed`<br>**R-D 全量**：`spec-governance` 进主规格 ＋ 覆盖 change 在册 ⇒ 判据 = `validate --all --strict` 全绿且 `list --specs` 由 6 条变 7 条；**产品面**（`world-core/src/`、`tests/`）零改动并入本档，判据 = `git diff --stat` 在那两处为空 |
-| **工作量估算** | 默认档 0.1 ＋ `spec_bridge.py`（五条判据＋自证）0.8 ＋ 编号桥复核与登记 0.3 ＋ 归档遗留 0.3 ＋ `spec-governance` 进主规格 0.2 ＋ 覆盖 change 起草 0.5 ≈ **2.2 人日**（AI 起草；评审与人签不计） |
+| **工作量估算** | 默认档 0.1 ＋ `spec_bridge.py`（**当时**五条判据＋自证；**现为七条**）0.8 ＋ 编号桥复核与登记 0.3 ＋ 归档遗留 0.3 ＋ `spec-governance` 进主规格 0.2 ＋ 覆盖 change 起草 0.5 ≈ **2.2 人日**（AI 起草；评审与人签不计） |
 | **需通知的使用方** | 下一位执行者（默认档改变其工作方式）；评审席（新增 `review.md` 闸）。**无破坏性接口变更，不需对外通知** |
 
 **R5 触发条件**：本 change 触及**契约面**（`openspec/specs/**`）、**工具**（`tools/spec_bridge.py`）、**工作流**（默认档与归档门禁）⇒ 按融合档判据**判 R5**。**无破坏性变更**：不改任何接口、不改产品代码与出厂行为、不改既有 Requirement 语义。
@@ -94,7 +94,7 @@
 ## Decisions
 
 1. **默认档切 `opsx-swe-gb`**（`openspec/config.yaml`）。替代方案"每次显式 `--schema`"被否：忘了加参数就**静默**走回默认档，而静默回退正是本 change 要消灭的东西。
-2. **`spec_bridge.py` 五条判据，每条都必须能自证会红**：① 归档目录必须有 `review.md`；② 每条 `证据：<path>::<fn>` 的函数/脚本必须真实存在；③ `config.yaml` 的 `schema:` 必须为 `opsx-swe-gb`；④ 编号桥映射表覆盖规格树下**全部** Requirement；⑤ 承载覆盖缺口的 change 存在且**未归档**。**自证口径写死**：`--self-test` 为每条各造一个反例样本，反例不变红即判"这条守卫是装饰"并拒绝合入。
+2. **`spec_bridge.py` 七条判据，每条都必须能自证会红**：① 归档目录必须有 `review.md`；② 每条 `证据：<path>::<fn>` 的函数/脚本必须真实存在；③ `config.yaml` 的 `schema:` 必须为 `opsx-swe-gb`；④ 编号桥映射表覆盖规格树下**全部** Requirement；⑤ 承载覆盖缺口的 change 存在且**未归档**。**自证口径写死**：`--self-test` 为每条各造一个反例样本，反例不变红即判"这条守卫是装饰"并拒绝合入。
 3. **编号桥落映射表，不改 Requirement 标题**。试挂证明两边多对多（**5 撞号 / 5 无号 / 17 条无人认领**，见 `mapping.md`）；标题只能带一个号，硬塞会重号 ⇒ 撤销"标题挂号"。桥＝`mapping.md`；规矩＝`spec-governance` 的"新增 Requirement 必须带流程侧号，取不到号登记为无号，不许自造、不许拿相近号硬凑"。
 4. **覆盖缺口落"故意不归档的 change"**：未实现的能力以 delta ＋ tasks 在册。**不写进主规格**——主规格描述的是**今天成立的行为**，把未实现的东西写进去就是把"未定"当"已定"。
 5. **46 条内容修订另立 `fc-2026-002`**（`audit.md` 随本 change 归档）。**例外**：凡"把已知缺陷写成已成立"的（`ledger-integrity` 的 K-3 升级路径自杀、`gate-enforcement` 的摩擦落点与风险等级、`projections` 的同源核对）一律列为 `fc-2026-002` 的 **P0 必做项，不得以"已知问题"挂账**。
@@ -106,7 +106,7 @@
 ## Risks / Trade-offs
 
 - **本 change 归档时，6 份规格仍带 46 条已知差错**（其中 15 条严重）→ **缓解**：① `audit.md` 随件在册、逐条带文件:行号与实跑命令；② `review.md` 的结论栏**写清"本基线语义层未核、已知 46 条"**，不写"已核"；③ `fc-2026-002` 紧随其后，P0 项不得挂账。
-- **`spec_bridge.py` 自己变成"从不失败的检查"** → **缓解**：五条判据各带反例自证（决策 2），自证不过即判定该守卫是装饰。
+- **`spec_bridge.py` 自己变成"从不失败的检查"** → **缓解**：七条判据各带反例自证（决策 2）；条数会增加，**每加一条必须同时加一个反例**，自证不过即判定该守卫是装饰。
 - **切默认档让后续每个 change 变重** → **缓解**：融合档自带 A/B 档判据（三条全不命中才可 A 档），轻改动可走 A 档。
 - **流程细节不另立册子，可能被读成"没有流程"** → **缓解**：批准与准出判据写在 `review.md` 内且**可机核**（缺 `review.md` 由判据① 硬拦）；需求号追溯由判据④ 保证覆盖。
 - **动已归档的 change**（补 `review.md`、移常设项）→ **缓解**：只补件与移项、不改结论、逐处留痕；`review.md` 里写明处置理由与前后 diff 口径。
@@ -151,7 +151,7 @@
 
 1. **切默认档**：`openspec/config.yaml` 的 `schema:` → `opsx-swe-gb`。
 2. **改融合档文字**：`openspec/schemas/opsx-swe-gb/schema.yaml` 与 `README.md` 里"双读＋一行指针"的写法逐处改掉（主本 `10-openspec-swe-gb` 同步；两处 sha256 一致）。
-3. **守卫**：新增 `world-core/tools/spec_bridge.py`（五条判据 ＋ `--self-test` 五条反例）；接 `world-core/check.sh`（新增一步，不改既有步骤号）。
+3. **守卫**：新增 `world-core/tools/spec_bridge.py`（**当时**五条判据 ＋ `--self-test` 五条反例；**现为七条判据＋八条反例**）；接 `world-core/check.sh`（新增一步，不改既有步骤号）。
 4. **新能力进主规格**：`spec-governance`（`openspec/specs/spec-governance/spec.md`）。
 5. **编号桥**：产出 `mapping.md`；**6 份主规格标题不改**；无号项在表内显式登记。
 6. **归档遗留**：补 `review.md`；两条常设项移入 `openspec/MAINTENANCE.md`；`validate --archived` 转绿。

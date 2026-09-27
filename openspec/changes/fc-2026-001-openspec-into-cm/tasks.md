@@ -12,11 +12,11 @@
       **不得**用 `openspec status --json` 的 `defaultSchema` 判（实测它读的是 CLI 源码里的常量
       `planning-home.js:4 const REPO_DEFAULT_SCHEMA = 'spec-driven'`，与 `config.yaml` 无关；CLI 回显那句 `with schema 'spec-driven'` 同理）。
       实测：探测 change 的 `.openspec.yaml` ＝ `schema: opsx-swe-gb` ✓（探测件已删）
-- [x] 1.2 新增 `world-core/tools/spec_bridge.py`，五条判据（与 `specs/spec-governance/spec.md` 逐条对应）
+- [x] 1.2 新增 `world-core/tools/spec_bridge.py`，五条判据（与 `specs/spec-governance/spec.md` 逐条对应）　**★ 后续追加两条**：⑥ 归档件的评审已签（`7c7e0b1`）、⑦ 让路登记（`415577d`）——**现为七条**
       ① 归档硬前置 ② 证据存在性（**两种形态都查**：`<path>::<fn>` 与 `<path> --self-test`）③ 默认档守卫
       ④ 编号桥覆盖 ⑤ 覆盖在册
       **验收**：`python3 world-core/tools/spec_bridge.py` rc=0，逐条列出结论 ✓（实测 5/5）
-- [x] 1.3 `spec_bridge.py --self-test`：为五条判据各造一个反例，反例不变红即判该守卫是装饰
+- [x] 1.3 `spec_bridge.py --self-test`：为**每条**判据各造一个反例，反例不变红即判该守卫是装饰　**现状**：七条判据 ＋ 八条反例（反例⑤ 用改名实现、不删夹具）
       **验收**：`--self-test` rc=0，五条反例逐条打印"已红 OK"、正控（完好沙盒）全绿 ✓
 - [x] 1.4 把 `spec_bridge.py` 接进 `world-core/check.sh`（**新增第 ⑧ 步**，不改既有步骤号 ③／③b／④／⑥／⑦ 的含义）
       **验收**：`check.sh` 第 ⑧ 步可 grep 定位；`set -euo pipefail` 下该步失败即整脚本非零退出 ✓
