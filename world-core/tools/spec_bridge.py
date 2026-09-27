@@ -780,6 +780,45 @@ def j14_judges_all_claimed(repo):
     return bad
 
 
+def j16_retracted_claims(repo):
+    """⑯ 书的四件「**已被撤回的说法**」不得被当成主张**写回正文**。
+
+    出处：合订本 `:1708` 逐字「**已被撤回的说法** | **不许写回正文**，共四件」，逐字登记在
+    `openspec/BOOK/理念条目.md` 的「已被撤回的说法（不许写回正文）」四行里。
+
+    **扫描面**＝"正文"：`openspec/specs/**` ＋ `world-core/docs/**`。
+    **豁免面**＝登记处与书本身（`openspec/BOOK/**`、`world-core/docs/理论/**`、`openspec/changes/**`）——它们**本来就该提到**这些说法。
+    **放行**＝命中处**带正指标记**（订正／已改／收回／已撤回／属单因论／已删）——那是"**指出它被撤回**"，不是"写回"。
+
+    **★ 射程（如实写）**：它是**串匹配**，判的是"这四件的措辞有没有出现在正文里且没被标成已撤回"；
+    **不判**"正文有没有换一种说法把同一件事又主张了一遍"——那要人读。**别把它读成"四件已彻底清净"**。
+    """
+    SIG = ("共同语言", "没有脑子", "三方都能懂", "原因只有一个——它里面没有")
+    MARK = ("订正", "已改", "收回", "已撤回", "属单因论", "已删")
+    bad = []
+    for base, in ((Path(repo) / "openspec" / "specs",), (Path(repo) / "world-core" / "docs",)):
+        if not base.is_dir():
+            continue
+        for p in sorted(base.rglob("*.md")):
+            rel = str(p.relative_to(repo))
+            if any(x in rel for x in ("BOOK", "理论", "changes")):
+                continue
+            try:
+                t = p.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+            for sig in SIG:
+                for m in re.finditer(re.escape(sig), t):
+                    ln = t[:m.start()].count("\n") + 1
+                    lo = max(0, m.start() - 90)
+                    ctx = t[lo:m.end() + 90]
+                    if any(k in ctx for k in MARK):
+                        continue
+                    bad.append("%s:%d —— 已被撤回的说法「%s」出现在正文里，且**附近没有「已撤回／订正」之类的标记** ⇒ "
+                               "按书 `:1708`「**不许写回正文**」：要么删，要么明写「该说法已撤回」" % (rel, ln, sig))
+    return bad
+
+
 JUDGMENTS = [
     ("① 归档硬前置（归档目录必须有 review.md）", j1_archive_review),
     ("② 证据存在性（证据行的函数/脚本必须真实存在）", j2_evidence),
@@ -797,6 +836,7 @@ JUDGMENTS = [
     ("⑬ `节对齐.md` 记录了当前来源坐标（生成物不许手编）", j13_secmap_freshness),
     ("⑮ 两份文档的「清单表」≡ 实际（双向）", j15_doc_lists_match_reality),
     ("⑭ 书 §5.6 的每一行判据都有人认领", j14_judges_all_claimed),
+    ("⑯ 书的四件「已被撤回的说法」不许写回正文", j16_retracted_claims),
 ]
 
 
@@ -1152,6 +1192,23 @@ def self_test():
 
         # 对照 14n：**不该红的** —— 沙盒里那份"认领表"覆盖了沙盒 specmap 的那些行
         _green(14, "14n", "每行判据都有人认领")
+
+        # ── 反例 16：往"正文"里**裸写一条已被撤回的说法**（附近无标记）⇒ 判据⑯ 必须红 ──
+        j16p = Path(tmp) / "world-core" / "docs"
+        j16p.mkdir(parents=True, exist_ok=True)
+        j16f = j16p / "sandbox-note.md"
+        back16 = j16f.read_text(encoding="utf-8") if j16f.is_file() else None
+        j16f.write_text("本节说明：共同语言已被证伪。\n", encoding="utf-8", newline="\n")
+        _red(15, "⑯", "正文里裸写了已被撤回的说法")
+        if back16 is None:
+            j16f.unlink()
+        else:
+            j16f.write_text(back16, encoding="utf-8", newline="\n")
+
+        # 对照 16n：**不该红的** —— 同一条说法，但**明写了它已撤回**
+        j16f.write_text("本节说明：共同语言一说**已撤回**（被证伪的是中间语言）。\n", encoding="utf-8", newline="\n")
+        _green(15, "16n", "命中处带「已撤回」标记")
+        j16f.unlink()
 
         # 反面自检：**每条判据都必须有反例**（没有反例的那条＝装饰）
         missing = [jname(i) for i in range(len(JUDGMENTS)) if i not in covered]
