@@ -51,7 +51,7 @@
 | 2 | 每原子的实现／测试／契约三件齐备 | 部分（测试在 `tests/*.rs`，与 src 不同夹） | 同上 |
 | 3 | `deps == import` 且无环 | **在建**：`world-core/tools/module_graph.py` 已落盘（2026-09-27），裸跑 `通过 0 / 失败 3`（含"依赖图有环：M05 → M05"），`--self-test` 正控自己也失败 ⇒ **尚未可用**，**尚未入库** | 同件第 12 组 ＋ 该工具自证转绿 |
 | 4 | 生成物与源一致（`WC-MODREG-001`） | 未建闸 | 同上 |
-| 5 | 编码 UTF-8 无 BOM | **半建**：非法 UTF-8／NUL／控制字符**已拦**（`world-core/tools/plain_text_audit.py`）；**BOM 未拦**——实测 `audit_bytes(b"\xef\xbb\xbfhello\n")` 返回 `(True,'ok')`，该脚本只在 UTF-16LE BOM 上因"非法 UTF-8"顺带报错 ⇒ **BOM 这条今天没有执行者** | 落点：本件 §四 第 5 条改造 `plain_text_audit.py`（加一条 BOM 判据＋反例），**不进 `cover-*`**（它属工具改造，见 `WC-ATOM-001` 的原子侧落点） |
+| 5 | 编码 UTF-8 无 BOM | **已建**：非法 UTF-8／NUL／控制字符**已拦**；**BOM 已拦**——`plain_text_audit.py` 的 `audit_bytes` 现在对 `b"\xef\xbb\xbf…"` 返回 `(False, '带 UTF-8 BOM（…）……去掉即可')`，`--self-test` 里配了反例（带 BOM ⇒ 必判红）。**2026-09-28 实测**：仓内自己文档的 BOM 已全部清掉，全仓仅剩 `world-core/tools/rustfmt.ps1` 一处**刻意保留**（`.gitattributes` 要求 `*.ps1` 必须带 BOM） | 落点：`world-core/tools/plain_text_audit.py`（判据＋反例）、`check.sh` 第 ⑤ 步 |
 
 > **不写"做了"就是没做**：上表第 1–4 条今天**没有执行者**，故本件不声明它们已生效——按本项目规矩（书 L5/L6 的分界）它们是"**规格已定、只差做到**"，进覆盖 change 的 `## L5 覆盖边界`。
 
