@@ -161,6 +161,100 @@
 每条用「措辞写宽／写窄／证据错位／与文档冲突」四类**之一**标出，
 并在需要时说明它**不是**"能力有没有"的问题。
 
+## 从规格正文移出的改因块（正文净化的落点）
+
+> 出处：`.agents/skills/worldcore-sdd/SKILL.md` §三「文档里写什么、不写什么」——**规格正文只写"世界必须怎样"**；
+> 改因块是**过程证据**，归本 change 的 `design.md`／`audit.md`。
+> 落地：`openspec/specs/**` 六份主规格与 `specs/**` 六份 delta 里的改因块**逐块删除**
+> （实测：每棵树 **33 块**、块头行 **76 行**，两棵树的内容逐字节相同）；
+> 形态门禁的 `Requirement text is very long` 由 **28 条降到 1 条**，剩下那 1 条是本 change 要求逐条写全的
+> 11 条排版契约本身（`projections` 的 `视觉投影的排版是可审计契约`，527 字符），**不是改因块**，
+> 故保留在第 2 类阈值之上而不拆条（拆条会新增 Requirement 标题，判据④ 的编号桥随之失配）。
+> **删前逐块回源核验**：同一事实已在 `audit.md`（逐条的 C／E／G／L／P／R 编号）／本件 §Decisions D-3／
+> `tasks.md` 第 2–5 组／`proposal.md` 现象证据表里的，按**删复述**处置；**别处没有的，整块搬到这里**。
+
+### 一、别处没有对应记载、整块搬来的三块（逐字）
+
+这三块是**唯三**自报「`audit.md` 未单列此条」的块——除规格正文外，本 change 没有任何产物记过它们。
+逐字搬来如下（原文同时位于 `openspec/specs/<能力>/spec.md` 与 delta 同名文件的同一位置）：
+
+**① 能力 `envelope-validation` · Requirement `事件身份在进程内唯一` 之下**
+
+```text
+> **改的是哪一类问题**：① 措辞写宽后的**范围收窄**——原文已有「同一进程内」限定，
+> 本条**只补"跨重启不保证"这半边**，不改结论强度。`audit.md` 未单列此条。
+>
+> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs:245-248` 逐字
+> 「`new_id()` = 纳秒 + 进程内计数器；计数器每次启动从 0 开始，/ 故"跨重启唯一"依赖纳秒不重复——本测试覆盖**同进程内**的唯一性。」
+> 断言本体在 `:251-256`：2000 次 `new_event` 收进 `BTreeSet` 后断言无重复。
+```
+
+① 自报"只补'跨重启不保证'这半边、不改结论强度"，故 `tasks.md` 未为它立补断言任务；
+它带来的边界条文已写进该 Requirement 的正文（`系统 SHALL NOT 声称跨进程或跨重启的 id 唯一性由本机制保证`）。
+
+**② 能力 `gate-enforcement` · Requirement "`act` 的效果不能靠 `change` 偷渡" 之下**
+
+```text
+> **改的是哪一类问题**：③ 证据错位（证据行未指名出厂步骤，无法核对是否被跑）。
+>
+> `audit.md` 未单列此条；本条改动**只为与上一条的引用口径统一**。
+> `world-core/check.sh:103` 逐字 `cargo test --locked --test contract`，`c01` 在其中。
+>
+> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs::c01_change_is_gated_and_cannot_smuggle_an_act`
+> 位于 `--test contract` 全套之内，由 `world-core/check.sh` 第 ③b 步（`:103`）执行。
+```
+
+**③ 能力 `gate-enforcement` · Requirement `运行中的世界不重读策略` 之下**
+
+```text
+> **改的是哪一类问题**：③ 证据错位（证据行未给路径，且该测试不在所标步骤内）。
+> 本条**内容不改**，只修引用口径。
+>
+> `audit.md` 未单列此条；`world-core/policy.json:8` 逐字
+> `    "策略在启动时一次读入内存，运行中不重读：磁盘上改了要重启才生效（消除『运行中改规则』的窗口）",`
+> 与本条是同一件事。
+>
+> **证据是哪条测试的哪个断言**：`world-core/tests/acceptance.rs::t13_running_world_does_not_reread_policy`
+> ——同样**不在** `world-core/check.sh` 的步骤 ③ 内（`:98` 只选 `t1_ t2_ t7_`）。
+```
+
+② 的 `check.sh:103` 与本件 §Context 第 5 条同源；③ 的"出厂脚本同名两处、步骤号要对上"与
+§影响分析「需重跑的测试」③ 同源。三块的结论都已在净化后的正文里成条，搬来的只是**它们的出处与行号**。
+
+### 二、只在该块里出现过的引用（逐条移来，供复核）
+
+下列 `path:line` **只出现在被删的改因块里**：`audit.md`／本件／`proposal.md`／`tasks.md`
+与净化后的规格正文都不再含它们。其中多数在 `audit.md` 或本件里以**更宽的行号区间或更粗的指代**记载，
+下面保留的是块里的**原始粒度**，以免核验时对不上：
+
+- `world-core/tests/contract.rs:245-248`、`:251-256`（见 §一 ①）
+- `world-core/policy.json:8`（见 §一 ③）
+- `world-core/tests/contract.rs::c11_irreversible_is_owner_only_and_the_refusal_does_not_lie`
+  ——`gate-enforcement` 不可逆那条的**断言侧第二条**（`audit.md` G1／G2 未列该函数名）
+- `world-core/tests/acceptance.rs:298-299`／`:316-317`／`:321-322`
+  ——`t8` 三类拒绝面的**断言行号**（`audit.md` R2 只说"三类"，未给行号）
+- `world-core/src/main.rs:389-395` —— CLI 把读模型拒绝转成 `rc=2` 的逐字
+- `world-core/tests/contract.rs:224-227` —— `c04` 只测"缺文件"的那一段（`audit.md` E3② 未给行号）
+- `world-core/tests/contract.rs:770-776` —— `c15` 的码断言本体（`audit.md` E1 给的是七条码来源的行号）
+- `world-core/tests/acceptance.rs:158-159` —— `t5` 的断言本体（`audit.md` E2／E5 未给行号）
+- `world-core/src/ledger.rs:280-289` —— `set_len(keep)` 落盘处（`audit.md` L3 给的是 `276-289`）
+- `world-core/src/ledger.rs:518-519` —— `is_chained()` 访问器（排除清单第 2 条给的是 `:506`）
+- `world-core/src/project/mod.rs:126-131` —— 三个不等分支的第一支（`audit.md` P1 给的是 `126-145`）
+- `world-core/tools/system_acceptance.sh:314`／`:342-344` —— ㉔–㉖ 的 `setpriv` 守卫行与 `else` 分支
+  （§影响分析只写"缺 `setpriv` 或非 root 时整段不执行"这一事实，未给行号）
+- `world-core/tools/visual_layout_audit.py:17-29` —— 契约表的行号（`audit.md` P6 给的是 `15-32`）
+- `world-core/docs/理论/语义世界-理论书-第一版-合订.md:2312` —— 框架 5.2 行（`audit.md` P2 引的是第四章 `:192`）
+- `world-core/policy.json:38` —— `allow` 表（`audit.md` G2 给的是 `policy.json:32`）
+
+**其余 30 块按"删复述"处置**（每块的同一事实在本 change 的产物里都有落点）：
+
+- **改因与问题类别**：`audit.md` 的对应条目（C1–C6／E1–E8／G1–G6／L1–L9／P1–P7／R1–R10，
+  每条自带"原文怎么写／实测是什么"与逐字引文）；类别口径见 §Decisions D-7 与
+  `proposal.md` §What Changes 的四类表。
+- **为什么用 `## ADDED`**：§Decisions D-3（"不新增能力，只声明该既有能力的边界"这一句的权威载体）。
+- **"需补断言（列进 tasks）"**：`tasks.md` 第 2–5 组逐条在册。
+- **证据与实现的行号**：`audit.md` 各条目；与块里的引文同源，行号粒度的差异已逐条列在 §二。
+
 ## Risks / Trade-offs
 
 - **[风险] 改规格措辞而代码不动，会让"规格说 A、实现做 B"** →

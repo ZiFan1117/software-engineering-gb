@@ -201,7 +201,7 @@
 
 ### §4.3 契约的生效条件（不假装已生效）
 
-本契约曾在既有文档中被判定为**须按模块分册**（裁决留痕见附录 A 附录 A 头部「生效条件与形态裁决」与 §6 #1；那是**历史**——按本文件当前形态，接口契约**一册分节**：总则在 §1–§4，`M01`–`M10` 各一节在 §5）。因此：
+本契约曾在既有文档中被判定为**须按模块分册**（裁决留痕见附录 A 头部「生效条件与形态裁决」与 §6 #1；那是**历史**——按本文件当前形态，接口契约**一册分节**：总则在 §1–§4，`M01`–`M10` 各一节在 §5）。因此：
 
 1. 本主文 §3（逐接口契约）与 §5（模块接口契约）**只登记已经实现的接口形状**，**不主张**任何模块的接口契约已生效；
 2. 本契约随 `framework/v0.1` 冻结、并经 **R2** 通过之前，引用本文件时必须同时引用本生效条件，不得截取 §3/§5 的表格作为「契约已冻结」的证据。
@@ -721,7 +721,7 @@
 | 本文件 §2.5 / §2.5.1 | 文法与规范化规则 | 本文件 |
 | `WC-LLD-001` §六 | `visual.rs` / `language.rs` 的渲染与解析规则 | **实存** |
 | `WC-HLD-001` §6.4（`IF-004` 行） | `IF-004` 的形态标注"文本（可审计排版）" | **实存**（`WC-HLD-001:331`） |
-| `WC-PFMT-001-v0.1` 协议/格式说明 | 行结构与字段集、编码与转义（A-2） | ⚠ **待建**（并行起草中，见 §8） |
+| `WC-PFMT-001-v0.1` 协议/格式说明 | 行结构与字段集、编码与转义（A-2） | ⚠ **待建**（并行起草中，见 §七） |
 | `WC-UT-001` / `WC-TS-001` | **字节级期望样本用例** | ⚠ **当前无验证面**——`WC-R4-DISP-001` §二 G 组第 2 行要求增"独立于同模块 `parse()`"的排版用例；本契约**不**声称已完成（`WC-LLD-001` §六已补期望样本，见该文件） |
 
 **不变量**：① 渲染函数**只接受 `(&State, world, vocab)`**、返回 `String`——
@@ -762,7 +762,7 @@
 | 有去重吗 | **没有**。任何一层都不按 `request_id` 去重（见 §四 `IF-D-05`） |
 
 **契约规定（本次落定，与实现一致）**：调用方若要把应答与请求配对，**必须**在 `act` 的 `body.request_id` 里自带请求号，并从成功应答的 `event.body.request_id`（或失败时账本里的 `notice.body.payload.request_id`）读回；`change` / `notice` **没有**配对字段。
-⚠ **`request_id` 目前不产生任何幂等效果**——它只是一个可被抄进流水的标识；真正的幂等键语义若要做，属 `WC-IRS-001`（**待建**，见 §8）的接口需求 **加上**代码变更，走 R5。
+⚠ **`request_id` 目前不产生任何幂等效果**——它只是一个可被抄进流水的标识；真正的幂等键语义若要做，属 `WC-IRS-001`（**待建**，见 §七）的接口需求 **加上**代码变更，走 R5。
 
 **不变量**：① 身份来自**内核**（套接字文件权限：`bind()` 后 `chmod 0600` + `chown` 给目标 uid，并拒绝在 group/other 可写目录里建），**不来自请求自称**；② 落笔必须经 `World::commit`（通道**没有**第二条写入路径）；③ `channel.json` 的 `listeners` **为空即拒载**（"无门之门"，`ext.world.Channel.NoListeners`）；④ **v1 一次一连接**：`serve_once` 处理完一个连接即返回，**长驻服务与并发未实现**（与单写者锁的交互登记为 `DEBT-03`）。
 
@@ -1019,7 +1019,7 @@ D 组第 2 行要求"**展开 `Guard.*` / `Policy.*` 的叶子码**"。**实测�
 |---|---|
 | 上游 | `WC-HLD-001 §6`（接口设计的权威来源）、`WC-SRS-001`、`WC-MODREG-001`（**§2 是模块号唯一出处**）、`WC-CR-002`（⛔ **D1 已被否决**，见 §4.3） |
 | 下游 | `WC-LLD-001`（详细设计）、`WC-TS-001`（测试用例）、`WC-RTM-001`（F-015/016/017/018/019/020、N-001 的接口编号列——⚠ **回填 `WC-RTM-001.csv` 不在本文件内**，登记为待办：D 组第 3 行要求"回填 RTM 接口编号列"） |
-| 代码（2026-09-27 逐文件实测，**不用花括号简写**） | `world-core/src/` **扁平 14 个文件**：`lib.rs`、`main.rs`、`ledger.rs`、`gate.rs`、`guard.rs`、`ontology.rs`、`readmodel.rs`、`checkpoint.rs`、`channel.rs`、`event.rs`、`error.rs` + `src/project/` 下 `mod.rs`、`language.rs`、`visual.rs`。**原写 `src/{ledger,gate,guard,ontology,readmodel,lib,project/*}.rs` 不准确**：它漏了 `main.rs`/`checkpoint.rs`/`channel.rs`/`event.rs`/`error.rs`，并把 `src/project/*` 与顶层文件混在一个花括号里。另：`world-core/tests/` 有 `acceptance.rs`、`contract.rs`、`cli.rs`、`perf.rs`；根目录有 `ontology.json`、`policy.json`、`check.sh`、`Cargo.toml`、`Cargo.lock`、`.scope-declaration.json`（⚠ **根目录无 `channel.json`**，见 §8 备注） |
+| 代码（2026-09-27 逐文件实测，**不用花括号简写**） | `world-core/src/` **扁平 14 个文件**：`lib.rs`、`main.rs`、`ledger.rs`、`gate.rs`、`guard.rs`、`ontology.rs`、`readmodel.rs`、`checkpoint.rs`、`channel.rs`、`event.rs`、`error.rs` + `src/project/` 下 `mod.rs`、`language.rs`、`visual.rs`。**原写 `src/{ledger,gate,guard,ontology,readmodel,lib,project/*}.rs` 不准确**：它漏了 `main.rs`/`checkpoint.rs`/`channel.rs`/`event.rs`/`error.rs`，并把 `src/project/*` 与顶层文件混在一个花括号里。另：`world-core/tests/` 有 `acceptance.rs`、`contract.rs`、`cli.rs`、`perf.rs`；根目录有 `ontology.json`、`policy.json`、`check.sh`、`Cargo.toml`、`Cargo.lock`、`.scope-declaration.json`（⚠ **根目录无 `channel.json`**，见 §七 备注） |
 
 ---
 
