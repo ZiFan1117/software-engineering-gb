@@ -124,8 +124,24 @@ description: 语义世界／world-core 的**软件开发 skill**（我们自己�
 ## 十三、操作层的坑（省你半小时）
 
 - **多行提交信息一律 `git commit -F <文件>`**。用 `-m "多行…"` 会被 PowerShell 拆坏：实测一次把消息里的 `--locked` 当成 git 选项、一次把后半段当成 pathspec。
+- **PowerShell 不支持 heredoc**：命令里留一句 `<<'X'` 会让**整条命令解析失败**（实测踩过三次）。要么用 `-F <文件>`，要么写脚本文件。
 - **PowerShell 变量名大小写不敏感**：`$b` 与 `$B` **是同一个变量**（曾因此静默毁掉一次对照循环）。
 - **中文串里别用 ASCII 双引号**：Python 源码里写中文时用「」，否则不是语法错就是引号提前闭合。
+
+### 读数环境三坑（**都不是被测对象的毛病，是"读数方式"的毛病——最容易产出假证**）
+
+| 坑 | 长什么样 | 怎么破 |
+|---|---|---|
+| **管道改写编码** | `prog --json \| python -c "json.load(sys.stdin)"` ⇒ PowerShell 在管道里**重新编码**，Python 报 `Unexpected UTF-8 BOM` | **别用外壳管道传结构化输出**；**用单进程 Python**：`subprocess.run([...], capture_output=True)` 然后自己 `decode('utf-8')` |
+| **`>` 换编码** | `prog --json > f.json` ⇒ PowerShell 的 `>` **默认写 UTF-16LE**，读回时 `0xff` 开头 | 用 `Out-File -Encoding utf8`（注意 5.1 会加 BOM）或**干脆不落盘**；要落盘就让**被调用的程序自己写** |
+| **相对路径换基准** | `[System.IO.File]::WriteAllText('openspec\x.py', …)` 写到了 `D:\Code\x.py`（.NET 的相对路径基准是**进程 cwd**，不是 PowerShell 的位置） | **一律绝对路径**；改完立刻回读 |
+| （第四种）**命令不存在被当通过** | Windows 上 `openspec` 是 `.cmd/.ps1` 壳，`subprocess` 直调 `FileNotFoundError` | 解析 `shutil.which(name+'.cmd')`；**解析不到必须显式报错**，不许静默跳过 |
+
+**通则**：**"没有输出"不等于"没有问题"**；**"读到的数"要先问一句"它是谁写的、用什么编码写的"**。
+任何"检查通过"的结论，都要能说出它**为什么可能失败**。
+
+### 另有两条与"跑门禁"有关
+
 - **门禁工具的工作目录**：`trace_matrix.py`／`doc_integrity.py` 的缺省路径以 **`world-core/` 为根**（与 `check.sh` 同口径）。在仓根跑会报"输入缺失即未能校验"——**那是我跑错了，不是别人报假**。
 - **长任务（编译、VM 测试）放后台**，别阻塞；但**报告前必须收结果**。
 
