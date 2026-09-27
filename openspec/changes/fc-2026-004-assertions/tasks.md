@@ -46,16 +46,16 @@
 - [ ] 4.4 把 `t1` 的"逐字段一致"补全：逐个断言 `actor`／`id`／`at`／`flags`／`body.subject`／`body.path`／`body.after`（今天只比 `len`／`seq`／`world`／`kind`／`body.before`）。**验收**：新增断言 ≥ 7 条；变异（改 `world-core/src/event.rs` 的某个字段构造）⇒ 至少一条变红。
 
 - [ ] 4.5 把 `t2` 的证据层级修正为**真跨进程**：把"新进程"这一层挂到 `world-core/tools/s1_sys_probe2.sh` 的 `TC-070`（`:379-383`，由 `world-core/check.sh:145` 执行），并在 `t2` 的文档注里写明它是同进程 drop + reopen。**验收**：`bash tools/s1_sys_probe2.sh` 通过；`t2` 的注释与规格一致。
-
+      **★ 行号订正（2026-09-28，断言工区 B 实测）**：`TC-070` 在 `world-core/tools/s1_sys_probe2.sh:413-422`（原写 `:379-383` 落在 `TC-067` 里），由 `world-core/check.sh:161`（**步骤 ⑦**）执行（原写 `:145` 是步骤 ⑥ 的注释行）。⇒ **引用一律写"命令 ＋ 步骤名"，不写行号**（行号会烂）。
 - [ ] 4.6 补一条断言固定"截到最后一个 `\n`"这条边界：末行是**完整合法 JSON 但缺末尾换行** ⇒ 被截掉且 `seq` 被复用。**验收**：断言存在且为绿；出处 `world-core/src/ledger.rs:276-289` 与实现自述 `:385`。
 
 - [ ] 4.7 补一条断言固定单写者锁的**反向失效**：pid 号被复用时持有者已不存在却不会被回收。**验收**：断言存在（若不便构造，则在本 change 的 `review.md` R5 节登记为"不可机核"）；出处 `world-core/src/ledger.rs:182-184`。
 
-- [ ] 4.8 补建 `spec_bridge.py` 的**证据链机械门禁**：把 `openspec/**` 纳入受控清单，使"改一个测试名 ⇒ 规格变红"成立。**验收**：`spec_bridge.py --self-test` 会红（先证会红）；交付物落 `world-core/tools/**`。**⚠ 该脚本不属本 change 的写入范围**（`design.md` §排除清单第 7 条）⇒ 本任务只登记与验收，实施另立 change。
-
-## 5. 补断言 · 投影与读模型
-
-- [ ] 5.1 补一条断言固定 `project check` 的**判据只剩头部四项**：让两份投影在内容上不一致（一方少渲一半主体）而头部四项相同 ⇒ 命令**仍然报绿**。**验收**：断言存在且为绿（它固定的是边界）；出处 `world-core/src/project/mod.rs:124-145`。
+- [x] 4.8 **证据链机械门禁 —— 已由 `spec_bridge.py` 判据② 承担**（2026-09-28 核）
+      **实测**：`def j2_evidence`（`world-core/tools/spec_bridge.py:165`）扫 `openspec/specs/**` **＋ 所有 delta**（`openspec/changes/**/specs/**/spec.md`），判"证据行的 token 必须指向真实存在的函数/脚本"；
+      `spec_bridge.py --self-test` 里两条反例逐字：`反例②a（**主规格**证据函数不存在 => 判据② 应红）：已红 OK`、`反例②b（**delta** 证据行指向不存在的函数 => 判据② 应红）：已红 OK` ⇒ **"改一个测试名 ⇒ 规格变红"当天即成立，"先证会红"亦有反例**。
+      **★ 订正**：本条原引「`design.md` §排除清单第 7 条」——**该条不存在**（该节只有 2 条：不改 `src/**` 行为／不动书与规格），系**假引用**（由断言工区 B 实测发现，执行者复核成立）。**故本条不是"范围外而搁置"，而是"已由判据② 承担"。**
+      **验收**：`python world-core/tools/spec_bridge.py --self-test` ⇒ rc=0 且含上列两条反例；`spec_bridge.py` 正跑判据② **[OK]**。
 
 - [ ] 5.2 补一条断言固定"三个不等分支在命令路径上不可达"：断言 `project check` 的两份投影取自同一 `state` 与同一 `vocab`。**验收**：断言存在；出处 `world-core/src/main.rs:408-410`。
 
@@ -65,8 +65,9 @@
 
 - [ ] 5.5 补一条断言：CLI 用法串里列出 `checkpoint write|verify|resume` 三条子命令。**验收**：断言存在；出处 `world-core/src/main.rs:28-30` 与 `:153`。
 
-- [ ] 5.6 为 `REQ-N-008`（带检查点续算 ≤ 全量重算的 1/2）在本 change 的 `review.md` R5 节登记为**范围外、未实现、无断言**，不补测试。**验收**：`review.md`（由人填）里有该范围外声明；出处 `WC-SRS-001-v0.1.md:112`、`WC-TP-001-v0.1.md:80`。
-
+- [ ] 5.6 **待人填**（作者／评审席）：为 `REQ-N-008`（带检查点续算 ≤ 全量重算的 1/2）在 `fc-2026-004-assertions` 的 `review.md` R5 节登记为**范围外、未实现、无断言**。
+      **★ 订正（2026-09-28）**：本条原文自己写着「`review.md`（**由人填**）」——而该 change 目录下**没有 `review.md`**（只有 `.openspec.yaml`／`design.md`／`proposal.md`／`tasks.md`），且评审记录按本仓口径**由人备料与签署**。
+      ⇒ **它不是 agent 能完成的活**：**保持未勾**，等人在 `review.md` 落笔后由签署人勾。**不许代填。**
 ## 6. 验证与取证（跨组的整体验收）
 
 - [ ] 6.1 形态门禁：在仓库根跑 `openspec validate fc-2026-002-spec-revisions --strict`，把**原始输出**抄回。**验收**：输出为 `Change 'fc-2026-002-spec-revisions' is valid`、`rc=0`。
