@@ -204,6 +204,20 @@
       **★ 已满足（2026-09-28 验证）**：VM 现取：`bash check.sh` **rc=0**（`✅`／`❌` 数与步数现取）、`cargo test --locked` **rc=0** ⇒ **已满足**。
 - [ ] 6.5 本件走独立评审席评审；评审通过后按作者指示签字，再归档
 
+      **★ 已签档的读数复核（2026-09-28，`429155a` 时点，逐项现取）** —— **`review.md` 一个数都没改**（它是评审席核过的对象，事后改它就不一致了）；
+      复核结论：**签下的每一个数今天都仍然成立** ✓
+      | 档里写的 | 现取 | 命令 |
+      |---|---|---|
+      | 合计 **49 Requirement／87 Scenario／98 证据行** | **49／87／98** ✓ | `python world-core/tools/spec_length_audit.py` |
+      | `1.3` 面**无不符** | **`1.3` 面不符的能力：无 ✓** | 同上 |
+      | 长 Requirement **9**（改前快照 **10**） | **9**（快照 **10**）✓ | 同上 `--json` ＋ `spec-counts-before.json` |
+      | CLI `very long` **6** | **6** ✓ | `openspec validate --all --strict` |
+      | 守卫 **16/0** | **16/0** ✓ | `python world-core/tools/spec_bridge.py` |
+      | `module_graph` **3/0** | **3/0** ✓ | `python world-core/tools/module_graph.py` |
+      | VM `check.sh` **42 ✅／0 ❌**、`cargo test` **16 target** | **42／0** ✓、**16／0 FAILED** ✓ | VM 上 `bash check.sh`／`cargo test --locked` |
+      **⇒ 意义**：签名是**对"那个对象＋那些读数"**下的；本笔证明**那些读数不是一次性的**（换个时点、换台机器仍成立 ⇒ 不是"当时刚好绿"）。
+
+
 
 ## 5 之注：**这四条为什么有意不勾**（2026-09-28 立，与 `cover-remaining-capabilities` 的 `8.x` **同处置**）
 让路登记的**文字**已写全（守卫**判据⑦** 当场 `[OK]`），但**追认还没到**——**勾上会被读成"批准已到"** ✗。
