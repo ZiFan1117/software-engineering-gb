@@ -1,0 +1,10 @@
+{
+  "capability": "notice.mute",
+  "provider": "backlight",
+  "verbs": ["get", "set"],
+  "risk": "low",
+  "undo": "never",
+  "confirm": "never",
+  "sandbox": "none",
+  "_comment": "背光：低危、可逆。**注意能力名用语义层的名字**（notice.mute 对应世界里的『静音一条通知』），不是设备名。"
+}

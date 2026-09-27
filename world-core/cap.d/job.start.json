@@ -1,0 +1,10 @@
+{
+  "capability": "job.start",
+  "provider": "job",
+  "verbs": ["start", "status", "list"],
+  "risk": "low",
+  "undo": "never",
+  "confirm": "never",
+  "sandbox": "none",
+  "_comment": "长任务：起任务即返回，完工后由等待者把结果写成一条**结果事件**。待办不另立登记簿——『哪些活没干完』由账本折叠回答。"
+}

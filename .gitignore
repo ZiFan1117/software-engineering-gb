@@ -1,0 +1,9 @@
+# 上游参考仓库（研究素材，不随本仓库跟踪）
+omarchy/
+omarchy-pkgs/
+refs/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/

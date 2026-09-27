@@ -1,0 +1,50 @@
+{
+  "_comment": "WC 出厂本体 v0.1 —— 世界的『法律』（出厂设置）。纯文本 JSON，语言无关。",
+  "_source": "依据 07/2-依据/14-总线词表v0.md §2.2/§三",
+
+  "world": 1,
+
+  "envelope": {
+    "_comment": "一条事件的外壳（信封）—— 机制只看这一层，不看信纸",
+    "required": ["world", "kind", "id", "seq", "at", "actor", "flags", "body"],
+    "optional": ["to", "trace"],
+    "fields": {
+      "world": "integer  # 词表版本；只加 flags，永不改这个数的含义",
+      "kind": "enum(change, act, notice)  # 三个家族",
+      "id": "string  # 事件自身身份（去重）",
+      "seq": "integer  # 在账本中的位置，全局单增，由世界分配",
+      "at": "integer  # 时间戳，Unix 秒。顺序由 seq 决定，at 只作辅助",
+      "actor": "string  # 世界内身份，如 world://user",
+      "to": "string  # 目的地；空 = 广播",
+      "trace": "string  # 因果：引发本条的那条事件的 id",
+      "flags": "array  # 能力旗标；未知旗标必须忽略",
+      "body": "object  # 三个家族各自的信纸"
+    }
+  },
+
+  "families": {
+    "change": {
+      "_comment": "变更：世界状态发生了变化",
+      "required": ["subject", "path", "before", "after"],
+      "optional": []
+    },
+    "act": {
+      "_comment": "动作：请求 → 结果（结果本身也是事件）",
+      "required": ["capability", "verb", "request_id"],
+      "optional": ["params"]
+    },
+    "notice": {
+      "_comment": "通告：发生了什么（完工铃等）",
+      "required": ["type", "subject"],
+      "optional": ["payload"]
+    }
+  },
+
+  "concepts": {
+    "_comment": "世界里有哪些实体、各有哪些字段（最小集；扩展走账本里的词表定义事件）",
+    "notice": { "fields": { "muted": "bool" } },
+    "job": { "fields": { "status": "enum(todo,doing,done)" } }
+  },
+
+  "flags": []
+}

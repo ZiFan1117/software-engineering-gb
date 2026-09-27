@@ -1,0 +1,6 @@
+# 二进制与本地产物
+/agentd/
+agentd.exe
+*.test
+*.jsonl
+jobs.json

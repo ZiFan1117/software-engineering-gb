@@ -1,0 +1,10 @@
+{
+  "capability": "ledger.compact",
+  "provider": "package",
+  "verbs": ["list", "install"],
+  "risk": "high",
+  "undo": "before-each",
+  "confirm": "required",
+  "sandbox": "none",
+  "_comment": "高危：动手前先做**载体撤销点**（记下当前包清单），并要求人确认。载体撤销撤的是文件系统的字节，**不是世界状态**。"
+}

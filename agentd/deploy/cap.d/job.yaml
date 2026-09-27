@@ -1,0 +1,7 @@
+# /etc/agent/cap.d/job.yaml —— 完工铃：登记长任务，零轮询
+capability: job.start
+provider: job
+verbs: [start, status, list]
+risk: low
+audit: always
+snapshot: never

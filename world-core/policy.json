@@ -1,0 +1,40 @@
+{
+  "_comment": "WC 出厂门禁策略 —— 世界『法律』的另一半：谁能做什么、哪些不可逆。纯文本 JSON，语言无关。",
+  "_source": "依据 07/2-依据/15-世界核心的组成与职责.md（门禁）+ WC-SRS-001 REQ-F-015/016/017",
+  "_status": "【候选·v0.1】能力清单为 AI 起草的候选值，不是需求方给定的；正式能力表由 S2 的 WC-CAP-001 冻结（框架基线），冻结后变更走 R5",
+  "_invariants": [
+    "本文件是『法律』：改它等于改契约，走 R5 框架变更评审",
+    "本文件与账本所在处不得对 group/other 可写，否则世界核心拒绝启动（src/guard.rs）",
+    "策略在启动时一次读入内存，运行中不重读：磁盘上改了要重启才生效（消除『运行中改规则』的窗口）",
+    "capabilities 里没有的能力一律**不放行**（默认拒绝，不是默认允许）"
+  ],
+
+  "policy": 1,
+
+  "capabilities": {
+    "notice.mute":     { "reversible": true },
+    "notice.unmute":   { "reversible": true },
+    "job.start":       { "reversible": true },
+    "job.finish":      { "reversible": true },
+    "job.cancel":      { "reversible": true },
+    "ledger.compact":  { "reversible": false },
+    "world.rekey":     { "reversible": false },
+    "world.migrate":   { "reversible": false }
+  },
+
+  "writes": {
+    "_comment": "谁可以写哪些主体（change 家族的授权）。默认拒绝：未列出的主体不得写任何主体。人（世界的主人）对其世界有主权；agent 只能通过 act 请求，由世界代它落 change。",
+    "_why": "2026-09-26 由安全评审发现 S-01：change 才是真正的状态写原语，此前它不过门禁 —— 于是被拒绝的 act 可以用 change 静默达成。此段即为补上的闸。",
+    "world://user": ["world://*"],
+    "world://core": ["world://*"],
+    "world://agent/*": []
+  },
+  "irreversible_actors": ["world://user"],
+  "_irreversible_note": "v1 没有审批通道：不可逆动作**只允许**这里列出的主体执行。其他主体会收到 AwaitApproval，且理由里明说『不要等批准』——避免让人以为等等就能批（WC-RV-R2-001 FIND-12/DEBT-07）。",
+
+  "subjects": {
+    "_comment": "主体白名单；结尾 * 表示前缀匹配（如 world://agent/* 覆盖所有 agent）",
+    "_why_core": "2026-09-27 补：`world://core` 是 `writes` 里**唯一被授权可写任意主体**的主体（见上），却不在本白名单内 ⇒ **出厂策略自身不自洽**，且世界核心连自己记一条通告都要被拒。补入本表使策略自洽。",
+    "allow": ["world://user", "world://core", "world://agent/*"]
+  }
+}

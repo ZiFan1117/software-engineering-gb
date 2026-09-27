@@ -1,0 +1,33 @@
+# 本机 core.autocrlf=true，检出时默认会把文本转成 CRLF。
+# 但 shell 脚本一律不得带 CRLF：本项目的工作流是把**工作区**的 .sh 用 base64
+# 直接送进 Linux VM 执行（见 D:\vm\安装报告-2026-09-25.md §五），
+# CRLF 会让 bash 报 `$'\r': command not found`。
+# ⚠️ 先保护本文件自己：`.gitattributes` 若以 CRLF 检出，下面的模式会带上尾部 CR 而**整体失效**（2026-09-27 加）
+.gitattributes text eol=lf
+
+*.sh text eol=lf
+
+# ── 源码与配置一律 LF ────────────────────────────────────────────────
+# 理由：**构建与运行都在 Linux VM 内**（D:\Code 只负责"写"）。
+# 本机 autocrlf=true 会把工作区 checkout 成 CRLF，制造满屏警告，
+# 也让"本地文件 md5 vs VM 文件 md5"这类忠实性核对出现假差异
+# （2026-09-26 收编 agentd 丢铃修复时实际踩到，见 WC-CR-001 §3.2）。
+# 这些格式用 LF 是安全的、也是唯一一致的表示。
+*.rs    text eol=lf
+*.toml  text eol=lf
+*.json  text eol=lf
+*.jsonl text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.py    text eol=lf
+*.csv   text eol=lf
+# ⚠️ .ps1 必须**带 UTF-8 BOM**（本行只管行尾，管不了 BOM，故在此声明纪律）：
+#    本机默认 shell 是 Windows PowerShell 5.1，它对无 BOM 的 .ps1 按 ANSI(GBK)
+#    解码，含中文注释的脚本会解析失败（报 Unrecognized token in source text）。
+#    2026-09-26 实测踩到，见 world-core/tools/rustfmt.ps1 头部说明。
+*.ps1   text eol=lf
+Cargo.lock text eol=lf
+# ⚠️ 2026-09-27 增（G-25）：此前 *.md 未声明 ⇒ Windows 工作区被 core.autocrlf 转成 CRLF，
+#    导致同一份文件「工作区字节」与「仓库字节」算出两个不同的 SHA-256（冻结摘要口径二义）。
+#    实测（git ls-files --eol 全 156 个追踪文件（w/lf 147、w/crlf 6、w/mixed 3，截至 3a6b342） + 真跑 git add --renormalize .）：本条对内容地址影响为 0。
+*.md    text eol=lf
