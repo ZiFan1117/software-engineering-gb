@@ -34,7 +34,7 @@ cargo build --locked --release
 |---|---|
 | **机核层守卫（`WC-ATOM-001` §四）今天通过**：真源码环 `M04 ↔ M09` 已按"消回边、保留合法方向"改成 DAG（`src/channel.rs` 用窄接口 `RequestSink`，`src/lib.rs` 为 `World` 实现）——**读数以 `bash check.sh` 与 `python world-core/tools/module_graph.py` 的输出为准，本节不复述数字** | `openspec/BOOK/冲突总账.md` 的"里程碑"一节 |
 | 一批"规格已写、断言未写"的条目：转出到 `openspec/changes/fc-2026-004-assertions/`，**未勾完** | 该 change 的 `tasks.md` |
-| 一批能力**书要求了、实现未落地**（投递与应答、通道资源边界、家族演进、未知旗标、本体命名空间、`trace` 语义、通告的闸、读模型缺格…） | `openspec/changes/cover-unimplemented-capabilities/tasks.md` |
+| **这一批 change 尚未归档**（它承载的九组能力**已落地并有会红的断言**：投递与应答、通道资源边界、家族演进与向前兼容、未知旗标与本体命名空间、`trace` 语义、通告的闸、写侧适配、读法是叶子、读模型缺格）——"落地"与"归档"是两件事，**本表说的是后者** | `openspec/changes/cover-unimplemented-capabilities/tasks.md` |
 | `S5/S6/S7` 之外**没有**别的流程侧文档（文档集封闭，见 skill §二） | — |
 
 **这些限制不是"待办的杂事"，是"这一版不能承诺的事"**——把没做到写成做到，是本项目最忌的一条。

@@ -29,6 +29,26 @@ OUTSIDE = ('audit_checked_refs.py', 'audit_refs_v3.py', 'build_specmap.py', 'bui
 NEG = ('不存在', '（无此 delta）', '无此文件', '零命中')
 EXPL = ('简称', '内部编号', '真名是', '真名', '映射到')
 
+
+def _neg_adjacent(line: str, tok: str, window: int = 60) -> bool:
+    """该引用**紧后面**（同一行、`window` 个字符内）是不是"它不存在"的声明。
+
+    ★ 为什么必须"相邻"（2026-09-28，第三席实证的【洞①】）：旧版只要**行内任意位置**出现
+    `不存在/无此文件/零命中/（无此 delta）` 就把**该行所有引用**一并赦免 ⇒
+    一行里只要提一句"某某不存在"，**同行的真缺口也被放过**（实证：`zz99_ghost_assert` 全仓不存在，
+    却因该行有"不存在"三字被计入"被排除"）。改成相邻窗口后，赦免只覆盖"它"说的那一个引用。
+    """
+    i = line.find('`%s`' % tok)
+    if i < 0:
+        return False
+    tail = line[i + len(tok) + 2: i + len(tok) + 2 + window]
+    # 只看**同一子句**：截到最近的子句分隔符（`；`／`。`／`——`／`|`）为止
+    for sep in ('；', '。', '——', '|'):
+        k = tail.find(sep)
+        if k >= 0:
+            tail = tail[:k]
+    return any(w in tail for w in ('不存在', '无此文件', '零命中', '（无此 delta）'))
+
 SHA = re.compile(r'^[0-9a-f]{7,40}$')
 blocks = re.split(r'(?m)^(?=- \[[ x]\] \d+\.\d+)', t)
 rows = []
@@ -66,8 +86,8 @@ for num, checked, blk in rows:
         why = None
         if any(w in ln for ln in ls for w in EXPL):
             why = '该行是「简称／内部编号 → 真名」的映射说明'
-        elif any(w in ln for ln in ls for w in NEG):
-            why = '该行在声明"它不存在"'
+        elif any(_neg_adjacent(ln, n) for ln in ls):
+            why = '该引用**紧后面**就是"它不存在"的声明（**相邻**判定，不再按整行赦免）'
         if why:
             excl.append('%s ← 名字 `%s`：%s' % (num, n, why))
         else:
@@ -76,8 +96,23 @@ for num, checked, blk in rows:
     for p in sorted(paths):
         cands = [R / p, R / 'world-core' / p, R / 'openspec' / p,
                  R / 'openspec/changes/cover-unimplemented-capabilities' / p]
-        if any(c.exists() for c in cands) or any((R / 'world-core').rglob(Path(p).name)) \
-                or any((R / 'openspec').rglob(Path(p).name)):
+        # ★ 【洞③】收紧（2026-09-28，第三席实证）：**不许**再用「按文件名在整棵树里 rglob」兜底——
+        #   那会把「目录写错」也放过（实证：`world-core/docs/S9-别的/WC-ST-001-v0.1.md` 该目录不存在，
+        #   只因别处有同名件就被静默算作"对得上"）。现在**只认候选根下的真实路径**；
+        #   裸文件名（无目录）另行白名单，`tests/*.rs` 允许按名匹配（条目里常只写文件名）。
+        if any(c.exists() for c in cands):
+            continue
+        # **裸文件名**（条目里常只写 `pairing.rs`／`module_graph.py`）⇒ 按**全仓同名**解析即可（那是合法简写）；
+        # **带目录的路径** ⇒ 必须落在上面那些候选根之一，**不许**再用"别处有同名件"兜底（那正是【洞③】）。
+        if '/' not in p and (any(R.rglob(p)) or any((R / 'world-core').rglob(p))):
+            continue
+        # **通配模式**（含 `*`）不是路径 ⇒ 单列"模式引用"，不计入缺口
+        if '*' in p or '?' in p:
+            excl.append('%s ← 路径 `%s`：通配模式（不是具体路径，不追存在性）' % (num, p))
+            continue
+        # **带目录的简写**（`carrier/mod.rs` 实为 `world-core/src/carrier/mod.rs`）⇒ 允许**后缀匹配**
+        if any(str(x).replace('\\', '/').endswith('/' + p) for x in R.rglob('*') if x.is_file()):
+            excl.append('%s ← 路径 `%s`：带目录的简写（按后缀匹配到真件）' % (num, p))
             continue
         ls = line_of(p)
         why = None
@@ -90,8 +125,8 @@ for num, checked, blk in rows:
                 why = '花括号路径，展开后 %d 个都在' % len(cs)
         if why is None and (Path(p).name in OUTSIDE or ' ' in p):
             why = '仓外工具名或命令串'
-        if why is None and any(w in ln for ln in ls for w in NEG):
-            why = '该行在声明"它不存在"'
+        if why is None and any(_neg_adjacent(ln, p) for ln in ls):
+            why = '该引用**紧后面**就是"它不存在"的声明（**相邻**判定）'
         if why:
             excl.append('%s ← 路径 `%s`：%s' % (num, p, why))
         else:
