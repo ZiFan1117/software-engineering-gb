@@ -10,6 +10,22 @@
       **验收**：改前改后逐能力计数相等（channel-identity 2/4、envelope-validation 6/10、gate-enforcement 7/13、ledger-integrity 8/17、projections 5/7、read-model 5/8）
 - [ ] 1.4 `openspec validate --all --strict` 的 `INFO Requirement text is very long` **从 28 降到 0**（若仍有，逐条说明为什么）
       **验收**：把两次数值抄回来
+      **★ 改前读数（2026-09-28，执行者量；本笔只登记、不改规格）**：
+      · **`1.1` 的验收今天已满足**：`python world-core/tools/spec_bridge.py` ⇒ **`[OK] ⑨ 规格正文无改因块（主规格 ＋ delta）`**
+        （offender **0**）⇒ 判据⑨ 已是绿的。**但**：这不等于 `1.4` 也满足（见下）。
+      · **`1.4` 的改前数**：`openspec validate --all --strict` ⇒ **`INFO Requirement text is very long` 命中 10 行**；
+        另按"**Requirement 正文（标题到下一个 `####`／`###` 之间）> 500 字**"手工量 ⇒ **12 条** ⇒ **两个口径不同，两个数都记**。
+      · **逐条（手工口径，12 条）**：`envelope-validation`「**信封字段的类型按本体的声明判（读路径也判）**」754 字
+        （⚠ **这一条是执行者本批为 `4.1` 新加的**，如实标出）｜`envelope-validation`「REQ-F-027 家族演进与向前兼容」960｜
+        `gate-enforcement`「不可逆动作只允许白名单主体并加摩擦」623｜`gate-enforcement`「闸读得到风险等级…互校」800｜
+        `gate-enforcement`「〔无号〕可逆性判定与出厂配置互校」512｜`ledger-integrity`「〔无号〕一个说法要回答的七个问题」568｜
+        `ontology-extensibility`「REQ-F-030 本体：极小核心 ＋ 命名空间扩展」657｜`projections`「视觉投影的排版是可审计契约」545｜
+        `read-model`「读模型是"一个真相"的检验面之一」521｜`read-model`「〔无号〕声明以外的字段不许落账」**2075**｜
+        `write-side-adaptation`「〔无号〕前值必须带上；翻不出来就报错、不许猜」1155｜`write-side-adaptation`「〔无号〕写侧以被管者身份运行…」1103。
+      · **★ 一条口径提醒（写给下一位动手的人）**：`1.4` 的目标是"**降到 0**"，而 skill §三 的口径是"**不写改因块与对照**"
+        ⇒ 缩短时**删的应当是"为什么这么改"的过程话**，**不许删 Requirement 的规范内容**（边界、SHALL／SHALL NOT 的射程要留）——
+        两者混起来删，就会把 `1.3`（"标题／Scenario／证据行**逐字不动**"）之外的东西一起伤到。
+
 
 ## 2. 流程文档去修订记录（26 处）
 
