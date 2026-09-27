@@ -680,3 +680,68 @@ fn h07_the_declared_inventory_is_mechanically_enumerable() {
         "出厂本体的词表身份被多份文档写死；就地改它必须走契约变更"
     );
 }
+
+/// **h08｜读法覆盖核对**（`TC-077` ／ `REQ-F-032`）——**逐字段**两条 ＋ **反假**一条。
+///
+/// ① **已声明 ⇒ 至少有一份读法可读**：法律（出厂本体）里声明为**必填**的每一个信封格，
+///    **读法覆盖表**（`DeclaredCells`）里都必须有它——不然那一格就没人读（`REQ-F-032` 的正题）。
+/// ② **缺格即报错**：把每一格**逐个**从账本行里拿掉 ⇒ 必须**被拒**、且**点名那一格**（逐字段，不是挑一个代表）。
+/// ③ **反假**（这条是"判据必须会红"的正向证据）：把覆盖表里的某一格**去掉** ⇒
+///    那一格缺失的行**就不再被拒** ⇒ 证明**覆盖表是承重的**；否则上面两条可能只是"什么都拒"的假绿。
+///
+/// 为什么单列一条而不是并进 `h04`：`h04` 钉的是"缺格被拒"的**机制**（含对偶与可选格的边界）；
+/// 本条钉的是**覆盖面**——法律声明的**每一格**都在覆盖里、且覆盖表**不能少一格**。
+#[test]
+fn h08_every_declared_envelope_field_is_covered_and_the_coverage_is_load_bearing() {
+    let dir = tmpdir("h08");
+    let lines = base_ledger(&dir);
+    let ont = Ontology::load(&factory_ontology()).unwrap();
+    let cells = declared_cells(&ont);
+    let declared = ont.envelope_required();
+
+    assert!(
+        !declared.is_empty(),
+        "法律声明的必填格为空 ⇒ 本用例无从判（不许把'没得查'读成'通过'）"
+    );
+
+    // ① 逐字段：法律声明的每一格，读法覆盖里都有它
+    for f in &declared {
+        assert!(
+            cells.envelope_required().iter().any(|c| c == f),
+            "法律声明了 `{f}`，而读法覆盖表（DeclaredCells）里没有它 ⇒ 那一格没人读（`REQ-F-032` 的缺口）"
+        );
+    }
+
+    // ② 逐字段：每一格缺了都必须被拒、且点名它
+    for f in &declared {
+        let mut bad = lines.clone();
+        bad[0].as_object_mut().unwrap().remove(f);
+        match State::fold_declared(&cells, &bad) {
+            Err(e) => assert!(
+                e.contains(&format!("`{f}`")),
+                "缺 `{f}` 被拒了，但报错**没有点名那一格**，实得：{e}"
+            ),
+            Ok(_) => panic!("缺 `{f}` 的账本行**静默通过**了 —— 缺格即报错这条没兜住"),
+        }
+    }
+
+    // ③ 反假：把覆盖表里的某一格去掉 ⇒ 那一格的缺格**不再被拒** ⇒ 覆盖表承重
+    let victim = declared
+        .iter()
+        .find(|f| f.as_str() == "actor")
+        .cloned()
+        .unwrap_or_else(|| declared[0].clone());
+    let reduced: Vec<String> = declared.iter().filter(|f| **f != victim).cloned().collect();
+    let cells_reduced = DeclaredCells::new(reduced, ont.family_required());
+    let mut bad = lines.clone();
+    bad[0].as_object_mut().unwrap().remove(&victim);
+    assert!(
+        State::fold_declared(&cells_reduced, &bad).is_ok(),
+        "覆盖表里已经**去掉**了 `{victim}`，而缺它的行**仍被拒** ⇒ 这条反假证明不了'覆盖表承重'（判据可能是别的东西在拦）"
+    );
+    // 同一条行、**完整**覆盖表 ⇒ 必须被拒（与上面构成对照：差别只在覆盖表）
+    assert!(
+        State::fold_declared(&cells, &bad).is_err(),
+        "同一条行在**完整**覆盖表下必须被拒（否则①②的对照不成立）"
+    );
+}
