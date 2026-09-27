@@ -297,6 +297,50 @@ def j7_waiver_registered(repo):
     return bad
 
 
+REVISION_HEAD_RE = re.compile(r"^#{1,4}\s*[^|]*?(修订记录|变更记录|修订历史)")
+RATIONALE_HEAD_RE = re.compile(r"^> \*\*(改的是哪一类问题|为什么用 ADDED|证据是哪条测试)")
+
+
+def j8_no_revision_log_in_docs(repo):
+    """⑧ 流程文档不许有"修订记录"节（**修订记录＝git 提交历史**）。
+
+    出处：作者指示「那几个文档里面也不要掺和这种什么修订的记录啥的」⇒ `.agents/skills/worldcore-sdd/SKILL.md` §三。
+    为什么单列一条：正文是给读者用的（他要的是"现在是什么"），不是给作者记账用的；
+    掺在一起，读者得在一堆"我曾写错什么"的括号里找那条规矩。
+    **书（`docs/理论/`）除外**——那是作者的作品，其附录体例由作者定。
+    """
+    bad = []
+    docs = Path(repo) / "world-core" / "docs"
+    if not docs.is_dir():
+        return []
+    for f in sorted(docs.rglob("*.md")):
+        if "理论" in f.parts:
+            continue
+        for i, ln in enumerate(f.read_text(encoding="utf-8", errors="replace").split("\n"), 1):
+            if REVISION_HEAD_RE.match(ln.strip()):
+                bad.append("%s:%d —— 有修订记录节「%s」；**修订记录＝git 提交历史**，正文只写「现在是什么」"
+                           % (rel(repo, f), i, ln.strip()[:48]))
+    return bad
+
+
+def j9_no_rationale_in_specs(repo):
+    """⑨ 规格正文不许有"改因块"（改因属该 change 的 `design.md`／`audit.md`）。
+
+    出处：同上 skill §三。实测混在正文里 76 个这样的块，形态门禁因此判 28 条
+    `Requirement text is very long`——**正文只写"世界必须怎样"**。
+    """
+    bad = []
+    specs = Path(repo) / "openspec" / "specs"
+    if not specs.is_dir():
+        return []
+    for f in sorted(specs.rglob("spec.md")):
+        for i, ln in enumerate(f.read_text(encoding="utf-8", errors="replace").split("\n"), 1):
+            if RATIONALE_HEAD_RE.match(ln.strip()):
+                bad.append("%s:%d —— 规格正文里有改因块「%s…」；**改因归该 change 的 `design.md`／`audit.md`**"
+                           % (rel(repo, f), i, ln.strip()[:44]))
+    return bad
+
+
 JUDGMENTS = [
     ("① 归档硬前置（归档目录必须有 review.md）", j1_archive_review),
     ("② 证据存在性（证据行的函数/脚本必须真实存在）", j2_evidence),
@@ -305,6 +349,8 @@ JUDGMENTS = [
     ("⑤ 覆盖在册（cover-* change 未归档且 tasks 有未勾项）", j5_coverage_change),
     ("⑥ 归档件的评审已签（结论 ∈ 批准/通过/有条件通过，且批准人非空）", j6_archived_review_signed),
     ("⑦ 让路登记（声明了「谁让」的件必须写全：让哪一条／为什么／谁批的）", j7_waiver_registered),
+    ("⑧ 流程文档无修订记录（**修订记录＝git 提交历史**；书除外）", j8_no_revision_log_in_docs),
+    ("⑨ 规格正文无改因块（改因归该 change 的 `design.md`／`audit.md`）", j9_no_rationale_in_specs),
 ]
 
 
@@ -446,6 +492,26 @@ def self_test():
         if not ok7:
             failures.append("反例⑦未变红")
         dm.write_text(backup7, encoding="utf-8", newline="\n")
+
+        # 反例 8／9：新规矩的机器项（修订记录／改因块）——**加了违规必须变红**
+        doc8 = Path(tmp) / "world-core/docs/S0-立项/WC-X-001.md"
+        doc8.parent.mkdir(parents=True, exist_ok=True)
+        doc8.write_text("# 沙盒文档\n\n### 修订记录\n\n| 版本 | 改了什么 |\n|---|---|\n| V0.1 | 沙盒 |\n",
+                        encoding="utf-8", newline="\n")
+        ok8 = not run_all(tmp)[7]["ok"]
+        print("  反例⑧（流程文档里出现『修订记录』节 => 判据⑧ 应红）：%s" % ("已红 OK" if ok8 else "*没红"))
+        if not ok8:
+            failures.append("反例⑧未变红")
+        doc8.unlink()
+
+        sp9 = Path(tmp) / "openspec/specs/cap-a/spec.md"
+        backup9 = sp9.read_text(encoding="utf-8")
+        sp9.write_text(backup9 + "\n> **改的是哪一类问题**：沙盒反例。\n", encoding="utf-8", newline="\n")
+        ok9 = not run_all(tmp)[8]["ok"]
+        print("  反例⑨（规格正文里出现『改因块』 => 判据⑨ 应红）：%s" % ("已红 OK" if ok9 else "*没红"))
+        if not ok9:
+            failures.append("反例⑨未变红")
+        sp9.write_text(backup9, encoding="utf-8", newline="\n")
 
     if failures:
         print("  => 自证不通过：%s" % "；".join(failures))
