@@ -1150,14 +1150,27 @@
        "line": 90,
        "when": "让两份投影在**内容**上不一致（例如一方少渲一半主体）、而头部四项相同",
        "then": "`project check` **仍然报绿** —— 本断言证明的是**边界**而不是实现缺陷；",
-       "ev": []
+       "ev": [
+        "world-core/tests/cli.rs",
+        "cli13_project_check_criterion_reads_only_the_header",
+        "world-core/src/project/mod.rs"
+       ]
       },
       {
        "title": "该命令的三个不等分支在命令路径上不可达（边界固定）",
        "line": 98,
        "when": "检查 `world-core/src/main.rs` 的 `project check` 分支如何构造两份投影",
        "then": "两份投影取自**同一个 `state` 与同一个 `vocab`** ⇒ 命令路径上不可能出现\"世界版本不同／",
-       "ev": []
+       "ev": [
+        "world-core/tests/cli.rs",
+        "cli14_project_check_feeds_both_projections_the_same_state_and_vocab",
+        "src/main.rs:408-410",
+        "cmd_project",
+        "open_readonly",
+        "read_model",
+        "vocab_hash",
+        "world-core/src/main.rs"
+       ]
       }
      ]
     },
@@ -3263,7 +3276,7 @@
   "caps": 9,
   "reqs": 48,
   "scns": 85,
-  "evs": 114,
+  "evs": 125,
   "srs": 41,
   "judges": 17,
   "booksecs": 46

@@ -92,7 +92,7 @@
 - **WHEN** 让两份投影在**内容**上不一致（例如一方少渲一半主体）、而头部四项相同
 - **THEN** `project check` **仍然报绿** —— 本断言证明的是**边界**而不是实现缺陷；
       它把该命令的覆盖限定为"同一份输入下的身份一致性核对"
-- **证据（待补）**：**本条尚无断言**（列进 tasks）——实现侧为 `world-core/src/project/mod.rs`:124-145；
+- **证据**：`world-core/tests/cli.rs` 的 **`cli13_project_check_criterion_reads_only_the_header`**（★ 2026-09-28 订正：本条原写「**本条尚无断言**（列进 tasks）」——**那句今天不成立**，该用例正是这条 Scenario 的断言，其头注逐字「这不是想要的行为，而是**当下边界**：本用例把它固定成会红的检查 —— 谁把正文也纳入判据，这里立刻红，且规格要同步改（不许偷偷放宽）」）——实现侧为 `world-core/src/project/mod.rs`:124-145；
       文档出处为 `world-core/docs/理论/语义世界-理论书-第一版-合订.md:736`。
 
 #### Scenario: 该命令的三个不等分支在命令路径上不可达（边界固定）
@@ -100,7 +100,7 @@
 - **WHEN** 检查 `world-core/src/main.rs` 的 `project check` 分支如何构造两份投影
 - **THEN** 两份投影取自**同一个 `state` 与同一个 `vocab`** ⇒ 命令路径上不可能出现"世界版本不同／
       词表不同／状态不同"三种不同源
-- **证据（待补）**：**本条尚无断言**（列进 tasks）——实现侧为 `world-core/src/main.rs`:408-410
+- **证据**：`world-core/tests/cli.rs` 的 **`cli14_project_check_feeds_both_projections_the_same_state_and_vocab`**（★ 2026-09-28 订正：本条原写「**本条尚无断言**（列进 tasks）」——**那句今天不成立**，该用例正是这条 Scenario 的断言，其头注逐字「出处：`src/main.rs:408-410` —— `cmd_project` 里同一次 `open_readonly`、同一次 `read_model`、同一个 `vocab_hash`，两个渲染函数各拿一份**只读**引用 ⇒ 结构上没有「传不同状态」的余地」）——实现侧为 `world-core/src/main.rs`:408-410
       逐字 `let a = language::render(&state, world, vocab);`／`let b = visual::render(&state, world, vocab);`。
 
 ### Requirement: 视觉投影与读模型逐项相等
