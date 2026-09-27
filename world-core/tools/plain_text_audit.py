@@ -57,6 +57,12 @@ SKIP_DIRS = {".git", "target", "node_modules", "__pycache__"}
 
 def audit_bytes(raw: bytes) -> Tuple[bool, str]:
     """审一段字节；返回 (是否合格, 原因)。"""
+
+    # ★ 2026-09-28 补（cover-* 12.6 / A-6）：**放行 UTF-8 BOM 是缺陷**。
+    #   BOM 是**编码标记**、不是文本内容，但它会：① 让"逐行比对"类工具把第一行读成带字节的东西；
+    #   ② 让不同工具对同一份文件算出不同哈希。⇒ 一律拒。
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return False, "带 UTF-8 BOM（\ufeff）：BOM 是编码标记、不是内容，它会让逐行比对与哈希对不上 —— 去掉即可"
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -107,6 +113,12 @@ def iter_targets(paths: Iterable[str]) -> List[str]:
 
 
 def self_test() -> int:
+    # ★ 反例（cover-* 12.6）：带 BOM 必须判红
+    _ok, _why = audit_bytes(b"\xef\xbb\xbf# BOM title\n")
+    print("[self-test/12.6] 带 UTF-8 BOM ⇒ 应判红：%s（%s）" % (not _ok, _why))
+    if _ok:
+        print("  ⇒ 自证失败：带 BOM 的文件竟被放行")
+        return 1
     """正/反例自证：**没有反例的自测等于没测**（本项目的一条老教训）。"""
     cases = [
         (b'{"a":1}\n', True, "正常 JSONL"),
