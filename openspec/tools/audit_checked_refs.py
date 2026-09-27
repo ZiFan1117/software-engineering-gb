@@ -43,6 +43,14 @@ for p in list((R / 'world-core/src').rglob('*.rs')) + list((R / 'world-core/test
     fn_names |= set(re.findall(r'fn\s+([a-z][a-z0-9_]*)',
                                io.open(p, encoding='utf-8', errors='replace').read()))
 
+# ★ 2026-09-28 补强：**Python 的 `def` 名也收**。
+# 为什么：本在册件里引的判据名（`j13_secmap_freshness`／`j14_judges_all_claimed`）真身在
+# `world-core/tools/spec_bridge.py`，而上面那段只收 Rust 的 `fn` ⇒ 它们被误判"对不上"（**审计器的面太窄**）。
+# 判据与守卫是 Python 写的，名字当然要能在 Python 里解析到。
+for p in list((R / 'world-core/tools').rglob('*.py')) + list((R / 'openspec/tools').rglob('*.py')):
+    fn_names |= set(re.findall(r'def\s+([a-z][a-z0-9_]*)',
+                               io.open(p, encoding='utf-8', errors='replace').read()))
+
 OUTSIDE = ('audit_checked_refs.py', 'audit_refs_v3.py', 'build_specmap.py', 'build_html.py', 'sync-vm.ps1',
            'push-vm.ps1', 'final_verify.ps1', 'signoff.py', 'check.sh', 'group6_verify.py', 'trace_matrix.py')
 NEG = ('不存在', '（无此 delta）', '无此文件', '零命中')
