@@ -2470,7 +2470,8 @@
    "c31_chainless_ledger_opens_readonly_and_refuses_writes",
    "c32_last_line_without_trailing_newline_is_cut_and_seq_is_reused",
    "c33_stale_lock_with_a_reused_live_pid_is_never_reclaimed",
-   "c34_envelope_field_types_are_checked_on_the_read_path"
+   "c34_envelope_field_types_are_checked_on_the_read_path",
+   "c35_the_ledger_alone_reproduces_the_same_state_elsewhere"
   ],
   "tests/delivery.rs": [
    "tmpdir",
