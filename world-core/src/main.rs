@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use world_core::World;
+use world_core::{Envelope, World};
 
 const USAGE: &str = "\
 world-core —— 世界核心（语义事件是唯一真相）
@@ -17,9 +17,10 @@ world-core —— 世界核心（语义事件是唯一真相）
   check                      加载本体+门禁策略+账本 → 打印 READY（骨架冒烟判据；**只读**）
   kinds                      列出本体已知的家族
   policy                     打印门禁策略（能力表 + 主体白名单）
-  append <kind> <json-body> [actor]
+  append <kind> <json-body> [actor] [--trace <id>] [--flag <名>]...
                              追加一条事件（法律校验 → 门禁裁决 → 通过才落笔）；
-                             actor 缺省 world://user（全权主体，见下）
+                             actor 缺省 world://user（全权主体，见下）；
+                             --trace / --flag 给出信封的可选字段（见文末）
   read [from_seq]            按序打印事件（JSON Lines；**只读**）
   state [--json]             从账本**重算**状态（读模型；不缓存、不写盘）
   project language           语言投影（结构化出口，给程序读）
@@ -45,6 +46,16 @@ world-core —— 世界核心（语义事件是唯一真相）
 缺省身份: append 不写第 4 个参数时，actor 取 `world://user`——而 `policy.json` 把该主体列为
           **唯一可执行不可逆动作**的主体，并授权它写**任意**对象（`world://*`）。
           也就是说「不写身份」的后果是**最高授权**，不是匿名。
+
+--trace <id>  信封**可选**字段 `trace`（因果：引发本条的那条事件的 id）。**只对 append 有效**。
+              不写该参数 ⇒ **不写该键**（不写 null）：没有因果与因果指向空是两件事。
+              指向一个**不存在**的 id **不导致拒绝**（v1 不做引用完整性校验）。
+              `--trace` 后面没有值 ⇒ 用法错误（rc=1）——**不许静默降级成「不写因果」**。
+--flag <名>   信封**必填**字段 `flags` 里**追加**一个旗标（可重复；重复的只留一个）。
+              不写该参数 ⇒ `flags` 为**空数组**（出厂初值，与本参数出现之前一字不差）。
+              **不认得的旗标照样放行**（未知旗标必须忽略）；但 `gate.` 开头的旗标是
+              **内核保留前缀**（内核依裁决写的摩擦标记），调用方给了即拒并留流水。
+              `--flag` 后面没有值 ⇒ 用法错误（rc=1）。
 退出码:   0 成功 / 1 用法错误 / 2 法律、账本、门禁或读模型错误
 ";
 
@@ -69,6 +80,17 @@ fn main() -> ExitCode {
     let mut owner_uid_bad: Option<String> = None;
     // 要求账本必须带摘要链（WC-CR-003 D3）：无链即拒启
     let mut require_chain = false;
+    // 写入入口的**可选信封字段**（`--trace` 因果 ／ `--flag` 旗标）。**只对 `append` 有效**。
+    //
+    // 解析期就装进一个 `Envelope`（`src/lib.rs`），于是 `cmd_append` 只多收**一个**参数；
+    // 三种情形分得很清（不许合并）：
+    //   `Ok(env)`＋字段全空 ＝ 没给这些参数 ⇒ **不写 `trace` 键**、`flags` 为空数组；
+    //   `Ok(env)`＋`trace = Some("")` ＝ 给了空串 ⇒ 按"未给"处理（`event::with_trace` 的口径）；
+    //   `Err(..)`            ＝ 给了 `--trace`／`--flag` 却没有值 ⇒ **用法错误**。
+    //     为什么 fail-closed：静默降级成"没给"会让调用方以为因果/旗标记下了——而账本里
+    //     什么都没有。这与 `--owner-uid` 打错即拒启同一口径（静默失效比不做更危险）。
+    let mut env = Envelope::new();
+    let mut env_bad: Option<String> = None;
     let mut rest: Vec<String> = Vec::new();
 
     let mut i = 0;
@@ -117,6 +139,32 @@ fn main() -> ExitCode {
                 }
             }
             "--confirm" => allow_confirm = true,
+            "--trace" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => env.trace = Some(v.clone()),
+                    None => {
+                        env_bad = Some(
+                            "`--trace` 后面必须跟一个事件 id（用法: world-core append \
+                             <kind> <json-body> [actor] [--trace <id>] [--flag <名>]...）"
+                                .to_string(),
+                        )
+                    }
+                }
+            }
+            "--flag" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => env.flags.push(v.clone()),
+                    None => {
+                        env_bad = Some(
+                            "`--flag` 后面必须跟一个旗标名\
+                             （用法: world-core append <kind> <json-body> [actor] [--flag <名>]...）"
+                                .to_string(),
+                        )
+                    }
+                }
+            }
             "--policy" => {
                 i += 1;
                 if i < args.len() {
@@ -132,6 +180,14 @@ fn main() -> ExitCode {
         i += 1;
     }
 
+    // 解析完再定格：`--trace`／`--flag` 后面缺值 ⇒ **用法错误**（fail-closed，见上面的声明处）。
+    // 用一个 `Result` 把"要带的可选信封字段"与"参数打错了"一起交给 `cmd_append`，
+    // 免得那个函数为这两个状态各收一个参数。
+    let env: Result<Envelope, String> = match env_bad {
+        Some(e) => Err(e),
+        None => Ok(env),
+    };
+
     match rest.first().map(String::as_str).unwrap_or("") {
         "check" => {
             if let Some(bad) = owner_uid_bad {
@@ -146,7 +202,7 @@ fn main() -> ExitCode {
         }
         "kinds" => cmd_kinds(&ontology),
         "policy" => cmd_policy(&policy),
-        "append" => cmd_append(&ontology, &ledger, &policy, &rest),
+        "append" => cmd_append(&ontology, &ledger, &policy, &rest, &env),
         "read" => cmd_read(&ontology, &ledger, &policy, &rest),
         "state" => cmd_state(&ontology, &ledger, &policy, &rest),
         "project" => cmd_project(&ontology, &ledger, &policy, &rest),
@@ -359,13 +415,46 @@ fn cmd_kinds(o: &Path) -> ExitCode {
     }
 }
 
-fn cmd_append(o: &Path, l: &Path, p: &Path, rest: &[String]) -> ExitCode {
+/// `append` —— **命令行写入入口**（唯一写入口 [`World::commit_envelope`] 的接线）。
+///
+/// ## 为什么走 `commit_envelope` 而不是 `commit`（2026-09-28，工区 F）
+///
+/// `REQ-F-031` 判据 (2)(3) 要的是"**能从写入入口写出带 `trace` 的事件并读回**"，
+/// `REQ-F-029`（第 4 组）要的是"**带未知旗标的事件必须被接受并落笔**"。
+/// 库侧承载可选信封字段的入口是 `World::commit_envelope`（`src/lib.rs`），
+/// 而命令行这一级此前**没有任何办法给出 `trace` 或旗标**：`--trace` 会被当成 `actor`
+/// 的位置参数，于是一条本该带因果的事件会以 `--trace` 为写信人提交
+/// （错误串看起来完全正常，只有 actor 是错的）。
+///
+/// 本函数把两者接上：不写这两个参数时 `Envelope` 全空，而
+/// `commit_envelope(kind, actor, body, &Envelope::default())` 与 `commit(kind, actor, body)`
+/// **走的是同一个 `commit_verbatim`**（`src/lib.rs` 里前者就是后者加一层薄壳），
+/// 故"不带因果、不带旗标"的既有行为一字未改——不存在第二条写路径。
+fn cmd_append(
+    o: &Path,
+    l: &Path,
+    p: &Path,
+    rest: &[String],
+    env: &Result<Envelope, String>,
+) -> ExitCode {
+    // `--trace`／`--flag` 后面没有值 ⇒ 用法错误（**fail-closed**：不许静默降级成"没给"）。
+    let env = match env {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("[FAIL] ext.world.Runtime.BadEnvelopeArg: {e}");
+            return ExitCode::from(1);
+        }
+    };
     if rest.len() < 3 {
-        eprintln!("用法: world-core append <kind> <json-body> [actor]");
+        eprintln!(
+            "用法: world-core append <kind> <json-body> [actor] [--trace <id>] [--flag <名>]..."
+        );
         eprintln!(
             "      actor 不写 ⇒ 取 world://user：policy.json 里**唯一**可执行不可逆动作的主体，"
         );
         eprintln!("      且被授权写任意对象（world://*）。**不写身份 = 最高授权，不是匿名。**");
+        eprintln!("      --trace <id> ⇒ 信封可选字段「因果：引发本条的那条事件的 id」。");
+        eprintln!("      --flag <名>  ⇒ 往信封的 flags 里追加一个旗标（可重复；`gate.` 开头的是内核保留前缀，调用方给了即拒）。");
         return ExitCode::from(1);
     }
     let kind = &rest[1];
@@ -391,7 +480,8 @@ fn cmd_append(o: &Path, l: &Path, p: &Path, rest: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    match w.commit(kind, &actor, body) {
+    // 一个写入口、一条路径：可选信封字段全空时与 `World::commit` 逐字等价（见本函数文档）。
+    match w.commit_envelope(kind, &actor, body, env) {
         Ok(ev) => {
             println!("{}", serde_json::to_string(&ev).unwrap_or_default());
             ExitCode::SUCCESS

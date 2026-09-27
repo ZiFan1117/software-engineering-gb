@@ -16,10 +16,24 @@
 ### Requirement: REQ-F-029 未知旗标必须忽略
 
 系统 SHALL 忽略任何不认识的旗标，并按它认得的那些继续处理；SHALL NOT 因为出现未知旗标而拒收。
-（今天：**未实现**——此前零需求、零用例，实现里只有一行注释；本体 `flags` 为空数组这一实测边界是主要阻塞。）
+（依据逐字：出厂本体 `world-core/ontology.json:20` —— `"flags": "array  # 能力旗标；未知旗标必须忽略"`。）
+
+本条与「未知**家族** SHALL 被拒」**对偶**，两条 SHALL NOT 互相冒充：分界线是
+**不认识的语义拒绝，不认识的附加信息忽略**。「这条事件带着我不认得的旗标」SHALL NOT 被读成
+「这个家族我不认识」；「这个家族我不认识」SHALL NOT 被读成「有旗标不认识」。
+**第三情形**另立条文，SHALL NOT 被并入本条、也 SHALL NOT 被并入家族那一条：
+扩展项与**核心字段重名** ⇒ SHALL 被拒（见本 change 的 `REQ-F-030`）——
+它不属于「未知」那一类，而属于「与核心冲突」那一类。
 
 #### Scenario: 未知旗标不影响受理
 
 - **WHEN** 提交一条带未知旗标的事件
 - **THEN** 该事件被接受、落笔，读回的 `flags` 保留原值；同一账本的折叠结果与不带该旗标时**相同**
-- **证据（待补）**：**本条尚无断言**（〔待补〕）本 change `tasks.md` 第 4 组 —— 与"未知家族拒绝"并列时两者不许互相冒充
+- **证据**：`world-core/tests/ontology_ext.rs::e02_a_landed_ledger_line_with_unknown_flags_folds_byte_identically`
+
+#### Scenario: 未知旗标与未知家族不许互相冒充
+
+- **WHEN** 取同一条合法事件，分别只把它的 `flags` 换成未知旗标、只把它的 `kind` 换成未知家族
+- **THEN** 前者被接受、落笔、折叠结果逐字节不变；后者被拒且**不落笔**——写入侧（`UnknownKind`）与折叠侧（`ReadModel.UnknownKind`）**两处都拒**，且各自点名那个家族
+- **证据**：`world-core/tests/ontology_ext.rs::e03_unknown_family_is_refused_on_both_sides_of_the_dual`
+

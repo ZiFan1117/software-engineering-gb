@@ -37,6 +37,72 @@ use readmodel::State;
 use serde_json::Value;
 use std::path::Path;
 
+/// **旗标的内核保留前缀**（`gate.`）：只许**内核依裁决结果**写。
+///
+/// 与 [`World::adjudicate_notice`] 里那个「通告类型的保留前缀」是**两个命名空间里的同一条纪律**
+/// （一个是通告的 `type`，一个是信封的 `flags`）——两处**各写一个常量、不共用**：
+/// 共用会让"改一个影响另一个"变成看不见的耦合。
+const RESERVED_FLAG_PREFIX: &str = "gate.";
+
+/// 写入入口的**可选信封字段**（`trace` 因果 ／ `to` 目的地 ／ `flags` 旗标）。
+///
+/// ## 为什么是一个结构体，而不是继续给 [`World::commit`] 堆位置参数（形态裁定，理由三条）
+///
+/// 1. **不破公开签名**：`World::commit` 在 HEAD 上 `tests/**` 有 **60 处**调用点、
+///    [`World::commit_requested`] 另有 `tests/delivery.rs` **18 处**与 `src/channel.rs` 的
+///    `RequestSink` **2 处**。给它们加参数要逐字改**每一个**调用点，而其中
+///    `tests/ontology_ext.rs` 正由并行工区在写——那是**别人的文件**，跨过去就是事故。
+/// 2. **可选信封字段是一个概念**：`trace`／`to`／`flags` 都是"信封上可选的格子"。
+///    装进结构体以后，再加一个格子**不必动任何调用点**；
+///    `commit_requested` 那个五参数签名已经开始痛了（每加一格就长一截）。
+/// 3. **写路径仍然只有一条**：本入口与 `commit`／`commit_requested` 一样，
+///    都只是 [`World::commit_verbatim`] 的薄壳——**不存在"带旗标就绕过门禁"的第二条路**。
+///
+/// ## 字段口径
+///
+/// - `trace`／`to`：`None` 或空串 ⇒ **不写该键**（不写 `null`）。"没有因果"与"因果指向空"是两件事。
+/// - `flags`：按给出顺序追加，重复的**只留一个**（`event::with_flag` 的口径）。
+///   ⚠️ `gate.` 开头的旗标**不许由调用方给**（见 [`World::commit_verbatim`] 的第二段）。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Envelope {
+    /// 因果：引发本条的那条事件的 `id`。
+    pub trace: Option<String>,
+    /// 目的地。空 ＝ 广播。
+    pub to: Option<String>,
+    /// 随事件走的**能力旗标**。
+    pub flags: Vec<String>,
+}
+
+impl Envelope {
+    /// 一个可选字段都不给（与 [`World::commit`] 等价）。
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 设因果（`None` ⇒ 不设）。
+    pub fn with_trace(mut self, trace: Option<&str>) -> Self {
+        self.trace = trace.map(str::to_string);
+        self
+    }
+
+    /// 设目的地（`None` ⇒ 不设）。
+    pub fn with_to(mut self, to: Option<&str>) -> Self {
+        self.to = to.map(str::to_string);
+        self
+    }
+
+    /// 追加一个旗标（重复的无副作用）。
+    pub fn with_flag(mut self, flag: &str) -> Self {
+        self.flags.push(flag.to_string());
+        self
+    }
+
+    /// 一个可选字段都没给。
+    pub fn is_empty(&self) -> bool {
+        self.trace.is_none() && self.to.is_none() && self.flags.is_empty()
+    }
+}
+
 /// 一个最小可用的世界：**法律（本体 + 门禁策略）+ 事实（账本）**。
 ///
 /// ⚠️ 字段**全部私有**（2026-09-26 收窄，见 `WC-RV-R2-001` **S-02 / T-02**）。
@@ -158,9 +224,15 @@ impl World {
     /// `change` 静默达成——`actor` 与 `subject` 之间约束为零。
     /// **"门禁不可绕过"当时是假的**，现在由 [`crate::gate::Policy::authorize_write`] 补上。
     ///
-    /// `notice` 仍不过闸：它是**通告**、不改状态，且门禁自己的流水就是 `notice`。
+    /// `notice` **也过闸**——另有一道**窄闸**，见 [`World::adjudicate_notice`]：
+    /// 保留前缀只许内核自己写、其余通告的写信人必须先在主体名单里。
+    /// ⚠️ 本句此前写的是"`notice` 仍不过闸"，那是这道窄闸补上**之前**的旧话
+    /// （`WC-THEORY-DEFECT-001` **D-13**），按实改正。
+    ///
+    /// 可选信封字段（`trace`／`to`／`flags`）走 [`World::commit_envelope`]；
+    /// 本方法等价于"一个可选字段都不给"（`Envelope::default()`）。
     pub fn commit(&mut self, kind: &str, actor: &str, body: Value) -> Result<Value, String> {
-        self.commit_verbatim(kind, actor, body, None, None)
+        self.commit_envelope(kind, actor, body, &Envelope::default())
     }
 
     /// 同 [`World::commit`]，但**显式给出因果与目的地**（可选信封字段）。
@@ -183,7 +255,44 @@ impl World {
         trace: Option<&str>,
         to: Option<&str>,
     ) -> Result<Value, String> {
-        self.commit_verbatim(kind, actor, body, trace, to)
+        self.commit_envelope(
+            kind,
+            actor,
+            body,
+            &Envelope::new().with_trace(trace).with_to(to),
+        )
+    }
+
+    /// **带可选信封字段的写入入口**：`trace`（因果）、`to`（目的地）、`flags`（能力旗标）。
+    ///
+    /// 三者都是信封上的格子，一起装进 [`Envelope`]（为什么是结构体而不是位置参数，见该结构体文档）；
+    /// 本方法与 [`World::commit`]、[`World::commit_requested`] 走的是**同一条**
+    /// [`World::commit_verbatim`]（取号 → 造事件 → 法律 → 门禁 → 落笔）。
+    ///
+    /// ## 旗标的口径（`REQ-F-029`「未知旗标必须忽略」）
+    ///
+    /// - 调用方给的旗标**按序追加、重复只留一个**（`event::with_flag` 的口径）；
+    /// - **不认得的旗标必须放行**：本入口不比对任何"已知旗标表"——出厂本体
+    ///   `ontology.json` 的 `flags` 是**空数组**，"认不认得"是**读法**的事（`event::read_flags`），
+    ///   不是写入入口的事。写入侧只做一件事：**不许替世界署名**（下一条）；
+    /// - **内核保留前缀 `gate.` 不许由调用方给**：拒，且留流水。
+    ///   这不是"不让你带旗标"，是"不许替世界说话"——闸的摩擦标记
+    ///   （`gate.friction:<等级>`）是**世界说的话**，理由与落点见 [`World::commit_verbatim`]。
+    pub fn commit_envelope(
+        &mut self,
+        kind: &str,
+        actor: &str,
+        body: Value,
+        env: &Envelope,
+    ) -> Result<Value, String> {
+        self.commit_verbatim(
+            kind,
+            actor,
+            body,
+            env.trace.as_deref(),
+            env.to.as_deref(),
+            &env.flags,
+        )
     }
 
     fn commit_verbatim(
@@ -193,11 +302,16 @@ impl World {
         body: Value,
         trace: Option<&str>,
         to: Option<&str>,
+        flags: &[String],
     ) -> Result<Value, String> {
         let seq = self.ledger.next_seq();
         let mut ev = event::new_event(seq, kind, actor, body);
         event::with_trace(&mut ev, trace);
         event::with_to(&mut ev, to);
+        // 调用方给的旗标：**在过法律之前**就位——法律要看到的东西，就是将要落笔的东西。
+        for f in flags {
+            event::with_flag(&mut ev, f);
+        }
 
         // 校验与裁决的顺序（2026-09-27 订正为两段式）：
         //   ① 先校验：形状不合 ⇒ 直接拒，**不写任何东西**（连流水都不写，因为流水同样要过校验）；
@@ -209,6 +323,47 @@ impl World {
             return Err(e.to_string());
         }
         let act_body = ev.get("body").cloned().unwrap_or(Value::Null);
+
+        // ── ② 的前半：**调用方给的旗标不许占用内核保留前缀**（2026-09-28 补，工区 F）──
+        //
+        // 为什么这条必须有：信封的 `flags` 里**混着两种作者**——
+        // 内核自己写的那一格（闸的摩擦标记 `gate.friction:<等级>`，由本函数依裁决结果加上去），
+        // 与调用方带来的旗标。若调用方能随便写 `gate.` 开头的旗标，他就能**替世界说**
+        // "这件事被加过摩擦"——与 `gate.*` 通告的伪造（`WC-THEORY-DEFECT-001` **D-13**）
+        // **同一形状**：账本里伪造的那一格与真的那一格逐字同形，事后不可区分。
+        //
+        // 口径三条（与 [`World::adjudicate_notice`] 的"保留前缀"同一纪律）：
+        // - 判定**只按前缀**（`gate.`），不猜语义：`gate.friction:high` 与 `gate.随便什么` 一样拒；
+        // - 拒在**门禁那一段**（校验之后），并照书 §4.2「被拦下的请求也要留痕」**留流水**；
+        // - 流水的理由**逐字点名那个旗标**（`refused` 指纹只覆盖"发起者＋信纸"，
+        //   不含信封旗标——被拒的是哪个旗标，由 `payload.reason` 说）。
+        //
+        // ⚠️ 已登记的边界（不假装已闭合）：
+        // - 本判定**只管前缀**，故调用方仍可写任意**非** `gate.` 前缀的旗标——
+        //   那正是 `REQ-F-029`「未知旗标必须忽略」要验的那条路，**不许收窄**；
+        // - 出厂本体 `ontology.json` 的 `flags` 是**空数组**（一个已声明旗标都没有）⇒
+        //   "哪些旗标属于内核"这件事**在本体里没有对照面**，只能写在代码里（上面那个常量即那一处）；
+        // - 旗标**不由门禁策略裁决**（`policy.json` 里没有旗标这一栏）⇒ 这是一条写在代码里的纪律，
+        //   不是策略；要不要把它挪进策略属门禁强度变更，须人裁。
+        for f in flags {
+            if f.starts_with(RESERVED_FLAG_PREFIX) {
+                return Err(self.gate_refusal(
+                    "ext.world.Gate.FlagNotAllowed",
+                    "gate.flag-not-allowed",
+                    "门禁拒绝旗标",
+                    actor,
+                    &act_body,
+                    &format!(
+                        "旗标 `{f}` 占用**内核保留前缀**（`{RESERVED_FLAG_PREFIX}`）——\
+                         它只由内核依裁决结果写（例如闸的摩擦标记 `gate.friction:<等级>`）。\n\
+                         \x20 为什么必须保留：否则任何主体都能替世界说\"这件事被加过摩擦\"，\
+                         而账本里伪造的旗标与真旗标**逐字同形、事后不可区分**。\n\
+                         \x20 处置：换成你自己的旗标名（不要以 `{RESERVED_FLAG_PREFIX}` 开头）"
+                    ),
+                ));
+            }
+        }
+
         let friction = self.adjudicate(kind, actor, &act_body)?;
 
         // **摩擦落账**（书 §5.5：摩擦挂在动作的不可逆等级上）。

@@ -194,6 +194,24 @@ mod unit {
     }
 
     #[test]
+    fn a_result_whose_value_is_unreadable_still_closes_the_pair() {
+        // ★ 这条是**生产路径上的守卫**，由独立评审席实测指出缺它：
+        //   `pairing::is_result` 与旧实现（`and_then(Value::as_str).map(|r| r=="ok"||…).unwrap_or(false)`）
+        //   在**这一格**上不同——`params.result` 不是字符串时，旧实现算"意图"、新实现算"结果"。
+        //   三种实测形态（`7`／`null`／`{}`）里取一种钉住；本条若红，说明"写坏了的结果"被当成了意图，
+        //   于是"有意图、无结果"这个假象会把"结果写坏了"这个**真事实**盖掉 —— 那正是本模块要防的。
+        for bad in [json!(7), Value::Null, json!({})] {
+            let mut r = result("e-2", 2, 101, "r-1", "ok");
+            r["body"]["params"]["result"] = bad.clone();
+            let evs = vec![intent("e-1", 1, 100, "r-1"), r];
+            assert!(
+                orphans(&evs).is_empty(),
+                "写坏了的结果（params.result = {bad}）仍应关闭配对，而不是被当成意图"
+            );
+        }
+    }
+
+    #[test]
     fn a_refused_result_also_closes_the_pair() {
         let evs = vec![
             intent("e-1", 1, 100, "r-1"),

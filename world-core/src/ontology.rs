@@ -195,6 +195,12 @@ impl Ontology {
             }
         }
 
+        // **判据②**：扩展项**不得与核心字段重名**（`REQ-F-030`；书 §2.7）。
+        // 放在装载期（而不是写入期）：重名是"法律自相矛盾"，法律不对就该拒绝启动，
+        // 而不是等到某一条写入路过时才报——那时读到的是"某条事件非法"，说错了病因。
+        let core_fields = core_field_names(&required, &optional);
+        check_extension_names(&concepts, &core_fields)?;
+
         Ok(Ontology {
             world,
             required,
@@ -244,6 +250,24 @@ impl Ontology {
     /// 某实体已声明的字段集（`None` = 该实体**没声明过**）。
     pub fn declared_fields(&self, entity: &str) -> Option<&BTreeSet<String>> {
         self.concepts.get(entity)
+    }
+
+    /// **读一条事件的旗标**：认得的照常处理，**不认得的一律忽略**（`REQ-F-029`）。
+    ///
+    /// 依据（逐字）：`world-core/ontology.json:20`
+    /// `"flags": "array  # 能力旗标；未知旗标必须忽略"`。
+    ///
+    /// 为什么把它挂在**本体**上：这条纪律是**法律**的一部分（写在出厂本体的信封字段表里），
+    /// 所以"读的人按哪一半继续"这件事的入口在本体侧，与 `validate` 同源。
+    ///
+    /// ⚠️ 本方法**没有 `Result`**：出现不认得的旗标**不是**一种校验失败——
+    /// 它是"读的人按他认得的那部分继续"。哪些算"认得"由调用方给：
+    /// 出厂读法用 [`crate::event::is_factory_flag`]，认得摩擦旗标的读法另给它自己的判据。
+    pub fn read_flags<'a, F>(&self, ev: &'a Value, knows: F) -> crate::event::Flags<'a>
+    where
+        F: Fn(&str) -> bool,
+    {
+        crate::event::read_flags(ev, knows)
     }
 
     /// 从 `subject` 取出**实体类型**：`world://<实体>/<实例…>` ⇒ `Some("<实体>")`。
@@ -376,6 +400,72 @@ impl Ontology {
 
         Ok(())
     }
+}
+
+/// **核心字段名** = `envelope.required` ∪ `envelope.optional`（出厂本体逐字给出的 10 项）。
+///
+/// ## 为什么**只**算信封字段、不算家族信纸字段（这一条是刻意的）
+///
+/// 家族（`families`）**本身是可扩展的**：一份"只加扩展"的本体会新增一个家族，
+/// 并在同一个名下新增一个概念——出厂门禁脚本 `tools/s1_sys_probe.sh` 的
+/// `ontology-ext.json` 就是"新增家族 `audit` ＋ 新增概念 `audit.result`"。
+/// 若把"全部家族的必填／可选字段"也算进核心，这份**纯加法**的本体会被判成"重名"而拒启，
+/// 而 `REQ-F-030` 判据③ 恰恰要求纯加法**必须照常可读**（换一份只加扩展的本体 ⇒ 折叠结果不变）。
+/// ⇒ 核心 = **信封**字段：它由本体逐字列出，不随扩展变动。
+fn core_field_names(required: &[String], optional: &[String]) -> BTreeSet<String> {
+    required.iter().chain(optional.iter()).cloned().collect()
+}
+
+/// **判据②**：扩展项（`concepts` 的实体名与字段名）**SHALL NOT 与核心字段重名**。
+///
+/// 依据（逐字）：书 §2.7「核心之外由命名空间扩展，各方在自己的空间里定义自己的概念；
+/// 核心之内不取交集，也不做删减」；本 change 的 delta `REQ-F-030`：
+/// 「扩展项 SHALL 落在命名空间内，**SHALL NOT 与核心字段重名**」。
+///
+/// 为什么必须**拒启**、而不是打个警告继续跑：重名的扩展项与核心字段**共用一个名字**，
+/// 而"核心字段的含义永不因扩展而变"是这一结构的全部价值 ⇒ 一旦叠上，
+/// 读的人再也分不清 `body` 指的是哪一个。**改本体＝改法律；法律自相矛盾时不许带病运行**
+/// （与 `load` 的其余错误同一处置）。
+///
+/// ⚠️ 只查 `concepts`（实体名与字段名）：家族的信纸字段落在 `body` **里面**，
+/// 与信封字段不在同一层，同名不构成"改掉核心那一格的含义"。
+fn check_extension_names(
+    concepts: &BTreeMap<String, BTreeSet<String>>,
+    core: &BTreeSet<String>,
+) -> Result<(), String> {
+    for (entity, fields) in concepts {
+        if core.contains(entity) {
+            return Err(core_collision(
+                &format!("`concepts` 的实体名 `{entity}`"),
+                entity,
+                core,
+            ));
+        }
+        for f in fields {
+            if core.contains(f) {
+                return Err(core_collision(
+                    &format!("实体 `{entity}` 的字段名 `{f}`"),
+                    f,
+                    core,
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 重名的拒绝理由：**点名**撞上的那一项，并列出全部核心字段（否则只说了"不行"、没说"怎么办"）。
+fn core_collision(at: &str, name: &str, core: &BTreeSet<String>) -> String {
+    let list = core.iter().cloned().collect::<Vec<_>>().join(", ");
+    format!(
+        "ext.world.Ontology.CoreCollision: 扩展项与核心字段重名：{at} 与信封字段 `{name}` 同名——\
+         本体采用**极小核心 ＋ 命名空间扩展**（书 §2.7 逐字「核心之外由命名空间扩展，\
+         各方在自己的空间里定义自己的概念；核心之内不取交集，也不做删减」），\
+         扩展项 SHALL NOT 与核心字段重名。\n\
+         \x20 核心字段（`envelope.required` ∪ `envelope.optional`，共 {n} 项）：{list}\n\
+         \x20 处置：把扩展项换到自己的名字上（出厂本体已声明的两格是 `notice.muted` 与 `job.status`）",
+        n = core.len()
+    )
 }
 
 fn str_list(v: &Value, key: &str) -> Result<Vec<String>, String> {

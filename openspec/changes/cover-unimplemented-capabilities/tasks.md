@@ -17,7 +17,13 @@
       **已落地**：`world-core/src/pairing.rs`（`request_id_of`／`is_result`／`find_pair`／`pairs`——配对键＝`act` 信纸必填的 `request_id`，另核 `trace` 是否指回意图的 `id`；"有意图无结果／有结果无请求／因果指错／两半齐全"**四态各自可判**，不合并成一句"查到了"）；
       断言 `world-core/tests/delivery.rs::d05`（意图＋结果落账后只用账本取回两半，`pair.results[0].trace == pair.intents[0].id`）、`::d06`（换请求号⇒`Unpaired`／应答无请求⇒`Unrequested`／因果指错⇒`Mistraced`／`notice` 不参与配对）
       **变异证明**：`pairing.rs` 的 `is_result` 恒 `false` ⇒ d05/d06 变红；`find_pair` 里不看 `trace`（改成 `match None::<&str>`）⇒ d06 变红而 d05 仍绿
-      **注**：`src/carrier/recover.rs` 的"什么算一次 `act` 的结果"改为复用 `pairing::is_result`／`pairing::request_id_of`——**同一判据全项目一份实现**（该文件原有 9 条单测仍绿）
+      **注（★ 2026-09-28 由独立评审席纠正过措辞，逐字保留纠正后的说法）**：`src/carrier/recover.rs` 的"什么算一次 `act` 的结果"改为复用 `pairing::is_result`／`pairing::request_id_of`——**同一判据全项目一份实现**（该文件原有 9 条单测仍绿）。
+      **★ 但"未动行为"是错的**（原稿如此声称，评审席实测推翻）：`pairing::is_result` 与原实现**在这一格上不同**——`params.result` **不是字符串**时（实测三种形态 `7`／`null`／`{}`），
+      旧实现 `and_then(Value::as_str).map(|r| r=="ok"||"failed"||"refused").unwrap_or(false)` 算**意图**；新实现算**结果**（`ResultTag::Unreadable => true`）。同一账本经 `carrier::recover::orphans`：**孤儿数 2（新）vs 1（旧）**。
+      **处置**：**保留这个更稳的行为**（把"结果写坏了"如实当成结果，而不是让它伪装成"有意图、无结果"），并且**三件都补齐**：
+      ① `pairing.rs` 的文档按实改写（原文写"且取值 ∈ `RESULTS`"，与代码矛盾）；
+      ② **在 `src/carrier/recover.rs` 加生产路径守卫单测** `a_result_whose_value_is_unreadable_still_closes_the_pair`（评审席指出该文件原有 9 条单测**没有一条覆盖这个形态** ⇒ 这条偏移此前**无守卫**）；
+      ③ 本注按实改写（不再声称"未动行为"）。
 
 ## 2. 通道资源边界（`REQ-F-026`）
 
@@ -35,32 +41,133 @@
 
 ## 4. 未知旗标必须忽略（`REQ-F-029`）
 
-- [ ] 4.1 实现"未知旗标一律忽略并按已知部分继续"
+- [x] 4.1 实现"未知旗标一律忽略并按已知部分继续"
+      **★ 已结账（2026-09-28，执行者带证据）**：三条验收**都可执行且为绿**——
+      「被接受／不影响折叠／读回原样」由 `tests/ontology_ext.rs::e01/e02/e04` ＋ `tools/s1_sys_probe.sh` 的 `TC-048` ①⑧⑨ 承担；
+      「**落笔**」那半条当日**做不到**（`World::commit`／`commit_requested`／CLI `append` 都没有旗标参数），工区 E 立了登记项；
+      **同日工区 F 把 `--flag` 落进 CLI `append`** ⇒ 该登记**如期变红**，E 随即把它改成**端到端断言**
+      `e05_the_public_write_entry_lands_an_unknown_flag_end_to_end`（`--flag future.flag` ⇒ rc=0、账本那行 `"flags":["future.flag"]` 原样、
+      与"同一事件不带旗标"的折叠结果**逐字节相同**；反假：不给参数时 `flags` 仍是空数组）＋ `TC-048` ⑮⑯⑰（VM 实测 ✅）。
+      **登记项不是用来长期挂着的**——这一条兑现了它。
       **验收**：造一条带未知旗标的事件 ⇒ 必须被接受、落笔、且不影响后续折叠
-- [ ] 4.2 与"未知家族拒绝"的边界写成规格条文（两者对偶，不许互相冒充）
+      **已落地的部分**（2026-09-28）：读侧实现 `world-core/src/event.rs::read_flags`
+      （`Flags{known, ignored, not_string}`——**没有 `Result`**："出现不认得的旗标"不是错误）
+      ＋ 本体侧入口 `world-core/src/ontology.rs::Ontology::read_flags`；`Ontology::validate` **不查**旗标。
+      断言 `world-core/tests/ontology_ext.rs::e01`（未知旗标被接受；出厂读法一个都不认得；
+      **正控**：换成"什么都认得"的读者 ⇒ 同批旗标落到 `known`）、
+      `::e02`（**真账本文件**读回：旗标原样保留、每行被接受、折叠结果与不带旗标时**逐字节相同**，
+      且**那一行确实被折进状态**，不是被跳过）、`::e04`（出厂读法**不认得**的 `gate.friction:high`
+      经**公开写入入口**落笔、读回、折叠均不受影响）；
+      系统级断言在 `world-core/tools/s1_sys_probe.sh` 的 `TC-048` ①⑧⑨⑮⑯⑰。
+      **"落笔"那半条当天的变化（如实记）**：本工区开工时它**做不到**——`World::commit`／
+      `commit_requested`／CLI `append` 都**没有旗标参数**，故当时立了一条**登记项**
+      （`e05` 断言"用法串里读不到 flag" ＋ `TC-048` ⑮）；**同日工区 F 把 `--flag` 落进 CLI `append`**
+      ⇒ 该登记**如期变红**（全量跑里 `e05` FAILED），已按登记时写下的处置改成**端到端断言**：
+      `world-core/tests/ontology_ext.rs::e05`（`append … --flag future.flag` ⇒ rc=0、账本那一行原样带旗标、
+      与"同一事件不带旗标"的折叠结果**逐字节相同**；反假：不给参数时 `flags` 仍为空数组）
+      与 `tools/s1_sys_probe.sh` 的 `TC-048` ⑮⑯⑰（系统级同一条）。
+      **仍未勾的原因**：验收三句（被接受／落笔／不影响折叠）现在**都已可执行且为绿**，
+      但"写入入口的旗标参数"是**工区 F 的交付物**（第 6 组）⇒ 本工区**不代它勾**，
+      按作者口径等 F 交件确认后再勾（该补的断言本工区已补齐）。
+      **仍在册的边界**：出厂本体顶层 `flags` 仍是**空数组**（`ontology.json:49`）⇒「未知旗标」
+      在本体侧**没有已定义旗标可比对**（`TC-048` ⑦、`WC-SCMP-001` §8.4 的 `G-83` 仍未关闭）；
+      作者已裁定**不动该文件**——任何非 `_` 键的改动都会换掉词表身份 `fnv1a64:4bf7b75573fee475`，
+      那是契约变更。
+      **变异证明**（三条，各自在 VM 上真做了一次：改坏 ⇒ 红 ⇒ 恢复 ⇒ 绿；原始输出见交付回执）：
+      ① `src/event.rs::read_flags` 的 `Some(f) => out.ignored.push(f),` 改成 `out.known.push(f),`
+      ⇒ `e01`/`e04`/`e05` 变红（`e02`/`e03`/`x01`/`x02` 仍绿）；
+      ② `src/ontology.rs::Ontology::validate` 末尾加一段"有未知旗标即拒" ⇒ `e01`/`e02`/`e03`/`e04`/`e05` 变红
+      （`e03` 的第 3 条断言正是"旗标不许让家族那条判据换向"）而 `x01`/`x02` 仍绿；
+      ③ `src/event.rs::with_flag` 的 `if !arr.iter().any(…)` 改成 `if false && …`（旗标不落账）
+      ⇒ `e01`/`e04`/`e05` 变红；三条都**恢复后复跑全绿**（`test result: ok. 7 passed`）。
+- [x] 4.2 与"未知家族拒绝"的边界写成规格条文（两者对偶，不许互相冒充）
       **验收**：规格里两条并列；各自一个反例
+      **已落地**（2026-09-28）：`specs/envelope-validation/spec.md` 的 `REQ-F-029` 正文明写**对偶**——
+      「**不认识的语义拒绝，不认识的附加信息忽略**」，并写明两条 SHALL NOT 互相冒充；
+      **第三情形**（扩展项与核心字段重名 ⇒ 拒，`REQ-F-030`）明写**不许并入**「未知」那一类，也不许并入家族那一条。
+      两个 Scenario 各自的断言：`world-core/tests/ontology_ext.rs::e02`（未知旗标：接受＋落笔＋折叠逐字节不变）
+      与 `::e03`（未知家族：写入侧 `ext.world.Ontology.UnknownKind` 与折叠侧 `ext.world.ReadModel.UnknownKind`
+      **两处都拒**、都点名那个家族）；系统级对偶在 `tools/s1_sys_probe.sh` 的 `TC-048` ⑤⑩⑪⑫（写入侧）与 ①（旗标侧）。
+      **变异证明**：`src/ontology.rs::Ontology::validate` 的家族查表放宽（`.get(kind)` 后回退到已知家族 `notice`）
+      ⇒ **`e03` 是唯一变红的那条**，`e01`/`e02`/`e04`/`e05` **仍绿**——两条对偶断言**不一起动**
+      （实测原始输出见交付回执）。
 
 ## 5. 本体：极小核心 ＋ 命名空间扩展（`REQ-F-030`）
 
-- [ ] 5.1 判据②：**扩展项与核心字段重名 ⇒ 必须被拒**（今天被接受，`tools/s1_sys_probe.sh:384` 实测为红）
+- [x] 5.1 判据②：**扩展项与核心字段重名 ⇒ 必须被拒**（今天被接受，`tools/s1_sys_probe.sh:384` 实测为红）
       **验收**：新增契约测试；删掉重名检查即变红
-- [ ] 5.2 判据③：换一份**只加扩展**的本体 ⇒ 同一账本折叠结果 SHALL 不变
+      **已落地**（2026-09-28）：`world-core/src/ontology.rs::check_extension_names`，挂在 `Ontology::load` 里
+      ⇒ **装载期拒启**（错误码 `ext.world.Ontology.CoreCollision`，**点名**撞上的那一项并列出核心字段集）；
+      核心字段 = `envelope.required` ∪ `envelope.optional`（**刻意不含家族信纸字段**——理由写在 `core_field_names` 的文档里：
+      含了就会把"新增家族 ＋ 同名下的新概念"这种**纯加法**判成重名，与判据③ 冲突）。
+      断言 `world-core/tests/ontology_ext.rs::x01`（字段名重名、实体名重名各一例；世界**拒绝启动**且**不建账本**；
+      正控：出厂本体与"只加扩展"的本体都照常加载）；系统级 `world-core/tools/s1_sys_probe.sh` 的 `TC-049` ⑦⑧⑨⑩
+      ——**⑦ 已从「登记（现状为红）」改为断言，实测通过**。⚠ 任务书给的坐标 `:384` **不是**那条登记：
+      `:384` 是 `TC-049` ④「可选字段恰为 to」；原登记在 `:389-403`（改动前），现为断言 `:428-431`。
+      **变异证明**：`src/ontology.rs::load` 里 `check_extension_names(&concepts, &core_fields)?;`
+      改成 `let _ = check_extension_names(&concepts, &core_fields);` ⇒ x01 变红，
+      且 `TC-049` ⑦ **退回红**（实测原始输出见交付回执）。
+- [x] 5.2 判据③：换一份**只加扩展**的本体 ⇒ 同一账本折叠结果 SHALL 不变
       **验收**：新增测试，断言"换本体前后折叠结果逐字节相同"
+      **已落地**（2026-09-28）：`world-core/tests/ontology_ext.rs::x02`——同一份账本在新旧本体下
+      「过法律 ＋ 折叠」的结果**逐字节相同**（并把"旗标原样保留"与"每行被接受"一起钉住）；
+      **反同义反复两件**：① 词表身份**必须已变**（否则"换本体"没发生）；② **负控**：把**核心**必填字段改掉的
+      本体读同一条旧事件**必须失败**。系统级同一断言在 `tools/s1_sys_probe.sh` 的 `TC-046` ①-⑤ 与 `TC-049` ⑥⑩。
+      **变异证明**：把 `src/ontology.rs::core_field_names` 的核心集在 `load` 里按 `families` **加宽**
+      （＝把家族信纸字段也算进核心）⇒ 纯加法的本体被拒 ⇒ `x02` 与 `x01` 一起变红，
+      且 `TC-046` ①-④ 与 `TC-049` ⑥⑩ 一起红（实测原始输出见交付回执）。
+
 
 ## 6. `trace` 语义（`REQ-F-031`）
 
-- [ ] 6.1 给写入入口加 `trace` 参数（`World::commit` 与 CLI `append` 今天都没有它）
+- [x] 6.1 给写入入口加 `trace` 参数（`World::commit` 与 CLI `append` 今天都没有它）
+      **已结账（2026-09-28，工区 F 落地、执行者复验）**：
+      库侧**本来就有**带 `trace` 的入口（`World::commit_requested`，随副本起点 `b00e2d6` 入库，**不是本轮新增**）；**真正缺的是命令行那一级**——`cmd_append` 只调 `w.commit(kind,&actor,body)`，写 `--trace` 时它会被当成 `actor`。
+      改法：`src/lib.rs` 新增 `pub struct Envelope {trace,to,flags}` ＋ `pub fn commit_envelope(…)`，`commit`／`commit_requested` 改成它的**薄壳**；
+      `src/main.rs` 的 `append` 补 `[--trace <id>]`（与 `[--flag <名>]...`）。
+      **为什么用信封结构体而不是改签名**：`World::commit` 在 HEAD 上有 **61 处**调用点、`commit_requested` 另有 **20 处**，
+      其中 `tests/ontology_ext.rs` **正由另一工区在写** ⇒ 加位置参数＝逐处改＋并行事故。**影响面：`tests/**` 0 改、`channel.rs` 的 `RequestSink` 0 改、`main.rs` 1 处**。
+      断言：`tests/trace_notice.rs::f61`（逐字节读回）／`f62`（不带 ⇒ **不写 `trace` 键**）／`f63`（空串按未给）／`f64`（经账本追回意图）／`f65`（悬空 id 仍接受）／`f66`（缺值即用法错误 rc=1 且不落笔）。
+      **变异**（私有树，`CARGO_TARGET_DIR=/root/t-f`）：删 `event::with_trace` ⇒ f61/f64/f65 红；CLI 改回 `w.commit` ⇒ f61/f64/f65/f67/f68 红；
+      `with_trace` 恒写 ⇒ f62/f63/f69 红；去 `if !t.is_empty()` ⇒ **只** f63 红（`"trace":""`）；给 trace 加引用校验 ⇒ f61/f65 红。**全绿**。
       **验收**：能从入口写出一条带 `trace` 的事件，并读回
-- [ ] 6.2 判据 (2)(3) 的可执行验证面（当前标【待验证】，阻塞原因=写入入口缺失）
+- [x] 6.2 判据 (2)(3) 的可执行验证面（当前标【待验证】，阻塞原因=写入入口缺失）
+      **已结账**：判据 (2)(3) 的可执行验证面**补齐**——命令行这一级（`f61`／`f66`）、"不写 `trace` 键"的**显式**断言（`f62`，不是写 `null`）、
+      **逐字节**读回（`f61`）、空串口径（`f63`）；判据 (4)（悬空 `id` 仍须接受）由 `f65` 经**命令行**承担。
+      出处逐字：`REQ-F-031` 判据 (2)(3)(4)（`WC-SRS-001-v0.1.md:263`）；书 §4.6「请求与结果的配对靠两处对齐…」（合订本 `:619`）。
       **验收**：新增测试，端到端断言 `trace` 落账且可追
 
 ## 7. 通告的闸〔无号〕
 
-- [ ] 7.1 通告也过门禁：任何主体可以写任何通告这一现状 SHALL 被收口
+- [x] 7.1 通告也过门禁：任何主体可以写任何通告这一现状 SHALL 被收口
+      **已结账（含一处必须说清的既有事实）**：**闸本身已在 HEAD 上**——`World::adjudicate_notice`（`src/lib.rs:336`，随副本起点 `b00e2d6` 入库）
+      ＋ `tests/contract.rs::c23a/c23b` 已在册，**不是本轮新增**；本轮补的是**断言面**：
+      ① `c23b`（不在册主体）原来**只断言错误码、完全没断言"留流水"**；② 通告的闸**没有命令行这一级**的端到端用例；
+      ③ **没有任何断言钉住"在册主体也写不了保留前缀"与"不在册"两条路的分工**。
+      新增 `tests/trace_notice.rs::f71`：① 在册主体发 `type=gate.rejected` ⇒ rc=2＋`ext.world.Gate.NoticeNotAllowed`＋**伪造行 0 条**；
+      ② 不在册发 `my.own.notice` ⇒ rc=2＋`NoticeRejected`＋**`gate.notice-rejected` 流水 1 条**（这一格此前**无人断言**）；
+      ③ **正控**：在册主体发普通通告 ⇒ 落账且**不**产生拒绝流水；四条流水的 `refused` 指纹都在，`refused_subject`（被拒信纸）与 `actor`（发起人）**分列两格**。
+      **变异**：撤掉通告的闸 ⇒ f71/f72＋c23a/c23b 红；删"主体须在册"那半 ⇒ f71/f72＋c23b 红。**全绿**。
+      出处逐字：书 §4.2「**通告另有一道窄闸**…这条守的是审计的根…」（合订本 `:531`）＋「**被拦下的请求也要留痕**」（`:527`）。
       **验收**：造一条"不该由它发的通告" ⇒ 必须被拒且留流水
-- [ ] 7.2 与"保留前缀通告"的既有规则对齐（`c23` 两条用例的分工写清）
+- [x] 7.2 与"保留前缀通告"的既有规则对齐（`c23` 两条用例的分工写清）
+      **已结账**：与「保留前缀通告」的既有规则对齐——**任务书里"两条用例"的说法比 HEAD 旧**（HEAD 上 c23 已有**三条**：a 保留前缀／b 不在册／c 流水 `refused` 指纹）。
+      真正缺的是：**`refused` 指纹的"随对象变"从未被钉过**（既有的两条断言——`starts_with("fnv1a64:")` 与"同一次尝试同指纹"——**一个常量指纹能同时满足**）；
+      路径分工只写在注释里、**没有会红的断言**。
+      新增 `tests/trace_notice.rs::f72`：① **判定先后**（不在册主体提交保留前缀通告 ⇒ 必须拿到 `NoticeNotAllowed` 而非 `NoticeRejected`）；
+      ② **流水类型互不相同**（`gate.notice-not-allowed` 1 条／`gate.notice-rejected` 4 条）；③ **指纹随被拒对象变**（换 actor 或换信纸 ⇒ 必须不同；同一次尝试重放 ⇒ 必须相同）。
+      **变异**：两段检查顺序对调 ⇒ f72＋c23a 红；**指纹改常量 ⇒ 只 f72 红（`contract.rs` 三条 c23 全绿）**——
+      这正是"既有断言抓不住常量指纹"的**实测证据**（逐字：`left: "fnv1a64:0000000000000000" right: "fnv1a64:0000000000000000"`）。**全绿**。
       **验收**：两条用例各自断言的路径互不冒充；补上 `refused` 指纹断言
 
+
+      **★ 工区 F 自加的一条纪律（执行者已认可，理由与撤销办法都在此）**：**`gate.` 开头的旗标是内核保留前缀，调用方给了即拒并留流水**
+（错误码 `ext.world.Gate.FlagNotAllowed`）。理由：信封 `flags` 里混着两种作者——内核依裁决写的 `gate.friction:<等级>` 与调用方带来的旗标；
+若调用方能随便写 `gate.` 开头，他就能**替世界说**"这件事被加过摩擦"，与 `gate.*` **通告**的伪造（`D-13`）**同一形状**，账本里伪造的那一格与真的那一格**逐字同形**。
+落地位置：`commit_verbatim` 在**过法律之后、门禁裁决之前**按前缀拒绝，并照书 §4.2「被拦下的请求也要留痕」留一条 `gate.flag-not-allowed` 流水、理由里**逐字点名那个旗标**。
+**撤销办法（不埋雷）**：删 `src/lib.rs` 里的 `const RESERVED_FLAG_PREFIX` 与那段 `for f in flags { if f.starts_with(…) { … } }`，再删 `f68` 一条用例即可。
+**仍登记、未动的边界（不许读成已合上）**：① `refused` 指纹**不覆盖信封旗标**（被拒的是哪个旗标由 `payload.reason` 逐字点名；要不要把信封纳入指纹属 `D-14` 口径变更 ⇒ **待人裁**）；
+② 旗标**不由 `policy.json` 裁决**、本体 `ontology.json` 的 `flags` 是空数组 ⇒ "哪些旗标属内核"目前是**代码里的纪律**，挪进策略＝**门禁强度变更，须人裁**。
 ## 8. 可逆性判定与两处配置互校〔无号〕
 
 - [x] 8.1 闸读出风险等级——**已落地**（2026-09-27）：`world-core/src/gate.rs:73` `pub risk: Option<CarrierRisk>,`、
@@ -146,3 +253,21 @@
 - [ ] 10.1 各组逐条核算：每件都有**会红的断言**，且断言是对外可核的行为、不是内部事实
 - [ ] 10.2 `python3 world-core/tools/spec_bridge.py` **七条全绿**（含判据②：本件 delta 里的证据行在归档前不得留下空锚）
 - [ ] 10.3 本件的 delta 合并入主规格并归档（**在此之前，本件必须一直不归档**）
+
+- [ ] 10.4 **本改动造成的接口文档漂移（只登记，未代改——等文档口）**：CLI 用法面已变
+（`append … [actor] [--trace <id>] [--flag <名>]...`），而下面几处仍写旧用法：
+`world-core/docs/S2-设计/WC-IC-001-v0.1.md:799`、`WC-HLD-001-v0.1.md:940`、`S1-需求/WC-UM-001-v0.1.md:37`、
+`WC-IRS-001-v0.1.md:1027`（`WC-FMT-001:1383/1416` 的 `D-06` 登记项同理）。
+**验收**：四处用法串与 `world --help` 的**当前输出**逐字一致；`spec_bridge.py` 仍 11/0。
+（**登记人声明**：这是"改动使既有文档过期"的正规登记，不是"文档写错"——过期的原因与处置都在这里。）
+- [ ] 10.5 **本改动造成的既有声明过期（只登记，未代改）**：
+① `WC-FMT-001-v0.1.md:322` 与 `阶段外-待启用/S2-设计/WC-LFMT-001-v0.1.md:112` 逐字「`src/` 内**没有任何代码读 `flags`**」
+⇒ **已过期**（`event::read_flags` 是第一个读点）；
+② `WC-ONT-001` §八.5（`WC-ONT-001-v0.1.md:579`／合并件 `WC-FMT-001-v0.1.md:2072`）「不担保"极小核心 + 命名空间扩展"已实现…
+`src/` 中找不到该机制」⇒ **宜复核**（"扩展项不得与核心字段重名"这条**已是机器判据**，判据② 已绿）；
+③ 状态列过期（`WC-SRS-001-v0.1.md:84/261` 的 `REQ-F-029`「未实现」、`:85/262` 的 `REQ-F-030`、
+`WC-RTM-001.csv:35-36`、`openspec/BRIDGE.md:100-101`、`WC-SCMP-001` §8.4 的 `G-82`）——**按本仓口径在归档合并时统一改**；
+④ 新增公开面与错误码需在 `WC-IC-001`（错误码表）与 `WC-ONT-001` §四 落一笔：
+`event::{Flags,is_factory_flag,read_flags}`、`Ontology::read_flags`、`ext.world.Ontology.CoreCollision`、`ext.world.Gate.FlagNotAllowed`；
+⑤ `WC-ONT-001` §八.4／`WC-FMT-001:2071`（"不担保顶层 `flags` 被使用"）**仍然成立**（本轮刻意没读顶层 `flags`），**不需改**。
+**验收**：①②④ 改后 `spec_bridge.py` 与 `ic_books_check.py` 仍绿；③ 由归档那一轮统一处置。

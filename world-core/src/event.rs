@@ -49,6 +49,66 @@ pub fn with_flag(ev: &mut Value, flag: &str) {
     }
 }
 
+/// 一个**读者**从一条事件的 `flags` 里读出来的东西（`REQ-F-029`）。
+///
+/// 依据（逐字）：`world-core/ontology.json:20` ——
+/// `"flags": "array  # 能力旗标；未知旗标必须忽略"`。
+/// 分界线（`WC-FMT-001` §「未知家族 / 未知字段 / 未知旗标」逐字）：
+/// 「**不认识的语义拒绝，不认识的附加信息忽略**」。
+///
+/// 三个格子各自可判：
+/// - [`Flags::known`]：**这个读者认得**的旗标 ⇒ 他按这部分继续处理；
+/// - [`Flags::ignored`]：**这个读者不认得**的 ⇒ **一律忽略**，不得因此拒收整条事件；
+/// - [`Flags::not_string`]：不是字符串的项（如 `123`）⇒ **如实计数**，既不静默修补、也不据此拒收
+///   （形状归本体校验；`WC-ONT-001` §八 逐字登记"不校验 `flags` 是不是数组、不校验取值"）。
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Flags<'a> {
+    /// 认得的旗标（按它们在事件里的原顺序）。
+    pub known: Vec<&'a str>,
+    /// 不认得的旗标（同样按原顺序）——**必须忽略**，不得据此拒收。
+    pub ignored: Vec<&'a str>,
+    /// 不是字符串的项数（不静默修补，也不据此拒收）。
+    pub not_string: usize,
+}
+
+/// 「出厂读法」认得哪些旗标：只有 [`FLAGS`]（今天为空）。
+///
+/// ⚠️ 这**不等于**"世界里只会有这些旗标"：`gate.friction:*` 由**内核自己**写
+/// （见 [`FLAG_FRICTION`]），而出厂读法**不认得**它——正因为"未知旗标必须忽略"，
+/// 带摩擦旗标的事件才照样读得下去（本文件 [`FLAG_FRICTION`] 的文档里那句
+/// 「旧读法读到它不会坏」在这里成为**可执行的**事实，而不只是一句注释）。
+pub fn is_factory_flag(flag: &str) -> bool {
+    FLAGS.contains(&flag)
+}
+
+/// **读出**一条事件的旗标：认得的进 [`Flags::known`]，不认得的一律进 [`Flags::ignored`]。
+///
+/// 这是"未知旗标一律忽略并按已知部分继续"的实现点：读的人拿 `known` 继续办事，
+/// `ignored` 只作登记。**没有 `Result`**——"出现了不认得的旗标"不是一种错误。
+///
+/// 口径（三条，都可判真假）：
+/// - 没有 `flags` 键、或 `flags` 不是数组 ⇒ 返回**空视图**（形状不归这里判：
+///   信封必填与家族信纸归 [`crate::ontology::Ontology::validate`]）；
+/// - **原顺序**保留（旗标是有序数组，重排会让"同一条事件"读出两种样子）；
+/// - **不解释旗标的取值**（`gate.friction:` 后面跟什么等级，是写它的人的事）。
+pub fn read_flags<F>(ev: &Value, knows: F) -> Flags<'_>
+where
+    F: Fn(&str) -> bool,
+{
+    let mut out = Flags::default();
+    let Some(arr) = ev.get("flags").and_then(Value::as_array) else {
+        return out;
+    };
+    for item in arr {
+        match item.as_str() {
+            Some(f) if knows(f) => out.known.push(f),
+            Some(f) => out.ignored.push(f),
+            None => out.not_string += 1,
+        }
+    }
+    out
+}
+
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// 造一条事件（**不含 seq 的现实值以外的一切都已就位**）。

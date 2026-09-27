@@ -15,8 +15,8 @@
 # | `TC-042` | `REQ-F-024` 投影不新增事实 | `project language`/`project visual` 的三元组集合 P ⊆ `state --json` 的 S；**反假**：注入 S 中不存在的三元组 ⇒ 判定必须非空 |
 # | `TC-046` | `REQ-F-027` 家族演进 | 换一份**只加扩展**的本体 ⇒ 旧账本折叠结果**逐字节不变**；**反例**：`world` 升版 ⇒ 必须拒启 |
 # | `TC-047` | `REQ-F-028` 取值形状 | 手写类型不符账本行 ⇒ 各得**类型化**拒绝（点名 `kind` / 点名 `seq`） |
-# | `TC-048` | `REQ-F-029` 未知旗标必须忽略 | 含**未知旗标**的合法事件**必须被接受**；对偶：未知 `kind` **必须被拒绝** |
-# | `TC-049` | `REQ-F-030` 极小核心 + 命名空间扩展 | ① 核心面**逐项可枚举**；③ 只加扩展 ⇒ 折叠结果不变 |
+# | `TC-048` | `REQ-F-029` 未知旗标必须忽略 | 含**未知旗标**的合法事件**必须被接受**；**经公开写入入口**（`append … --flag`）落笔并原样保留；对偶：未知 `kind` **必须被拒绝** |
+# | `TC-049` | `REQ-F-030` 极小核心 + 命名空间扩展 | ① 核心面**逐项可枚举**；② 扩展项与核心字段**重名 ⇒ 加载被拒**；③ 只加扩展 ⇒ 折叠结果不变 |
 # | `TC-050` | `REQ-N-006` 投影质量目标 | **跨进程**两份投影同源头（`world`/`vocab`/`last_seq`/`state`）**逐字节相同**；**反例**：换词表 ⇒ 词表 hash 必变 |
 # | `TC-051` | `REQ-F-019` 排版可审计 | 调 `tools/visual_layout_audit.py`（**独立于** `visual::parse()` 的第二份解析器），三样本：普通值 / 含换行·控制字符的值 / 空状态 |
 # | `TC-052` | `REQ-F-031` `trace` 字段 | 判据 (4a)(4b)：带 `trace`（指向不存在的 `id`）与不带 `trace` 两本账 ⇒ **都必须被接受**，且 `state` 与两投影结论**逐字节相同** |
@@ -356,10 +356,44 @@ assert_has "⑥ 对偶一半与 TC-047 的 ① 同源（两处必须一致，不
 # 登记⑦：判据①的**可构造性**边界（出厂本体 flags 为空数组）
 FLAGS_LEN="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1],encoding="utf-8")).get("flags",[])))' "$SB/ontology.json")"
 if [ "$FLAGS_LEN" = "0" ]; then
-  reg "⑦ 出厂本体 flags = **空数组**（实测长度 $FLAGS_LEN）⇒ 「未知旗标」在**本体内没有任何已定义旗标可比对**；① 之所以能跑，靠的是**手写账本行**而非公开写入入口。该边界如实登记，不读作「已完备」"
+  reg "⑦ 出厂本体 flags = **空数组**（实测长度 $FLAGS_LEN）⇒ 「未知旗标」在**本体内没有任何已定义旗标可比对**（本体侧没有对照面，故『已定义/未定义』这条界线今天只能由读者一侧给）。该边界如实登记，不读作「已完备」"
 else
   ok "⑦ 出厂本体已定义 $FLAGS_LEN 个旗标（判据①有本体侧对照面）"
 fi
+
+# ⑧：① 的那一行**确实被折进状态**（不是"没报错但其实被跳过"——跳过也会得到同样的基线）
+assert_has "⑧ ① 的行被**折进状态**（不是被跳过）：折叠结果里读得到它改的那一格" "$FOUT" '"muted": ?true'
+assert_has "⑨ ⑧ 的槽位确实是那个已声明的实体（世界里的东西，不是凭空多出来的键）" "$FOUT" 'world://notice/a'
+
+# ⑩⑪ **对偶的写入侧**（TC-047 的 ① 与 ⑤ 走的是折叠侧）：同一个入口，方向相反
+#   旗标那半：接受并落笔；家族那半：拒绝且**不落笔**。两条各自成判，不许互相冒充。
+DUAL_LED="$SB/dual.jsonl"
+DOUT="$(WO2 "$SB/ontology.json" "$DUAL_LED" append bogus '{"subject":"world://notice/a","path":"muted","before":null,"after":true}' 2>&1)"; DRC=$?
+assert_rc "⑩ 对偶·写入侧：未知 kind 经 append 子命令 ⇒ **必须被拒绝**（rc=2）" 2 "$DRC"
+assert_has "⑪ ⑩ 的理由是**类型化**的未知家族（不是一句泛泛的解析失败）" "$DOUT" 'UnknownKind'
+DUAL_LINES=0
+[ -f "$DUAL_LED" ] && DUAL_LINES="$(wc -l <"$DUAL_LED" | tr -d ' ')"
+assert_eq "⑫ ⑩ **不落笔**（被拒的事件一行都没进账本）" "0" "$DUAL_LINES"
+
+# ⑬ 反假：同一个入口、同一条信纸，只把 kind 换成已知家族 ⇒ 必须照常落笔
+#    （否则 ⑩⑫ 可能只是"这个入口本来就写不进去"）
+DOUT2="$(WO2 "$SB/ontology.json" "$DUAL_LED" append change '{"subject":"world://notice/a","path":"muted","before":null,"after":true}' 2>&1)"; DRC2=$?
+assert_rc "⑬ 反假：同一条信纸换成已知家族 ⇒ 照常落笔（rc=0）" 0 "$DRC2"
+DUAL_LINES2="$(wc -l <"$DUAL_LED" | tr -d ' ')"
+assert_eq "⑭ ⑬ 确实落了一行（证明 ⑩⑫ 的『不落笔』不是入口失效）" "1" "$DUAL_LINES2"
+
+# ⑮⑯⑰ **公开写入入口**能不能落一条带**任意未知旗标**的事件。
+# 依据（2026-09-28 工区 F 落的写入入口参数）：`append <kind> <json-body> [actor] [--trace <id>] [--flag <名>]...`
+# 在这之前，带任意未知旗标的事件**只能由手写账本行构造**（① 走的正是那条路）——
+# 本轮之前它是一条登记项，入口一落地就按登记时的处置改成断言（登记项不是用来长期挂着的）。
+FLAG_LED="$SB/flag_entry.jsonl"
+WO2 "$SB/ontology.json" "$FLAG_LED" append change '{"subject":"world://notice/a","path":"muted","before":null,"after":true}' world://user --flag future.flag >/dev/null 2>&1
+assert_rc "⑮ 经**公开写入入口**（append … --flag）落一条带未知旗标的事件 ⇒ **被接受**（rc=0）" 0 "$?"
+FLAG_LINE="$(cat "$FLAG_LED" 2>/dev/null)"
+assert_has "⑯ ⑮ 落笔的那一行**原样带着**那个旗标（不是被丢掉、也不是被改写）" "$FLAG_LINE" '"flags":\["future.flag"\]'
+WO2 "$SB/ontology.json" "$FLAG_LED" state --json >/dev/null 2>&1
+assert_rc "⑰ ⑮ 那条事件**照常被折叠**（rc=0：旗标不碍事）" 0 "$?"
+
 
 # ══ TC-049 · REQ-F-030 极小核心 + 命名空间扩展 ═══════════════════════
 echo
@@ -386,7 +420,8 @@ assert_eq "⑤ 可选字段恰为 trace" "HAS_TRACE=1" "$(printf '%s' "$CORE" | 
 assert_eq "⑥ 判据③「只加扩展 ⇒ 同一账本折叠结果不变」（与 TC-046① 同断言、两处必须一致）" \
   "$BASE_STATE" "$(WO "$SB/ontology-ext.json" state --json)"
 
-# 登记⑦：判据②「扩展项不得与核心字段重名」——现状为红（本体加载器只查形状，不查重名）
+# ⑦ 判据②「扩展项不得与核心字段重名」——**已落地（2026-09-28）**：
+# 本体加载器在装载期查重名（`src/ontology.rs::check_extension_names`），撞上即拒启。
 python3 - "$SB/ontology.json" "$SB/ontology-collide.json" <<'PY'
 import json, sys, collections
 src, dst = sys.argv[1], sys.argv[2]
@@ -396,11 +431,14 @@ json.dump(o, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY
 chmod 600 "$SB/ontology-collide.json"
 COL_OUT="$(WO "$SB/ontology-collide.json" state 2>&1)"; COL_RC=$?
-if [ "$COL_RC" -eq 2 ]; then
-  ok "⑦ 反例②：扩展项与核心字段（body）重名 ⇒ 被拒（rc=2）"
-else
-  reg "⑦ 反例②**现状为红**：扩展项与核心信封字段重名（concepts 里叫 body）竟**被接受**（rc=$COL_RC）—— 本体加载器只查形状、不查重名 ⇒ REQ-F-030 判据② **不成立**"
-fi
+assert_rc "⑦ 反例②：扩展项与核心字段（body）重名 ⇒ **加载被拒**（rc=2）" 2 "$COL_RC"
+assert_has "⑧ ⑦ 的理由带**可判定的错误码**（不是一句泛泛的加载失败）" "$COL_OUT" 'ext\.world\.Ontology\.CoreCollision'
+assert_has "⑨ ⑦ 的理由**点名**撞上的那一项（实体名）" "$COL_OUT" 'body-fake'
+
+# 正控⑩：**只加扩展**的本体必须照常可读（防"什么都拒"把判据③ 一起打死）
+EXT_OUT="$(WO "$SB/ontology-ext.json" state --json 2>&1)"; EXT_RC=$?
+assert_rc "⑩ 正控：只加扩展（新家族 audit ＋ 概念 audit.result）⇒ 照常可读（rc=0）" 0 "$EXT_RC"
+
 
 # ══ TC-050 · REQ-N-006 投影质量目标（跨进程同源）══════════════════════
 echo
