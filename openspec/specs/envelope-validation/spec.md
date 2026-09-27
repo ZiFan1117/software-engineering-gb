@@ -25,6 +25,40 @@ SHALL NOT 被读成"`world` 缺失也被指名报出"。
       —— **⚠ `world` 一轮的"报出字段名"是恒真断言**（`world-core/src/ontology.rs:32` 的前缀自带 `world`）
       ⇒ 该轮要成为"指名报出"的证据 ⇒ 需补断言（列进 tasks）。
 
+### Requirement: 信封字段的类型按本体的声明判（**读路径也判**）
+
+系统 SHALL 按本体 `envelope.fields` 的**声明**校验信封字段的**类型**：声明串的**首词即类型**
+（`integer` / `number` / `string` / `array` / `object` / `bool`；`enum(...)` 见下）。
+类型不符时 SHALL 拒绝，错误码 SHALL 为 `ext.world.Ontology.BadFieldType`，并 SHALL **点名那一格**。
+
+系统 SHALL NOT 把本条读成"信封的形状已被查全"：**缺格**另有其主——读侧由折叠层的
+`ext.world.ReadModel.MissingCell` 承担、`seq` 由账本解析的 `ext.world.Ledger.MissingSeq` 承担；
+**枚举值**另有其主——值不在枚举里时由家族查找报 `ext.world.Ontology.UnknownKind` 并点名那个值。
+本条只判**声明过且值在场**的**信封**字段；`body` **内部**字段的类型不属本条。
+
+**两条边界 SHALL 被写明**（不写，读者会以为"声明即强制"）：
+① **不认得的声明词一律放行**——本体把某格声明成 `weird` 时该格**不判**（本判据不替本体发明类型系统）；
+② **`null` 算"在场"**——它会被判类型不符（`to: null` ⇒ 拒），与"缺省"（键不写）**不是一回事**。
+对**写入路径产出的**事件无影响（生产路径不写 `null`），但**旧账本若含 `null`，本条之后会被拒**——
+这是一处**行为变更**，如实写在这里。
+
+#### Scenario: 读路径上类型不符的信封被拒且点名那一格
+
+- **WHEN** 打开一份账本，其中的事件把某一格写成与声明不符的类型（`world` 写成字符串、`actor` 写成整数）
+- **THEN** 打开被拒，错误码为 `ext.world.Ontology.BadFieldType`，且**点名那一格**；同形但类型合规的账本必须打得开（正控）
+- **证据**：`world-core/tests/contract.rs::c34_envelope_field_types_are_checked_on_the_read_path`
+      （两处反例 ＋ 一处正控）。**写入路径的次序不变**：`world` 写成字符串时写侧仍先报 `BadVersion`，
+      本判据**不抢**它——那条既有契约钉在 `world-core/tests/contract.rs::c02_every_required_envelope_field_is_enforced`。
+
+#### Scenario: 声明之外的词一律放行（边界固定）
+
+- **WHEN** 本体把某格的类型声明改成一个**不认得的词**（如 `weird`），而事件里该格的值类型不符
+- **THEN** 不判类型、放行 —— 本判据**不替本体发明类型系统**
+- **证据（待补）**：**本条尚无断言**（列进 tasks）。落点：`world-core/tests/contract.rs` 里加一条用例
+      （另造一份把某格声明写成 `weird` 的坏本体，喂一条该格类型不符的事件，断言**打开成功**）。
+      该边界**已被独立实测确认**（独立评审席自造 12 组账本里的 `weird` 一组：`actor: 123` ⇒ rc=0），
+      但**仓内今天没有会红的断言**——故照实标"待补"，**不拿实测当断言**。
+
 ### Requirement: 三类话之外一律被拒
 
 系统 SHALL 只接受本体声明的三个家族（变更 / 请求与结果 / 通告）；出现未知家族时 SHALL 拒绝，

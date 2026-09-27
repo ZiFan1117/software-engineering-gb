@@ -161,8 +161,44 @@
      ]
     },
     {
-     "title": "三类话之外一律被拒",
+     "title": "信封字段的类型按本体的声明判（**读路径也判**）",
      "line": 28,
+     "text": [
+      "系统 SHALL 按本体 `envelope.fields` 的**声明**校验信封字段的**类型**：声明串的**首词即类型**",
+      "（`integer` / `number` / `string` / `array` / `object` / `bool`；`enum(...)` 见下）。",
+      "类型不符时 SHALL 拒绝，错误码 SHALL 为 `ext.world.Ontology.BadFieldType`，并 SHALL **点名那一格**。",
+      "系统 SHALL NOT 把本条读成\"信封的形状已被查全\"：**缺格**另有其主——读侧由折叠层的",
+      "`ext.world.ReadModel.MissingCell` 承担、`seq` 由账本解析的 `ext.world.Ledger.MissingSeq` 承担；",
+      "**枚举值**另有其主——值不在枚举里时由家族查找报 `ext.world.Ontology.UnknownKind` 并点名那个值。",
+      "本条只判**声明过且值在场**的**信封**字段；`body` **内部**字段的类型不属本条。",
+      "**两条边界 SHALL 被写明**（不写，读者会以为\"声明即强制\"）：",
+      "① **不认得的声明词一律放行**——本体把某格声明成 `weird` 时该格**不判**（本判据不替本体发明类型系统）；",
+      "② **`null` 算\"在场\"**——它会被判类型不符（`to: null` ⇒ 拒），与\"缺省\"（键不写）**不是一回事**。",
+      "对**写入路径产出的**事件无影响（生产路径不写 `null`），但**旧账本若含 `null`，本条之后会被拒**——",
+      "这是一处**行为变更**，如实写在这里。"
+     ],
+     "scenarios": [
+      {
+       "title": "读路径上类型不符的信封被拒且点名那一格",
+       "line": 45,
+       "when": "打开一份账本，其中的事件把某一格写成与声明不符的类型（`world` 写成字符串、`actor` 写成整数）",
+       "then": "打开被拒，错误码为 `ext.world.Ontology.BadFieldType`，且**点名那一格**；同形但类型合规的账本必须打得开（正控）",
+       "ev": [
+        "world-core/tests/contract.rs::c34_envelope_field_types_are_checked_on_the_read_path"
+       ]
+      },
+      {
+       "title": "声明之外的词一律放行（边界固定）",
+       "line": 53,
+       "when": "本体把某格的类型声明改成一个**不认得的词**（如 `weird`），而事件里该格的值类型不符",
+       "then": "不判类型、放行 —— 本判据**不替本体发明类型系统**",
+       "ev": []
+      }
+     ]
+    },
+    {
+     "title": "三类话之外一律被拒",
+     "line": 62,
      "text": [
       "系统 SHALL 只接受本体声明的三个家族（变更 / 请求与结果 / 通告）；出现未知家族时 SHALL 拒绝，",
       "SHALL NOT 猜测其含义，SHALL NOT 落笔该事件，且 SHALL NOT 改动世界状态。"
@@ -170,7 +206,7 @@
      "scenarios": [
       {
        "title": "不认识的事件家族被拒",
-       "line": 33,
+       "line": 67,
        "when": "以本体未声明的 `kind` 提交事件",
        "then": "提交失败，错误串含 `UnknownKind`，且不落笔该事件（账本 `last_seq` 不前进）",
        "ev": [
@@ -181,7 +217,7 @@
     },
     {
      "title": "法律损坏或指向别处时拒绝启动",
-     "line": 42,
+     "line": 76,
      "text": [
       "本体与门禁策略 SHALL 在世界打开时装载并校验；文件缺失、家族为空、能力表为空、白名单为空、",
       "`writes` 段缺失时 SHALL 拒绝启动；法律文件是**符号链接**时 SHALL 拒绝启动，",
@@ -192,7 +228,7 @@
      "scenarios": [
       {
        "title": "坏本体拒绝启动",
-       "line": 51,
+       "line": 85,
        "when": "本体文件内容损坏",
        "then": "打开失败",
        "ev": [
@@ -201,7 +237,7 @@
       },
       {
        "title": "本体缺失与家族为空被拒",
-       "line": 57,
+       "line": 91,
        "when": "本体文件不存在，或 `families` 为空",
        "then": "装载失败（`ReadFail` / `NoFamilies`）",
        "ev": [
@@ -210,7 +246,7 @@
       },
       {
        "title": "策略的每一类畸形形状都被拒",
-       "line": 63,
+       "line": 97,
        "when": "以 5 类畸形形状分别装载门禁策略（坏 JSON／缺 `policy`／能力表为空／白名单为空／缺 `writes`）",
        "then": "每一类都被拒；**对照**：合法策略必须能加载",
        "ev": [
@@ -219,7 +255,7 @@
       },
       {
        "title": "策略为符号链接时拒绝启动，而真实文件不被误拒",
-       "line": 73,
+       "line": 107,
        "when": "以指向别处的软链作为策略路径打开世界；对照组用真实文件",
        "then": "软链被拒且错误信息含\"符号链接\"；真实文件正常打开",
        "ev": [
@@ -230,7 +266,7 @@
     },
     {
      "title": "事件身份在进程内唯一",
-     "line": 80,
+     "line": 114,
      "text": [
       "系统 SHALL 保证同一进程内分配的事件 `id` 不重复。",
       "系统 SHALL NOT 声称跨进程或跨重启的 `id` 唯一性由本机制保证。"
@@ -238,7 +274,7 @@
      "scenarios": [
       {
        "title": "连续提交的事件 id 各不相同",
-       "line": 85,
+       "line": 119,
        "when": "在同一进程内连续提交多条事件",
        "then": "所有事件的 `id` 互不相同",
        "ev": [
@@ -249,7 +285,7 @@
     },
     {
      "title": "错误携带机器可读的错误码",
-     "line": 91,
+     "line": 125,
      "text": [
       "系统 SHALL 在失败路径上给出机器可读的错误码（如 `ext.world.*`），使调用方按码判定，",
       "SHALL NOT 要求调用方去匹配中文散文措辞。",
@@ -259,7 +295,7 @@
      "scenarios": [
       {
        "title": "各类失败路径的错误码可枚举",
-       "line": 99,
+       "line": 133,
        "when": "触发布局类（本体形状）、门禁类、法律类、通道类、读模型类失败路径",
        "then": "每条错误都带稳定的错误码 `ext.world.<域>.<原因>`，且错误码区分度 ≥ 6",
        "ev": [
@@ -270,7 +306,7 @@
     },
     {
      "title": "错误码契约的已知边界",
-     "line": 107,
+     "line": 141,
      "text": [
       "系统 SHALL 逐条登记**已知的无码失败出口**，使\"凡失败路径都带码\"这一全称句不成立：",
       "- 静态墙的三条断言：拒绝符号链接、拒绝 group/other 可写（文件与目录）、属主断言未通过；",
@@ -281,7 +317,7 @@
      "scenarios": [
       {
        "title": "静态墙三条断言无错误码（边界固定）",
-       "line": 117,
+       "line": 151,
        "when": "以符号链接作为法律路径、或以对 group/other 可写的文件作为法律路径打开世界",
        "then": "拒绝启动，但错误串**不含** `ext.world.` 码——本断言证明的是**边界**而不是实现缺陷",
        "ev": [
@@ -297,7 +333,7 @@
       },
       {
        "title": "策略版本不符出口无错误码（边界固定）",
-       "line": 125,
+       "line": 159,
        "when": "以 `policy` 版本号不为 1 的策略打开世界",
        "then": "拒绝启动，错误串为散文，**不含** `ext.world.` 码",
        "ev": [
@@ -316,7 +352,7 @@
     },
     {
      "title": "REQ-F-027 家族演进与向前兼容",
-     "line": 131,
+     "line": 165,
      "text": [
       "事件一旦追加**不可改**，故演进 SHALL 是**加法**：`world` 声明词表版本，**只加 `flags`、永不改这个数的含义**；",
       "新家族／新字段的引入 SHALL NOT 让旧事件读不懂。家族演进的形态 SHALL 逐层写死为下面三条：",
@@ -337,7 +373,7 @@
      "scenarios": [
       {
        "title": "新家族按加法加，新读法照读旧账本",
-       "line": 153,
+       "line": 187,
        "when": "取一份只新增家族与同名概念的新本体，与出厂本体分别读**同一本旧账本**",
        "then": "词表身份**改变**（\"换本体\"确实发生）、既有三家族的必填格一格未变、旧账本每一行仍合法，",
        "ev": [
@@ -346,7 +382,7 @@
       },
       {
        "title": "读法没有语义的家族被拒且点名",
-       "line": 160,
+       "line": 194,
        "when": "账本里出现一条**新家族**的行",
        "then": "写入侧与折叠侧两处都**拒**、各自**点名**那个家族；把那一行去掉后，新旧两套读法**都照读**",
        "ev": [
@@ -355,7 +391,7 @@
       },
       {
        "title": "加可选格无害、加必填格破坏性",
-       "line": 166,
+       "line": 200,
        "when": "给**已知家族**加一格可选、再把它加成必填，两次都读同一本旧账本",
        "then": "前者照读且折叠结果逐字节不变；后者读不过去并点名那一格（写入侧与折叠侧各报一次）",
        "ev": [
@@ -364,7 +400,7 @@
       },
       {
        "title": "两个方向各有一条会红的断言",
-       "line": 172,
+       "line": 206,
        "when": "分别造出\"不认识的家族\"与\"不认识的旗标\"两条事件",
        "then": "前者被**拒**且不落笔；后者被**接受**、落笔，且不影响后续折叠",
        "ev": [
@@ -375,7 +411,7 @@
     },
     {
      "title": "REQ-F-029 未知旗标必须忽略",
-     "line": 179,
+     "line": 213,
      "text": [
       "系统 SHALL 忽略任何不认识的旗标，并按它认得的那些继续处理；SHALL NOT 因为出现未知旗标而拒收。",
       "（依据逐字：出厂本体 `world-core/ontology.json:20` —— `\"flags\": \"array  # 能力旗标；未知旗标必须忽略\"`。）",
@@ -389,7 +425,7 @@
      "scenarios": [
       {
        "title": "未知旗标不影响受理",
-       "line": 191,
+       "line": 225,
        "when": "提交一条带未知旗标的事件",
        "then": "该事件被接受、落笔，读回的 `flags` 保留原值；同一账本的折叠结果与不带该旗标时**相同**",
        "ev": [
@@ -398,7 +434,7 @@
       },
       {
        "title": "未知旗标与未知家族不许互相冒充",
-       "line": 197,
+       "line": 231,
        "when": "取同一条合法事件，分别只把它的 `flags` 换成未知旗标、只把它的 `kind` 换成未知家族",
        "then": "前者被接受、落笔、折叠结果逐字节不变；后者被拒且**不落笔**——写入侧（`UnknownKind`）与折叠侧（`ReadModel.UnknownKind`）**两处都拒**，且各自点名那个家族",
        "ev": [
@@ -2426,15 +2462,15 @@
    "c23_notice_from_unlisted_actor_is_refused",
    "c23_gate_notice_says_what_it_refused",
    "c24_known_codeless_outlets_carry_no_ext_world_prefix",
-   "write_raw_jsonl",
    "write_v1_ledger",
+   "write_raw_jsonl",
    "legal_change",
    "c29_k3_chainless_ledger_survives_one_legal_append",
    "c30_k3_boundary_chainless_ledger_plus_one_append_reports_mixed_chain",
    "c31_chainless_ledger_opens_readonly_and_refuses_writes",
    "c32_last_line_without_trailing_newline_is_cut_and_seq_is_reused",
    "c33_stale_lock_with_a_reused_live_pid_is_never_reclaimed",
-   "c33_envelope_field_types_are_checked_on_the_read_path"
+   "c34_envelope_field_types_are_checked_on_the_read_path"
   ],
   "tests/delivery.rs": [
    "tmpdir",
@@ -3076,32 +3112,38 @@
   },
   {
    "cap": "envelope-validation",
+   "req": "信封字段的类型按本体的声明判（**读路径也判**）",
+   "line": 28,
+   "file": "openspec\\specs\\envelope-validation\\spec.md"
+  },
+  {
+   "cap": "envelope-validation",
    "req": "事件身份在进程内唯一",
-   "line": 80,
+   "line": 114,
    "file": "openspec\\specs\\envelope-validation\\spec.md"
   },
   {
    "cap": "envelope-validation",
    "req": "错误携带机器可读的错误码",
-   "line": 91,
+   "line": 125,
    "file": "openspec\\specs\\envelope-validation\\spec.md"
   },
   {
    "cap": "envelope-validation",
    "req": "错误码契约的已知边界",
-   "line": 107,
+   "line": 141,
    "file": "openspec\\specs\\envelope-validation\\spec.md"
   },
   {
    "cap": "envelope-validation",
    "req": "REQ-F-027 家族演进与向前兼容",
-   "line": 131,
+   "line": 165,
    "file": "openspec\\specs\\envelope-validation\\spec.md"
   },
   {
    "cap": "envelope-validation",
    "req": "REQ-F-029 未知旗标必须忽略",
-   "line": 179,
+   "line": 213,
    "file": "openspec\\specs\\envelope-validation\\spec.md"
   },
   {
@@ -3318,9 +3360,9 @@
  ],
  "counts": {
   "caps": 9,
-  "reqs": 48,
-  "scns": 85,
-  "evs": 163,
+  "reqs": 49,
+  "scns": 87,
+  "evs": 164,
   "srs": 41,
   "judges": 17,
   "booksecs": 46
