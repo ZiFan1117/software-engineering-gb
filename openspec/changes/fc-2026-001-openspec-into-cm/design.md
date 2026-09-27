@@ -67,7 +67,7 @@
 
 **R5 触发条件**：本 change 触及**契约面**（`openspec/specs/**`）、**工具**（`tools/spec_bridge.py`）、**工作流**（默认档与归档门禁）⇒ 按融合档判据**判 R5**。**无破坏性变更**：不改任何接口、不改产品代码与出厂行为、不改既有 Requirement 语义。
 
-**现象证据**：① 流程侧 39 份文档检索 `openspec` **0 命中**；② `openspec validate --archived` = `0 passed / 1 failed`（`✗ 2 incomplete tasks (18/20)`）；③ `spec_bridge*` 五处**全无**；④ 规格侧 REQ 号 **0 处** vs `WC-SRS-001` **378 处**；⑤ 六路逐条审计 **46 条**（严重 15，见 `audit.md`）。
+**现象证据**（全部实测，数值口径见 `openspec/BRIDGE.md`）：① 流程侧 `world-core/docs/` 下 **133 个 `.md`/`.csv`** 检索 `openspec` **0 命中**；② `openspec validate --archived` 当时 = `0 passed / 1 failed`（`✗ 2 incomplete tasks (18/20)`）；③ `spec_bridge*` 五处**全无**；④ 规格侧 REQ 号 **0 处** vs `WC-SRS-001` **371 处**（旧稿写 378，不可复现，已改）；⑤ 六路逐条审计 **46 条**（严重 15，见 `audit.md`）。
 
 ## 方案对比
 
