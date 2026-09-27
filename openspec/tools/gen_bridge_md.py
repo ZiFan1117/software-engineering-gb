@@ -92,13 +92,20 @@ L.append("|---|---|---|---|")
 for i, (cap, req) in enumerate(unmapped, 1):
     L.append("| %d | `%s` | %s | 无号·待流程侧增补 |" % (i, cap, req))
 L.append("")
-L.append("## 三、规格层自身能力的承诺（`spec-governance`，新能力）" )
+L.append("## 三、规格层自身能力的承诺（`spec-governance`——**由 `fc-2026-001` 引入，归档时并入主规格**）")
 L.append("")
-L.append("> 该能力由 `fc-2026-001` 引入。按本表立的新规矩，新写的 Requirement 要带流程侧号；")
+L.append("> ⚠ **主规格里今天还没有这个能力**（`openspec list --specs` 为 **6** 条）：OpenSpec 的 delta 在 change **归档时**才并入主规格，而 `fc-2026-001` 尚未归档（等评审签字）。本节登记的是**该 change 的承诺**，不是「已并入的事实」。")
+L.append("> ⚠ **不要**为了让本节看起来成立而手动把它塞进 `openspec/specs/`——那会让 `archive fc-2026-001` 报 `ADDED already exists` 而**永远归不了档**（`fc-2026-002` 今天正是这个病，守卫判据⑩ 抓的 10 处就是它）。")
 L.append("> 而流程侧今天没有对应需求 ⇒ **逐条登记为「无号·待流程侧增补」**（这是新规矩的第一次适用）。")
 L.append("")
 L.append("| # | 承诺（逐字，`specs/spec-governance/spec.md` 的 Requirement 标题） | 号 |")
 L.append("|---|---|---|")
+# 标题**现取 delta**（2026-09-27 修）：写死的 GOV 会与 delta 脱节——与"标题现取规格树"同一条规矩。
+_gov_delta = _REPO / "openspec/changes/fc-2026-001-openspec-into-cm/specs/spec-governance/spec.md"
+if _gov_delta.is_file():
+    GOV = [ln[len("### Requirement:"):].strip()
+           for ln in _gov_delta.read_text(encoding="utf-8", errors="replace").split("\n")
+           if ln.startswith("### Requirement:")]
 for i, t in enumerate(GOV, 1):
     L.append("| %d | 〔无号·待流程侧增补〕%s | 无号（待流程侧增补） |" % (i, t))
 L.append("")

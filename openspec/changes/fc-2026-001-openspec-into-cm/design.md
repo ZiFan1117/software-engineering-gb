@@ -1,5 +1,7 @@
 # Design
 
+> **数值口径（2026-09-27 补）**：本文出现的「**23 条承诺／39 条需求**」是**立件时点**的读数（时点见 `design.md` 的时序表，`ef2c9a0`／`21:32:37`）。**现行权威值见 `openspec/BRIDGE.md` §七**：规格承诺 **33 条**、流程侧唯一需求号 **41 个**（该表**现算**，并给复算命令）。按 skill §八「一个事实一个权威载体」，**本件不复述现读数**；历史读数保留，因为它记录的是"当时看到什么"。
+
 > **本件是本次 OpenSpec change 的 `design.md`**，其中「影响分析」一节即 R5 的准入要件。
 > **优先次序**：OpenSpec 那一套是**唯一的产物**；软件流程只作**件内的栏位与附表**（批准人、环境指纹、准出判据、需求号追溯），**不另立流程册、不设双份登记**。
 
@@ -58,7 +60,7 @@
 
 | 项 | 内容 |
 |---|---|
-| **受影响模块** | ① `openspec/config.yaml`（默认档）② 新增 `openspec/specs/spec-governance/`（新能力进主规格）③ `openspec/schemas/**`（改掉"双读＋一行指针"的写法；主本 `10-openspec-swe-gb` 同步）④ `openspec/changes/archive/2026-09-27-baseline-verified-doctrine/**`（补 `review.md`、移常设项）⑤ 新增 `openspec/MAINTENANCE.md`（规格层自己的维护清单）⑥ `world-core/tools/spec_bridge.py`（新增）⑦ `world-core/check.sh`（加一步）⑧ `world-core/.scope-declaration.json`（范围门禁要求时按需收窄） |
+| **受影响模块** | ① `openspec/config.yaml`（默认档）② 新增 `spec-governance` 能力——**delta 已就绪，归档时由 `openspec archive` 并入主规格**（**不是"现在已在主规格"**：`openspec list --specs` 今天为 **6** 条；**不要手动预并入**，那会令归档报 `ADDED already exists`）③ `openspec/schemas/**`（改掉"双读＋一行指针"的写法；主本 `10-openspec-swe-gb` 同步）④ `openspec/changes/archive/2026-09-27-baseline-verified-doctrine/**`（补 `review.md`、移常设项）⑤ 新增 `openspec/MAINTENANCE.md`（规格层自己的维护清单）⑥ `world-core/tools/spec_bridge.py`（新增）⑦ `world-core/check.sh`（加一步）⑧ `world-core/.scope-declaration.json`（范围门禁要求时按需收窄） |
 | **受影响需求** | 流程侧 **22 条**被映射（编号桥，见 `mapping.md`）；**5 条承诺取不到号**（登记为「无号」）；**9 条非绿需求无规格落点**（进覆盖 change） |
 | **需重跑的测试** | ① VM：`bash check.sh`（rc=0 为准出前提，本轮已跑）② 新增：`python3 world-core/tools/spec_bridge.py --self-test`（**每条判据各自的反例必须真红**；**条数与逐条结论以 `--json` 的 `passed`/`failed` 为准，本处不复述条数**）③ `openspec validate --all --strict`（6 项 → **7 项全绿**）④ `openspec validate --archived`（本 change 目标是**由红转绿**） |
 | **回归范围** | 按流程侧权威四档（`附件三-评审与门禁.md:265`「R-A 冒烟回归 / R-B 模块回归 / R-C 契约回归 / R-D 全量回归」；**流程侧没有 R-E**）：<br>**R-A 冒烟**：6 份主规格的 Requirement **一字不动** ⇒ 判据 = `git diff -U0 bf2eae7 <该轮提交> -- openspec/specs` 的**每个 hunk 都落在 `## Purpose` 段内**（出现 Requirement 级 hunk 即失败）。**实测（`bf2eae7`→`457c954`，2026-09-27 复算）：`3 files changed, 11 insertions(+), 5 deletions(-)`**；**读数会随提交变，故只认判据，不认写死的数字**<br>**R-B 模块**：`spec_bridge.py` 新增并接 `check.sh` ⇒ 判据 = `--self-test` **每条判据的反例全红**（条数以该命令输出为准）＋ `check.sh` 第 ⑧ 步通过<br>**R-C 契约**：归档件补 `review.md`、移两条常设项 ⇒ 判据 = `validate --archived` 由 `0 passed/1 failed` 变 `1 passed/0 failed`<br>**R-D 全量**：`spec-governance` 进主规格 ＋ 覆盖 change 在册 ⇒ 判据 = `validate --all --strict` 全绿且 `list --specs` 由 6 条变 7 条；**产品面**（`world-core/src/`、`tests/`）零改动并入本档，判据 = `git diff --stat` 在那两处为空 |
@@ -169,7 +171,7 @@
 1. **切默认档**：`openspec/config.yaml` 的 `schema:` → `opsx-swe-gb`。
 2. **改融合档文字**：`openspec/schemas/opsx-swe-gb/schema.yaml` 与 `README.md` 里"双读＋一行指针"的写法逐处改掉（主本 `10-openspec-swe-gb` 同步；两处 sha256 一致）。
 3. **守卫**：新增 `world-core/tools/spec_bridge.py`（**当时**五条判据 ＋ `--self-test` 五条反例；**此后判据与反例都已增加，现值以 `--json` 的 `passed`/`failed` 与 `--self-test` 的输出为准，本处不复述条数**）；接 `world-core/check.sh`（新增一步，不改既有步骤号）。
-4. **新能力进主规格**：`spec-governance`（`openspec/specs/spec-governance/spec.md`）。
+4. **新能力在归档时进主规格**：`spec-governance`——delta 在 `openspec/changes/fc-2026-001-openspec-into-cm/specs/spec-governance/spec.md`，**归档时**由 CLI 并入 `openspec/specs/spec-governance/`（今天该目录**尚不存在**）。
 5. **编号桥**：产出 `mapping.md`；**6 份主规格标题不改**；无号项在表内显式登记。
 6. **归档遗留**：补 `review.md`；两条常设项移入 `openspec/MAINTENANCE.md`；`validate --archived` 转绿。
 

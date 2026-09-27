@@ -1,5 +1,7 @@
 # Tasks
 
+> **数值口径（2026-09-27 补）**：本文出现的「**23 条承诺／39 条需求**」是**立件时点**的读数（时点见 `design.md` 的时序表，`ef2c9a0`／`21:32:37`）。**现行权威值见 `openspec/BRIDGE.md` §七**：规格承诺 **33 条**、流程侧唯一需求号 **41 个**（该表**现算**，并给复算命令）。按 skill §八「一个事实一个权威载体」，**本件不复述现读数**；历史读数保留，因为它记录的是"当时看到什么"。
+
 > 格式硬约束：每条形如 `- [ ] X.Y 描述`；只有 `x` 算完成。每条自带验收方式。
 > **归档门禁要求全勾**；本来就做不完的常设项**不写在这里**（落 `openspec/MAINTENANCE.md`）。
 > **前置**：本 change 判为 **R5**。作者已在对话中指示开工（`review.md` §七 有追认登记）；
@@ -29,7 +31,7 @@
 
 ## 2. 规格层（新能力进主规格）
 
-- [ ] 2.1 `spec-governance` 进主规格：`openspec/specs/spec-governance/spec.md`（delta 已在本 change 内就绪）
+- [ ] 2.1 `spec-governance` **在归档时**进主规格（`openspec/specs/spec-governance/spec.md` 今天尚不存在）——delta 已在本 change 内就绪；**验收**：`openspec archive fc-2026-001-openspec-into-cm --yes` 之后 `openspec list --specs` 由 6 条变 7 条，且 `validate --all --strict` 仍 rc=0
       **验收**：`openspec list --specs` 由 6 条变 **7 条**，新增条 `requirementCount` = 5
 - [x] 2.2 新增 `openspec/MAINTENANCE.md`（规格层自己的维护清单）
       **验收**：文件存在；含"本件不进任何规格树"的声明；第 4.2 步移出的两条在此可检索命中 ✓
