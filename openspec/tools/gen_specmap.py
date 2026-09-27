@@ -85,46 +85,46 @@ for ln in rl(SRS):
         flag = "red"
     srs[rid] = {"id": rid, "title": re.sub(r"[*`]", "", c[1]), "pri": c[2], "status": flag, "raw": st[:400]}
 
-# ---------- 3. 书：章节 ----------
+# ---------- 3. 书：章节（**2026-09-28 重对准合订本**） ----------
+# 原来读逐章文件 `语义世界-第N章-*.md`——书合并成《合订本》之后那些文件不存在，
+# 本段会**静默产出 0 章**（已加 fail loud）。现在直接从合订本的章标题取。
+BOOK = os.path.join(THEORY, "语义世界-理论书-第一版-合订.md")
+if not os.path.isfile(BOOK):
+    raise SystemExit("[FAIL] 合订本不存在：%s（书章节与 5.6 判据表都由它取数）" % BOOK)
+book_lines = rl(BOOK)
 chapters = []
-for fn in sorted(os.listdir(THEORY)):
-    m = re.match(r"^语义世界-第(.+?)章-(.+)\.md$", fn)
-    if not m:
+cur = None
+for i, ln in enumerate(book_lines):
+    mch = re.match(r"^#\s+(序|第.+?章)\s*$", ln)
+    if mch:
+        cur = {"chap": mch.group(1).replace("第", "").replace("章", "").strip() or mch.group(1),
+               "file": os.path.basename(BOOK), "secs": [], "line": i + 1}
+        if cur["chap"] == "序":
+            cur["chap"] = "序"
+        chapters.append(cur)
         continue
-    chap = m.group(1)
-    lines = rl(os.path.join(THEORY, fn))
-    secs = []
-    for i, ln in enumerate(lines):
-        mm = re.match(r"^##\s+(\d+\.\d+)\s+(.+?)\s*$", ln)
-        if mm:
-            secs.append({"num": mm.group(1), "title": mm.group(2), "line": i + 1})
-    chapters.append({"chap": chap, "file": fn, "secs": secs})
-
-# 序（独立篇）
-xu = {"chap": "序", "file": "语义世界-序.md", "secs": []}
-if os.path.isfile(os.path.join(THEORY, "语义世界-序.md")):
-    for i, ln in enumerate(rl(os.path.join(THEORY, "语义世界-序.md"))):
-        mm = re.match(r"^##\s+(.+?)\s*$", ln)
-        if mm:
-            xu["secs"].append({"num": "序.%d" % (len(xu["secs"]) + 1), "title": mm.group(1), "line": i + 1})
-chapters = [xu] + chapters
-if len(chapters) <= 1:            # 只有"序"、没有任何章节文件匹配上
-    raise SystemExit(
-        "[FAIL] 书章节：在 %s 下一个 `语义世界-第N章-*.md` 都没匹配上（只找到 `序`）。\n"
-        "       原因：书已合并成单文件（`语义世界-理论书-第一版-合订.md`），逐章文件不再存在。\n"
-        "       处置：**不许静默产出 1 章**——要么把本段重新对准合订本，要么显式声明本字段停用。\n"
-        "       （本仓纪律：失败必 fail loud；静默降级＝把\"没读到\"装成\"读到了就是这样\"。）" % THEORY)
+    if cur is None:
+        continue
+    ms = re.match(r"^##\s+(?:(\d+\.\d+)\s+(.+?)|(.+?))\s*$", ln)
+    if ms:
+        if ms.group(1):
+            cur["secs"].append({"num": ms.group(1), "title": ms.group(2), "line": i + 1})
+        else:
+            cur["secs"].append({"num": "%s.%d" % (cur["chap"], len(cur["secs"]) + 1),
+                                "title": ms.group(3), "line": i + 1})
+if not chapters:
+    raise SystemExit("[FAIL] 合订本里一个章标题（`# 序` / `# 第N章`）都没匹配上：%s" % BOOK)
 
 # ---------- 4. 书：第五章 5.6 判据表 ----------
 judges = []
-c5 = os.path.join(THEORY, "语义世界-第五章-今天做到几分.md")
+c5 = BOOK          # **2026-09-28 重对准**：原读逐章文件（不存在），现读合订本
 if not os.path.isfile(c5):
     raise SystemExit(
         "[FAIL] 书第五章 5.6 判据表：源文件不存在 —— %s\n"
         "       原因：书已合并成 `语义世界-理论书-第一版-合订.md`，该逐章文件不再存在。\n"
         "       处置：同上——重新对准合订本，或显式声明本字段停用；**不许静默产出 0 条判据**。" % c5)
 if os.path.isfile(c5):
-    lines = rl(c5)
+    lines = book_lines          # **2026-09-28 重对准**：源＝合订本（上面已读进 book_lines）
     start = next((i for i, l in enumerate(lines) if l.startswith("## 5.6")), None)
     if start is not None:
         for i in range(start, len(lines)):
