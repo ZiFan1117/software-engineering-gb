@@ -1956,3 +1956,100 @@ fn c34_envelope_field_types_are_checked_on_the_read_path() {
         "正控：类型合规的同形账本必须打得开"
     );
 }
+
+// ── c35 ── **带着全部历史离开并独立复算**（`TC-078`）────────────────────────────
+//
+// 判据逐字（`WC-SRS-001` §五 `TC-078`）：「换一台机器、**只带账本** ⇒ 独立复算出同一状态」。
+//
+// **做法与它的射程（不冒充）**：折叠（`State::fold`）只吃**事件的字节**，不吃任何机器状态、
+// 进程状态或外部文件 ⇒ 本用例在同一台机器上**换目录**（不同绝对路径）＋**只读账本**复算，
+// 作为"换机器"的**可判代理**。**它不证明**"跨架构/跨字节序也一致"（那要真换机器，本用例管不到）。
+//
+// 四件事各自可判：
+// ① 甲地建账（真落盘）⇒ 记下状态；
+// ② **只把账本文件**搬到乙地（另一目录）⇒ 在那里复算，**不带甲地的任何东西**；
+// ③ **正控**：复算出来的状态**非空**（否则"两边都空"也会相等，那是假绿）；
+// ④ **反假**：把账本改一个字节 ⇒ 复算结果**必须变**（否则"相同"可能只是"它根本没读"）。
+#[test]
+fn c35_the_ledger_alone_reproduces_the_same_state_elsewhere() {
+    let here = tmpdir("c35-here");
+    let there = tmpdir("c35-there");
+    let lp_a = here.join("history.jsonl");
+    let on = ontology();
+    let po = policy();
+
+    // ① 甲地：建一本**有内容**的账（change ＋ act ＋ notice 三条）
+    {
+        let mut w = World::open(&on, &lp_a, &po).expect("甲地开世界");
+        w.commit(
+            "change",
+            "world://user",
+            event::change_body("world://notice/n-1", "muted", json!(null), json!(true)),
+        )
+        .expect("change");
+        w.commit(
+            "act",
+            "world://user",
+            event::act_body("notice.mute", "do", "r-c35", json!({})),
+        )
+        .expect("act");
+        w.commit(
+            "notice",
+            "world://user",
+            event::notice_body("probe.v1", "world://s", json!({ "c35": true })),
+        )
+        .expect("notice");
+    }
+
+    // ② **只带账本**：把账本文件复制到乙地（另一个目录、另一个绝对路径），甲地不参与
+    let lp_b = there.join("history.jsonl");
+    fs::copy(&lp_a, &lp_b).expect("复制账本");
+
+    let read_lines = |p: &Path| -> Vec<Value> {
+        fs::read_to_string(p)
+            .expect("读账本")
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| serde_json::from_str::<Value>(l).expect("账本行必须是 JSON"))
+            .collect()
+    };
+    let state_a = world_core::readmodel::State::fold(&read_lines(&lp_a))
+        .expect("甲地复算")
+        .to_json()
+        .to_string();
+    let state_b = world_core::readmodel::State::fold(&read_lines(&lp_b))
+        .expect("乙地复算（只带账本）")
+        .to_json()
+        .to_string();
+
+    // ③ 正控：状态非空（防"两边都空"的假绿）
+    assert!(
+        !state_a.trim().is_empty() && state_a != "{}" && state_a != "null",
+        "甲地状态是空的 ⇒ 本用例证明不了'能复算出同一状态'（假绿），实得：{state_a}"
+    );
+    assert!(
+        state_a.contains("world://notice/n") || state_a.contains("muted"),
+        "状态里看不到那三条事件留下的东西 ⇒ 复算可能没真读账本，实得：{state_a}"
+    );
+
+    // ② 的断言：乙地复算的结果与甲地**逐字节相同**
+    assert_eq!(
+        state_a, state_b,
+        "只带账本换到另一个目录，复算出的状态**不同** ⇒ 账本不是自足的历史"
+    );
+
+    // ④ 反假：改账本一个字节 ⇒ 结果必须变
+    let mut tampered = read_lines(&lp_b);
+    // 动**状态追踪的那个东西**：`change` 那条的 `body.after` 从 `true` 翻成 `false`
+    // （★ 第一次我改的是 `at`，而状态 JSON 里根本没有 `at` ⇒ 反假当场红，是**我自己选的字段选错了**；
+    //  教训：反假要动"被追踪的量"，不是随便动一个字节。）
+    tampered[0]["body"]["after"] = json!(false);
+    let state_t = world_core::readmodel::State::fold(&tampered)
+        .expect("改一个字段后仍应能折叠")
+        .to_json()
+        .to_string();
+    assert_ne!(
+        state_a, state_t,
+        "把账本里 `change` 的 `body.after` 翻了面，复算结果却**没变** ⇒ '相同'可能是'它根本没读账本'"
+    );
+}
