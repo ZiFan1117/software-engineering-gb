@@ -349,7 +349,7 @@ rg -n 'use (world_core|gate|ledger|ontology|readmodel|event|guard|checkpoint|cha
 | `REQ-F-023` | `M09` | `IF-006`；`IF-005` | 部分实现 |
 | `REQ-F-024` | `M06` | `IF-003`；`IF-004`；`IF-005` | 已实现 |
 | `REQ-F-025` | `M04` | `IF-002`；`IF-006`；`IF-008` | 部分实现 |
-| `REQ-F-026` | `M09` | `IF-006` | 未实现（待 S4） |
+| `REQ-F-026` | `M09` | `IF-006` | **已实现**（★ 2026-09-28 订正：原写"未实现（待 S4）"——四个数值在 `policy.json` 的 `channel_limits`，四条边界在生产路径生效（取不到数值即拒启、**在 `bind` 之前**），断言 `tests/channel_bounds.rs` 的 `l01`–`l06`。⚠ **仍成立的那半句**（本册 `:176` 那句）：**裸原语 `serve_once`／`serve_n` 不受四边界约束**，那是**在册的待人裁项**） |
 | `REQ-F-027` | `M01` | `IF-005`；`IF-001` | 未实现（待 S4） |
 | `REQ-F-028` | `M03` | `IF-005`；`IF-009` | 已实现 |
 | `REQ-F-029` | `M01` | `IF-005` | 未实现（待 S4） |

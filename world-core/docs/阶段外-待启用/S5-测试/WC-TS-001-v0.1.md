@@ -117,7 +117,7 @@
 
 > **`cli07`/`cli08` 的归属**：这两条属 **L0/CLI（跑真实二进制）**，是 `REQ-F-020`「同源」在**跨进程**面的验证；`cli05` 只覆盖同进程内的一次 `project check`。
 > **`cli08` 的"必须不同"判据依赖"换词表要能被检出"是 `REQ-F-020` 的明文判据**（`WC-SRS-001`:134）；若只改 `_comment` 而 `vocab=` 变了，才是 bug。
-> ⚠️ **状态：`cli07`/`cli08` 作为用例**尚未实现**（`tests/cli.rs` 现有 6 条）**——本节写的是**用例定义与期望**，不是"已通过"。
+> ⚠️ **状态（★ 2026-09-28 订正）**：`cli07`／`cli08` **已实现并已跟踪**——`world-core/tests/cli.rs:208` 的 `cli07_usage_string_discloses_default_actor`、`:327` 的 `cli08_channel_bind_refuses_socket_not_in_identity_map`；该文件现共 **14** 条 `cli*` 用例（`git grep -c "^fn cli" -- world-core/tests/cli.rs` ⇒ 14）。**原写"现有 6 条"是写下时的读数。** 本节其余部分仍是**用例定义与期望**，不是"已通过"。
 > **但 `cli08` 的判据已在本轮当场手工验证过**（2026-09-26，VM，工作区 `3a6b342`，跑真实二进制）：
 > 同一账本、同一出厂本体，只把 `_comment` 改一处 ⇒ `vocab=fnv1a64:4bf7b75573fee475` **不变**；
 > 把 `concepts.notice.fields` 加一个字段（真正的语义变更）⇒ `vocab=` 变为 **`fnv1a64:6f97aa5c526d3946`**（**变了**）。

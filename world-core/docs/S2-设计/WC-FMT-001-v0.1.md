@@ -999,7 +999,7 @@ for ev in read_ledger("ledger.jsonl"):
 | 请求上限 | **每个连接恰好一行**；第二行不会被读取（函数已返回） | `src/channel.rs:206–212` |
 | 应答上限 | **每个连接最多一行**；且并非所有失败都回行（见 §3.5） | `src/channel.rs:225/233/237` |
 | 超时 | **无任何超时/非阻塞设置**（`src/*.rs` 内 `set_read_timeout` / `set_write_timeout` / `set_nonblocking` / `timeout` 全部零命中）⇒ `accept()` 与 `read_line` 均为阻塞式，可无限期等待 | 读码所得；**【待验证 V-06】** |
-| 单行长度上限 | **无上限**（`read_line` 对 `String` 无界追加） | 读码所得；**【待验证 V-05】**；`WC-R4-DISP-001:48` 已把「单行上限」采纳进需求层，**尚未落笔** |
+| 单行长度上限 | **有上限**（★ 2026-09-28 订正：原写"**无上限**（`read_line` 对 `String` 无界追加）…**尚未落笔**"——**那句今天不成立**）：`world-core/policy.json` 的 `channel_limits` 有 `max_line_bytes = 4096`（可配置、代码内无缺省值），超限即拒收；断言 `tests/channel_bounds.rs` 的 `l02`（含"正好等于上限必须放行"的正控） |
 | 并发 | 无并发处理、无限流、无并发上限；`DEBT-03`（单写者锁与通道并发的交互）**未设计** | `WC-LLD-001:118`；`WC-HLD-001` §八 #5 |
 | 长驻服务 | **未做** | `src/channel.rs:48–49`；`WC-LLD-001:118` |
 
