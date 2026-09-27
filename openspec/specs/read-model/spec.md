@@ -162,6 +162,8 @@ SHALL NOT 被表述为"v1 CLI 从不读快照"。
 | `actor` | **逐事件**身份——"谁做的"是**账本级**的事实，不是某一格的值 | 同上 |
 | `flags` | **能力旗标**：未知旗标必须**忽略** ⇒ 它不改状态 | 同上 |
 
+- **另 5 格同样如此**：`kind`／`seq`／`body`／`to`／`trace` **不进** `state`，它们的可读面同样是**逐条读事件**——
+  上表只列 `1.1` 点名的那 5 格；**判据本身不按这张表**（`c36` 的清单**从本体派生**：`required ∪ optional`，新加一格自动进判据）。
 - **证据**：`world-core/tests/contract.rs::c36_every_declared_envelope_cell_is_readable_from_some_read_view`
       （逐格断言"某一读法读得到"＋同时断言"`state` 里读不到"；**两条反向验证**：把头部 `world=` 拿掉 ⇒ 该用例红；
       把 `actor` 混进状态 ⇒ 该用例红）。
