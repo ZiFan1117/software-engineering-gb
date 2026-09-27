@@ -128,6 +128,15 @@ echo "  ✅ 门禁失败路径 / 静态墙 / 单写者 / 检查点 / 通道身�
 
 # ── ④ 两个投影同源 ──────────────────────────────────────────────────
 echo
+echo
+step "③c 其余测试二进制（**全量，不写死清单**——任何新加的测试文件自动进闸）"
+# 为什么要有这一步（2026-09-28 实测）：`check.sh` 原只跑 `acceptance`（挑 t1_/t2_/t7_ 三个用例）与 `contract`，
+# 而仓里**实有 13 个测试二进制** ⇒ 其余 11 个（含 `family_readmodel`／`atom_reversibility`／`atom_declared_only`／
+# `write_side`／`channel_bounds`／`projection_leaf`／`ontology_ext`／`trace_notice`／`cli`／`delivery`／`perf`）
+# **从不被出厂门禁执行**。⇒ "每条要求都要有会红的断言"这句话，会被"门禁不跑它"削掉一大半。
+# 本步**不写死清单**（写死就会烂）：跑整棵 `cargo test --locked`，新文件自动进闸。
+run_tail 6 "全量测试（含本批新增的全部断言）" cargo test --locked
+
 step "④ 投影与同源核对（REQ-F-018/019/020）"
 W() { "$BIN" --ontology "$SB/ontology.json" --ledger "$SB/ledger.jsonl" --policy "$SB/policy.json" "$@"; }
 W append change '{"subject":"world://notice/n-1","path":"muted","before":null,"after":true}' >/dev/null

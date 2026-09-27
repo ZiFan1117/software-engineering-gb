@@ -1,5 +1,8 @@
 # Tasks
 
+> **坐标口径（2026-09-28 补，评审席建议项 ④ 的整改）**：本件正文里的 `path:line` 是**写下时的 as-of 坐标**（各条目正文注明了时点/提交），**权威定位子是"函数名／用例名／步骤名"**——它们**不随行号漂移**。
+> **要复现某条证据**：先按函数名／用例名 `grep`（如 `grep -n "fn cli08_" world-core/tests/cli.rs`），再读那一段；**不要照抄行号**。
+> **为什么不逐处改成"命令＋步骤名"**：本件有 **80 处 `path:line`、涉及 63 行**，机械重写**风险高于收益**（改错一处就把真证据改坏）；而函数名／用例名在这些条目里**绝大多数本来就有**（评审席抽查 10 条，**全部能按函数名定位**）。**这是取舍，不是遗漏。**
 > **来源**：`fc-2026-002-spec-revisions/tasks.md` 的组 2–6（34 条），逐条转出；**其中若干条在本件里被改写过**（`design.md` 自己写着 `3.3`／`3.4`「先重写再补」——★ 2026-09-28 订正：原写"未改判据"与实情矛盾）。
 > **每条都必须有自己的变异证明**（"改坏哪一行 ⇒ 它变红"）；没有变异点的条目**不算完成**。
 
@@ -17,6 +20,8 @@
       **变异怎么变红**：在 `world-core/src/channel.rs` 的 `serve_once` 里（`let mut out = stream;` 之后）插一句对端 uid 比对（读 `/proc/self/status`）。原始输出：`test c14_channel_takes_identity_from_kernel_not_from_request ... FAILED` ／ `panicked at tests/contract.rs:808: 受理路径不得读对端凭证：uid 对不上也必须受理（uid 只在 bind() 用）: "ext.world.Channel.Impersonation: 对端 uid 0 与本套接字身份 uid 12345 不符，拒绝"` ／ `MUT_RC=101`。
 
 - [x] 2.2 在 `world-core/tests/cli.rs` 补一条断言：`channel bind` 对**不在身份映射里**的套接字报 `ext.world.Channel.NotConfigured` 且 `rc=2`。**验收**：`cargo test --locked --test cli` 通过；变异（删掉 `None` 分支的拒绝）⇒ 变红。
+      **★ 分清（2026-09-28 补，评审席建议项 ⑦）**：下面记的那次红**同时有两类原因**——① **变异造成的**：`NotConfigured` 那条不再报（这正是本条要证明的）；② **环境造成的**：报告尾部那句 `[FAIL] 通道目录 不可绕过检查未通过：所在目录 /tmp 的权限为 777` ——那是**我把账本/通道目录放在 `/tmp`** 触发了世界自己的静态墙（`/tmp` 是 777），**与变异无关**。⇒ **判"变异有没有打上"只看 ①**：`NotConfigured` 消失 ＋ 落到 `bind` 的另一条错上；② 只是伴随现象。
+
       **断言在哪**：`world-core/tests/cli.rs:327`（`cli08_channel_bind_refuses_socket_not_in_identity_map`）＋ `:353` 的 `assert_eq!(code, 2, "不在身份映射里的套接字必须拒绝（rc=2）…")`、其后 `err.contains("ext.world.Channel.NotConfigured")` 与 `!unmapped.exists()`。
       **变异怎么变红**：把 `world-core/src/main.rs` 的 `cmd_channel` 里 `None` 分支的拒绝改成 `None => conf.listeners()[0].clone(),`。原始输出：`test cli08_channel_bind_refuses_socket_not_in_identity_map ... FAILED` ／ `panicked at tests/cli.rs:355: 拒绝理由必须点名错误码，读流水的人才能程序判定；stderr=[FAIL] 通道目录 不可绕过检查未通过：所在目录 /tmp 的权限为 777…`（`NotConfigured` 这句**没了**，落到了 `bind` 的另一条错上）／ `MUT_RC=101`。
 
@@ -87,7 +92,7 @@
 
 - [x] 4.5 把 `t2` 的证据层级修正为**真跨进程**：把"新进程"这一层挂到 `world-core/tools/s1_sys_probe2.sh` 的 `TC-070`（`:379-383`，由 `world-core/check.sh:145` 执行），并在 `t2` 的文档注里写明它是同进程 drop + reopen。**验收**：`bash tools/s1_sys_probe2.sh` 通过；`t2` 的注释与规格一致。
       - **落点**：`world-core/tests/acceptance.rs:157`（`t2` 的文档注：写明它是**同进程** `drop` ＋ `reopen`，真跨进程那一层挂到 `TC-070`；**刻意不写行号**——任务书给的两处行号实测都对不上）。**承担者**：`world-core/tools/s1_sys_probe2.sh` 的 `TC-070`（`REQ-F-022`：① 两次**独立进程**读回逐字节相同 ② 条数＝账本行数 ③ `seq` 无缺号）。**验收读数**：`bash tools/s1_sys_probe2.sh` **rc=0**（`== 汇总：断言通过 117 项，断言失败 0 项；另行**登记**（现状为红、如实记录）2 项 ==`、`== 结论：断言全通过（TC-053 – TC-076 端到端）==`）。**变异**：`src/main.rs` 的 `cmd_read` 每行尾部加 `#pid=<本进程 pid>` ⇒ TC-070 ① 变红；恢复后 ①②③ 复绿、rc=0。⚠ 首次变异**假绿**：漏了 `cargo build`（探针跑的是**已构建**的二进制）⇒ 读的是旧二进制；补上构建即红——这正是「假证形态①：脚本根本没跑」的实例，故记在这里。
-      **★ 行号订正（2026-09-28，断言工区 B 实测）**：`TC-070` 在 `world-core/tools/s1_sys_probe2.sh:413-422`（原写 `:379-383` 落在 `TC-067` 里），由 `world-core/check.sh:161`（**步骤 ⑦**）执行（原写 `:145` 是步骤 ⑥ 的注释行）。⇒ **引用一律写"命令 ＋ 步骤名"，不写行号**（行号会烂）。
+      **★ 行号订正（2026-09-28，断言工区 B 实测）**：`TC-070` 在 `world-core/tools/s1_sys_probe2.sh:413-422`（原写 `:379-383` 落在 `TC-067` 里），由 `world-core/check.sh:161`（**步骤 ⑦**）执行（原写 `:145` 是步骤 ⑥ 的注释行）。⇒ **引用写"命令 ＋ 步骤名 或 函数名/用例名"**；**确需行号时，必须同时给出函数名／用例名并注明时点**（行号只作参考，**会烂**——本件已有 1–8 行的漂移实测；★ 2026-09-28 按实修正：原写"一律不写行号"，而同件 2.1–5.5 实际有 80 处，**原措辞与实情不符**）。
 - [x] 4.6 补一条断言固定"截到最后一个 `\n`"这条边界：末行是**完整合法 JSON 但缺末尾换行** ⇒ 被截掉且 `seq` 被复用。**验收**：断言存在且为绿；出处 `world-core/src/ledger.rs:276-289` 与实现自述 `:385`。
       - **断言**：`world-core/tests/contract.rs:1728`（`fn c32_last_line_without_trailing_newline_is_cut_and_seq_is_reused`）。**变异**：`src/ledger.rs` 的 `keep` 从「最后一个换行之后」改成 `raw.len()` ⇒ `--test contract -- c32_` rc=101（`panicked at tests/contract.rs:1418`）；恢复后 rc=0。
 
