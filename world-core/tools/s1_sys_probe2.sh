@@ -128,14 +128,26 @@ PY
   chmod 600 "$2"
 }
 
-ARC change '{"subject":"world://sys/a","path":"p","before":null,"after":1}' >/dev/null
-ARC change '{"subject":"world://sys/a","path":"q","before":null,"after":2}' >/dev/null
+# 种子：写成**已声明**的格子（`world://notice/a` ＋ `muted`；书 §5.3「声明以外的东西不许落账」，
+# 执行者 `src/ontology.rs::check_concepts`）。原先的 `world://sys/a#p` 与 `#q` 两个名字都没声明过
+# ⇒ 两条种子都被拒、账本 0 行，后面**整片**断言（链、缺号、半行、投影、回滚…）跟着一起红。
+#
+# ⚠ 第二行为什么改成"同一格再改一次"（而不是另一格 `q`）：出厂本体里每个实体只声明了**一格**
+#   （`notice.muted` / `job.status`），而"同一主体两个字段"在声明里没有对应的东西；
+#   若改用第二个**主体**，`TC-066④`（视觉/语言投影"行数 = 主体数 + 1"＝3）会从 2 个主体变成 3 个，
+#   那条断言要么被改松、要么变成假红——两者都不许。故第二行改成对同一格的第二次变更
+#   （`before` 必须等于上一次的 `after`，这正是折叠层的 `BeforeMismatch` 在管的），
+#   账本仍是 2 行、主体仍是 1 个，判据强度不变（反而多验了一次"旧值对得上才放行"）。
+ARC change '{"subject":"world://notice/a","path":"muted","before":null,"after":true}' >/dev/null
+ARC change '{"subject":"world://notice/a","path":"muted","before":true,"after":false}' >/dev/null
 assert_eq "种子：账本 2 行" "2" "$(wc -l <"$L" | tr -d ' ')"
 
 # ══ TC-053 · REQ-F-003 账本只追加且为纯文本 ═══════════════════════════
 echo; echo "── TC-053 · REQ-F-003 账本只追加且为纯文本 ──"
 cp "$L" "$SB/snap.jsonl"
-A change '{"subject":"world://sys/b","path":"r","before":null,"after":3}' >/dev/null
+# 本条只要求"再追加一条、账本只增 1 行、前 2 行逐字节不变"——落笔的格子是哪个不影响判据，
+# 故取种子里那一格（`notice/a#muted`）：`before` 必须等于上一次的 `after`（当前是 false）才放行。
+A change '{"subject":"world://notice/a","path":"muted","before":false,"after":true}' >/dev/null
 assert_eq "① 追加后只增 1 行" "3" "$(wc -l <"$L" | tr -d ' ')"
 assert_eq "② 前 2 行**逐字节不变**" "$(head -2 "$SB/snap.jsonl")" "$(head -2 "$L")"
 BADN="$(python3 - "$L" <<'PY'
@@ -209,18 +221,24 @@ assert_has "③ state 的帮助面**不提供** --cache（刻意不写盘）" "$
 # ══ TC-057 · REQ-F-007 法律在前、落笔在后 ═════════════════════════════
 echo; echo "── TC-057 · REQ-F-007 校验不过绝不落笔 ──"
 N0="$(wc -l <"$L" | tr -d ' ')"
-for i in 1 2 3; do ARC change "{\"subject\":\"world://sys/x$i\",\"path\":\"p\",\"after\":$i}" >/dev/null; done
+# 三条"违法事件"缺的是 `before`；主体/字段换成已声明的 `notice/x{1,2,3}` ＋ `muted`，
+# 好让"被拒"这件事**只有一个理由**（缺 before）。三个主体都是新的、都被拒 ⇒ 不落笔、不影响主体数。
+for i in 1 2 3; do ARC change "{\"subject\":\"world://notice/x$i\",\"path\":\"muted\",\"after\":$i}" >/dev/null; done
 assert_eq "① 连续 3 次提交**违法**事件（缺 before）后账本行数不变" "$N0" "$(wc -l <"$L" | tr -d ' ')"
-if grep -q 'world://sys/x1' "$L"; then bad "② 被拒事件正文不得出现在账本里"; else ok "② 被拒事件正文不得出现在账本里"; fi
-assert_has "③ 每次拒绝都有可读理由（[FAIL]  + 点名缺失字段）" "$(A change '{"subject":"world://sys/y","path":"p","after":1}')" '^\[FAIL\] .*before'
+if grep -q 'world://notice/x1' "$L"; then bad "② 被拒事件正文不得出现在账本里"; else ok "② 被拒事件正文不得出现在账本里"; fi
+assert_has "③ 每次拒绝都有可读理由（[FAIL]  + 点名缺失字段）" "$(A change '{"subject":"world://notice/y","path":"muted","after":1}')" '^\[FAIL\] .*before'
 
 # ══ TC-058 · REQ-F-008 三个事件家族及其信纸字段 ═══════════════════════
 echo; echo "── TC-058 · REQ-F-008 三家族信纸字段 ──"
-O="$(A change '{"path":"p","before":null,"after":1}')"; assert_rc "① change 缺 subject ⇒ rc=2" 2 "$?"
+# 字段名一并取已声明的 `muted`（本条判的是"缺 subject"，字段名不参与判定；
+# 但检查用的数据里不留未声明的名字，是同一把尺子）。
+O="$(A change '{"path":"muted","before":null,"after":true}')"; assert_rc "① change 缺 subject ⇒ rc=2" 2 "$?"
 assert_has "② 理由点名 subject" "$O" 'subject'
 O="$(A act '{"verb":"do","request_id":"r","params":{}}')"; assert_rc "③ act 缺 capability ⇒ rc=2" 2 "$?"
 assert_has "④ 理由点名 capability" "$O" 'capability'
-O="$(A notice '{"subject":"world://sys/a"}')"; assert_rc "⑤ notice 缺 type ⇒ rc=2" 2 "$?"
+# 通告的主体也换成已声明的：主体不是本条的判据（本条判"缺 type"），但**检查用的数据必须是已声明的**，
+# 免得拒绝理由变成"缺 type ∧ 实体没声明"两个都成立。`notice` 家族不受 `concepts` 管（只管 `change`）。
+O="$(A notice '{"subject":"world://notice/a"}')"; assert_rc "⑤ notice 缺 type ⇒ rc=2" 2 "$?"
 assert_has "⑥ 理由点名 type" "$O" 'type'
 O="$(A bogus '{"a":1}')"; assert_rc "⑦ 未知家族 ⇒ rc=2" 2 "$?"
 assert_has "⑧ 理由点名那个未知家族 bogus" "$O" 'bogus'
@@ -228,9 +246,16 @@ assert_rc "⑨ 对照：三家族各给全字段 ⇒ 都 rc=0" 0 "$(ARC act '{"c
 
 # ══ TC-059 · REQ-F-009 change 必带旧值 ══════════════════════════════
 echo; echo "── TC-059 · REQ-F-009 change 必带旧值 ──"
-O="$(A change '{"subject":"world://sys/a","path":"p","after":9}')"; assert_rc "① 缺 before ⇒ rc=2" 2 "$?"
+# ②"理由点名 before"能成立的前提是**拒绝只有一个理由**：主体/字段都用已声明的，
+# 于是"缺 before"就是唯一的拦下理由（原先 `world://sys/a#p` 两个名字都没声明过，
+# 拒绝理由会变成实体没声明——本条要验的"必带旧值"就验不到了）。
+O="$(A change '{"subject":"world://notice/a","path":"muted","after":true}')"; assert_rc "① 缺 before ⇒ rc=2" 2 "$?"
 assert_has "② 理由点名 before" "$O" 'before'
-assert_rc "③ 反例方向：before:null 是**合法值**（不得被当成"缺"）⇒ rc=0" 0 "$(ARC change '{"subject":"world://sys/a","path":"p2","before":null,"after":9}')"
+# ③ 要验的是"`before:null` 是**合法值**"，故这一笔必须落在**没写过的新格子**上
+#    （折叠层对新格子不核 before）。出厂本体里第二格是 `job.status`（`enum` 三值，取 "todo"）。
+#    ⚠ 这一笔同时决定了 `TC-066④`"投影行数 = 主体数 + 1 ＝ 3"里的主体数：
+#    到此为止落笔的主体恰是 `notice/a` 与 `job/b` 两个 ⇒ 仍是 3 行，那条断言一字未动。
+assert_rc "③ 反例方向：before:null 是**合法值**（不得被当成"缺"）⇒ rc=0" 0 "$(ARC change '{"subject":"world://job/b","path":"status","before":null,"after":"todo"}')"
 assert_has "④ 读回的事件里 before 字段**仍在**（null 未被丢弃）" "$(W read 2>/dev/null | tail -1)" '"before": ?null'
 
 # ══ TC-060 · REQ-F-011 读模型可删掉重算且逐字节一致 ═══════════════════
@@ -262,9 +287,13 @@ import json, sys
 evs = [json.loads(x) for x in open(sys.argv[1], encoding="utf-8").read().rstrip("\n").split("\n") if x.strip()]
 for e in evs:
     e.pop("chain", None)
+# 手写行的主体/字段必须与**种子里那一格**一致（`notice/a#muted`，当前值 true）：
+# 本条要验的是"事件自称的旧值 999 ≠ 账本折叠出的当前值 ⇒ BeforeMismatch"，
+# 指向不存在的格子就变成"首见不核 before"，这一条会变成假红/假绿。
+# （这是**手写账本行**，走的是折叠层 `readmodel`，本来就不经写入侧的本体校验。）
 evs.append({"world": 1, "kind": "change", "id": "e-lie", "seq": evs[-1]["seq"] + 1,
             "at": 1, "actor": "world://user", "flags": [],
-            "body": {"subject": "world://sys/a", "path": "p", "before": 999, "after": 5}})
+            "body": {"subject": "world://notice/a", "path": "muted", "before": 999, "after": 5}})
 open(sys.argv[2], "w", encoding="utf-8").write("\n".join(json.dumps(e, ensure_ascii=False, sort_keys=True) for e in evs) + "\n")
 PY
 chmod 600 "$SB/bad_lie.jsonl"
@@ -278,10 +307,15 @@ assert_has "⑥ 点名未知家族 ghost" "$O" 'ghost'
 echo; echo "── TC-063 · REQ-F-014 回滚＝追加补偿事件 ──"
 BEFORE_N="$(wc -l <"$L" | tr -d ' ')"
 BEFORE_HEAD="$(head -1 "$L")"
-ARC change '{"subject":"world://sys/a","path":"p","before":1,"after":42}' >/dev/null
-assert_eq "① 前值已改为 42" "42" "$(W state --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["objects"]["world://sys/a"]["p"])')"
-ARC change '{"subject":"world://sys/a","path":"p","before":42,"after":1}' >/dev/null
-assert_eq "② 追加补偿事件后状态**回到目标值** 1" "1" "$(W state --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["objects"]["world://sys/a"]["p"])')"
+# 回滚落在 `job/b#status` 上（TC-059③ 刚建的那一格，当前值 "todo"）：换的是目标格子，
+# 判据不动——"改成新值 → 读回是新值 → 追加补偿事件 → 回到目标值 → 条数 +2、首行逐字节不变"。
+# 为什么不用种子那格 `notice/a#muted`：它是 bool，`python3 print` 出来是 `True`/`False` 两个
+# 首字母大写的字面量，断言里就得写 Python 的表示法；落在 `status` 上则字段与取值都是**声明里真有的**
+# （`enum(todo,doing,done)` 的 todo/doing），断言读的是谁一目了然。
+ARC change '{"subject":"world://job/b","path":"status","before":"todo","after":"doing"}' >/dev/null
+assert_eq "① 前值已改为 doing" "doing" "$(W state --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["objects"]["world://job/b"]["status"])')"
+ARC change '{"subject":"world://job/b","path":"status","before":"doing","after":"todo"}' >/dev/null
+assert_eq "② 追加补偿事件后状态**回到目标值** todo" "todo" "$(W state --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["objects"]["world://job/b"]["status"])')"
 assert_eq "③ 账本章数**只增不减**（+2）" "$((BEFORE_N + 2))" "$(wc -l <"$L" | tr -d ' ')"
 assert_eq "④ 历史首行**逐字节不变**（不得修改或删除历史）" "$BEFORE_HEAD" "$(head -1 "$L")"
 
@@ -486,15 +520,19 @@ PY
 assert_eq "①b 策略**自洽**：writes 里能写的主体必须都在白名单内（缺者列于此）" "" "$CORE_IN_WRITES"
 O="$(A act '{"capability":"notice.mute","verb":"do","request_id":"r-w","params":{}}' world://stranger)"; assert_rc "② 未列白名单的主体 ⇒ **默认拒绝**（rc=2）" 2 "$?"
 assert_has "③ 理由含「门禁拒绝」" "$O" '门禁拒绝'
-O="$(A change '{"subject":"world://sys/z","path":"p","before":null,"after":1}' world://stranger)"; RC=$?
+# 主体/字段用已声明的 `notice/z` ＋ `muted`：本条要验的是"**未列 writes 的主体**提交 change ⇒ 拒"。
+# 若沿用未声明的 `world://sys/z#p`，拒绝就变成"门禁拒 ∧ 实体没声明"两个理由都成立——
+# 门禁哪天坏了这条也照样红不了（红的是本体校验），判据就废了。换成已声明的名字之后，
+# **唯一的**拒绝理由只剩门禁。⑥ 是同一笔写入的对照（白名单内主体 ⇒ rc=0），必须真落笔。
+O="$(A change '{"subject":"world://notice/z","path":"muted","before":null,"after":true}' world://stranger)"; RC=$?
 assert_rc "④ 未列 writes 的主体提交 change ⇒ rc=2" 2 "$RC"
 # ⚠️ 2026-09-27 改：门禁流水现在会带 `refused_subject`（点名"它在拒绝什么"，见
 #    WC-THEORY-DEFECT-001 D-14）⇒ 朴素的字符串计数会把**内核的流水**也捞进来，
 #    于是这条断言测的就不再是"原事件有没有落笔"了。故改为**只数原事件**
 #    （`"kind":"change"` 那一行），保留"拒绝流水不算"的原意。
-Z0="$(grep '"kind":"change"' "$L" | grep -c 'world://sys/z' | tr -d ' ')"
+Z0="$(grep '"kind":"change"' "$L" | grep -c 'world://notice/z' | tr -d ' ')"
 assert_eq "⑤ 被拒的主体**不落笔**（账本里不得出现该 change 原事件；拒绝流水留痕不算）" "0" "$Z0"
-assert_rc "⑥ 对照：白名单内主体 ⇒ rc=0（防恒红）" 0 "$(ARC change '{"subject":"world://sys/z","path":"p","before":null,"after":1}')"
+assert_rc "⑥ 对照：白名单内主体 ⇒ rc=0（防恒红）" 0 "$(ARC change '{"subject":"world://notice/z","path":"muted","before":null,"after":true}')"
 
 # ══ TC-075 · REQ-N-005 可度量的质量目标（三列齐备机器可核）═══════════
 echo; echo "── TC-075 · REQ-N-005/007/008 质量目标三列齐备（**按表头名取列** ＋ **行数断言** ＋ 自身反例）──"

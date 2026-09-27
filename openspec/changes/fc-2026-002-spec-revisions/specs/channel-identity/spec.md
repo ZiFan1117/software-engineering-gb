@@ -4,25 +4,6 @@
 
 ### Requirement: 身份取自内核而非请求自称
 
-> **改的是哪一类问题**：② 措辞写窄（实现有、规格无）兼 ③ 证据错位。
-> **不是**"这一层能力有没有"的问题——能力在（写入侧身份确实不取自请求），是**表述与断言的强度对不上**。
->
-> `audit.md` **C1**：规格写「采用内核给出的身份、自称被忽略」，证据实为「拒绝且不落笔」；
-> `audit.md` **C2**：规格写「从内核提供的连接元数据中取得身份」，而实现**不取任何连接凭证**。
->
-> **证据是哪条测试的哪个断言**：
-> ① 拒绝侧：`world-core/tests/contract.rs:668-670` 逐字
->    `let e = serve_once(&mut w, &listener, &expect).expect_err("冒充必须被拒");`／
->    `assert!(e.contains("Impersonation"), "实得: {e}");`／
->    `assert_eq!(w.ledger().last_seq(), before, "冒充被拒后不得落笔");`
-> ② 身份取自映射侧：`world-core/tests/contract.rs:653-657` 逐字
->    `assert_eq!( ev["actor"], json!("world://agent/1"), "actor 必须取自内核身份映射，而不是请求" );`
-> ③ **"不取连接元数据"这一句今天没有任何断言**——实现侧只有自述：`world-core/src/channel.rs:256-257` 逐字
->    「① 身份已由**套接字文件的权限**保证：只有 expect.uid 连得上（见 bind()）。/ 因此这里不需要（也无法用）peer_cred——它在本工具链上仍是不稳定 API。」
-> ④ "未被身份映射登记的套接字被默认拒绝"今天也没有断言——实现侧为 `world-core/src/main.rs:604-615` 的 `None` 分支
->    （报 `ext.world.Channel.NotConfigured`、`rc=2`）。
-> ⇒ ③④ 需补断言（列进 tasks）。
-
 通道 SHALL 使请求方身份由**套接字绑定**决定：每个监听套接字在创建时绑定到一个身份，
 只有该身份能连上；系统 SHALL NOT 从连接元数据、对端凭证或请求正文取得身份。
 请求正文里自称的身份与套接字绑定的身份不一致时，系统 SHALL 拒绝该请求且 SHALL NOT 落笔。
@@ -39,29 +20,6 @@
 ## ADDED Requirements
 
 ### Requirement: 通道身份的实际保证与它的边界
-
-> **为什么用 ADDED 而不是 MODIFIED**：本节是一条**新的 Requirement 实体**（原规格没有这一条），
-> 而 `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下**逐字存在**。
-> 本节**不新增能力**：它挂在既有能力 `channel-identity` 之下，只声明**该既有能力的边界**——
-> 这正是把"已知边界写成正式条文"所必需的那一步。
->
-> **改的是哪一类问题**：④ 与项目文档冲突（规格把**已知边界**写成已成立，通篇未登记）。
-> 书稿已逐字登记该边界：`world-core/docs/理论/语义世界-理论书-第一版-合订.md:697` 逐字
-> 「分情况的有 1 项。经通道进来的连接，身份由入口绑定给出，非最高权限的邻居冒称会被拒；最高权限的用户可以连任何套接字，这一项对它无效。」
->
-> `audit.md` **C3**：实测「套接字 actor=`world://agent/1`、uid=1001、mode=600」下，
-> uid 1001 连上→落笔 `agent/1`；**root 连上→同样落笔 `agent/1`**；只有 root「自称」`world://user` 才被拒
-> ⇒「身份取自内核」这条检查**只抓自称、不抓谁连上**。
->
-> **证据是哪条测试的哪个断言**：`world-core/tools/system_acceptance.sh:342-344` 逐字
-> `assert_rc "㉔ M09 正例：身份 uid 的连接可建立并落笔（rc=0）" 0 "$ROOT_RC"`／
-> `assert_ne "㉕ M09 反例：**别的 uid 连不上**（内核在 connect 处拒绝）" 0 "$OUTB_RC"`／
-> `assert_ne "㉖ 且失败理由不是「连接成功」（输出里不得出现 CONNECTED）" "CONNECTED" "$(printf '%s' "$OUTB" | tail -1)"`。
-> **⚠ 这三条断言自身的边界必须一起读**：`world-core/tools/system_acceptance.sh:314` 逐字
-> `if command -v setpriv >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then`，其 `else` 分支（`:346`）逐字
-> `echo "  【未能校验】跨 uid 连接反例（缺 setpriv 或非 root）"`
-> ⇒ 缺 `setpriv` 或非 root 时这三条整段不执行。
-> 「root 连上仍落笔 `agent/1`」这一失效形态**今天没有断言** ⇒ 需补断言（列进 tasks）。
 
 通道身份 SHALL 由套接字文件的属主与权限保证：只有套接字属主能够连接，连接即代表该身份。
 该系统 SHALL NOT 区分连接方是哪一进程，SHALL NOT 约束超级用户的行为。

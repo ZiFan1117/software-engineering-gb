@@ -81,6 +81,15 @@ fn sandbox(tag: &str) -> PathBuf {
 /// - 主体 `world://obj/{seq%1000}`，字段 `field-{seq%8}`，故同一 (主体,字段)
 ///   每 1000 条复现一次，第 k 次出现的值 = `k % 2 == 0`（**前后自洽**）；
 /// - 每 100 条中：1 条 `act`、1 条 `notice`，其余为 `change`。
+///
+/// ⚠️ 这里的主体/字段名**故意不改成出厂本体里声明过的那两个**（`notice.muted` / `job.status`），
+/// 理由两条，都是可核的：
+/// 1. 本函数**不经过写入路径**——它直接把 JSON Lines 写进文件，是"夹具"而不是"世界的写入"；
+///    按 `concepts` 校验实体与字段的那道闸在写入侧（`src/ontology.rs::check_concepts`），
+///    折叠侧只查 seq 连续／家族存在／`before` 自洽（`src/readmodel.rs:92-149`），故本夹具过得去；
+/// 2. 要保住的是"**同一主体下 8 个不同字段**、每个字段每 1000 条复现一次"这个构造——
+///    出厂本体只声明了 2 格字段，改成声明过的名字就得把 8 个字段压成 2 个，
+///    测的就不再是"多字段、多主体的重放"了。**改它=把度量对象改小**，故不改。
 fn synthesize(dir: &Path, n: usize) -> PathBuf {
     let path = dir.join("ledger.jsonl");
     let f = fs::File::create(&path).unwrap();
@@ -295,7 +304,13 @@ fn qg01_append_10k_without_loss_or_duplication() {
     for i in 0..n {
         // 同一 (主体, 字段) 每 500 条复现一次；第 k 次出现的 before 必须等于上一次的 after
         let occ = i / 500;
-        let subject = format!("world://obj/{:04}", i % 500);
+        // 主体必须是**出厂本体里已声明的实体**：本用例走的是真实写入路径（`World::commit`），
+        // 而写入侧现在按 `ontology.json` 的 `concepts` 校验实体与字段（书 §5.3「声明以外的东西
+        // 不许落账」，执行者 `src/ontology.rs::check_concepts`）。原先写 `world://obj/{i}`——
+        // `obj` 没声明过 ⇒ 第 0 条就被拒、`unwrap_or_else` 当场 panic（rc=101）。
+        // 字段 `muted` 本来就是 `notice` 声明过的那一格（`concepts.notice.fields`），
+        // 故**只换实体名**：`world://obj/…` → `world://notice/…`（其余构造一字未动）。
+        let subject = format!("world://notice/{:04}", i % 500);
         let ev = w
             .commit(
                 "change",

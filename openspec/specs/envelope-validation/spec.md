@@ -9,17 +9,6 @@
 
 ### Requirement: 信封的必填字段被逐字段强制
 
-> **改的是哪一类问题**：① 措辞写宽（要求强于断言）。**不是**"能力有没有"的问题。
->
-> `audit.md` **E6**：八个必填字段里，`world` 那一轮的「报出字段名」**恒真**。
->
-> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs:120-123` 逐字
-> `assert!( msg.contains("MissingField") && msg.contains(field), "删除 \`{field}\` 应被拒且指明字段，实得: {msg}" );`
-> 而错误前缀自带 `world` 二字——`world-core/src/ontology.rs:32` 逐字
-> `"ext.world.Ontology.MissingField: {at} 缺少必填字段 \`{field}\`"`
-> ⇒ `field == "world"` 时 `msg.contains("world")` 由前缀满足，该轮**不证明**字段名被报出。
-> 其余 7 个字段不受影响。⇒ 需补断言（列进 tasks）。
-
 系统 SHALL 对每一条写入事件逐字段校验信封必填项 `world` / `kind` / `id` / `seq` / `at` /
 `actor` / `flags` / `body`；任一字段缺失时 SHALL 拒绝该事件。
 
@@ -38,19 +27,6 @@ SHALL NOT 被读成"`world` 缺失也被指名报出"。
 
 ### Requirement: 三类话之外一律被拒
 
-> **改的是哪一类问题**：③ 证据错位（引错了出厂步骤）兼 ① 措辞写宽（缺"状态未被改动"的断言）。
-> **不是**"能力有没有"的问题——三类话之外确实被拒且不落笔。
->
-> `audit.md` **E2**：被引证据的证据行写着「`check.sh` 步骤 ③」，而那一步**根本不跑 `t5`**
-> （`world-core/check.sh:98` 逐字 `cargo test --locked --test acceptance -- t1_ t2_ t7_`，只选三个函数）。
-> `audit.md` **E5**：`t5` 没有断言本 Scenario 的第二句「状态未被改动」。
->
-> **证据是哪条测试的哪个断言**：`world-core/tests/acceptance.rs:158-159` 逐字
-> `let e1 = w.commit("bogus", "world://user", json!({})).unwrap_err();`／
-> `assert!(e1.contains("UnknownKind"), "实得: {e1}");`
-> 与 `:187` 逐字 `assert_eq!(w.ledger().last_seq(), 1, "被拒的事件绝不允许落笔");`
-> ——**这断言的是"不落笔"，不是"状态未被改动"**。同文件 `:87-92` 有"状态未变"的既有写法可照抄。
-
 系统 SHALL 只接受本体声明的三个家族（变更 / 请求与结果 / 通告）；出现未知家族时 SHALL 拒绝，
 SHALL NOT 猜测其含义，SHALL NOT 落笔该事件，且 SHALL NOT 改动世界状态。
 
@@ -64,17 +40,6 @@ SHALL NOT 猜测其含义，SHALL NOT 落笔该事件，且 SHALL NOT 改动世�
       且它**不断言"状态未被改动"** ⇒ 需补断言（列进 tasks）。
 
 ### Requirement: 法律损坏或指向别处时拒绝启动
-
-> **改的是哪一类问题**：① 措辞写宽（要求强于断言）。
->
-> `audit.md` **E3**：本条的措辞比证据宽三处，**三处实现都拒，只是没有载体**。
->
-> **证据是哪条测试的哪个断言**，逐条给出：
-> ① **策略文件缺失**：`world-core/tests/contract.rs::c03` 的五类（`:154` 坏 JSON、`:159-164` 缺 `policy`、
->    `:166-171` 能力表为空、`:173-178` 白名单为空、`:180-185` 缺 `writes`）里**没有「缺失」**，全仓无载体；
-> ② **本体字段形状非法**：`world-core/tests/contract.rs:224-227` 只测缺文件、`:229-242` 只测家族为空；
-> ③ **本体软链**：`world-core/tests/contract.rs::c09` 只测**策略**软链。
-> ⇒ 三处均需补断言（列进 tasks）。
 
 本体与门禁策略 SHALL 在世界打开时装载并校验；文件缺失、家族为空、能力表为空、白名单为空、
 `writes` 段缺失时 SHALL 拒绝启动；法律文件是**符号链接**时 SHALL 拒绝启动，
@@ -114,13 +79,6 @@ SHALL NOT 猜测其含义，SHALL NOT 落笔该事件，且 SHALL NOT 改动世�
 
 ### Requirement: 事件身份在进程内唯一
 
-> **改的是哪一类问题**：① 措辞写宽后的**范围收窄**——原文已有「同一进程内」限定，
-> 本条**只补"跨重启不保证"这半边**，不改结论强度。`audit.md` 未单列此条。
->
-> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs:245-248` 逐字
-> 「`new_id()` = 纳秒 + 进程内计数器；计数器每次启动从 0 开始，/ 故"跨重启唯一"依赖纳秒不重复——本测试覆盖**同进程内**的唯一性。」
-> 断言本体在 `:251-256`：2000 次 `new_event` 收进 `BTreeSet` 后断言无重复。
-
 系统 SHALL 保证同一进程内分配的事件 `id` 不重复。
 系统 SHALL NOT 声称跨进程或跨重启的 `id` 唯一性由本机制保证。
 
@@ -131,22 +89,6 @@ SHALL NOT 猜测其含义，SHALL NOT 落笔该事件，且 SHALL NOT 改动世�
 - **证据**：`tests/contract.rs::c05_event_ids_are_unique_within_a_process`
 
 ### Requirement: 错误携带机器可读的错误码
-
-> **改的是哪一类问题**：③ 证据错位（最重的一处：Scenario 说"四类路径"，证据里**没有一类是账本**）
-> 兼 ① 措辞写宽（法律类存在**无码出口**）。
->
-> `audit.md` **E1**：`openspec/specs/envelope-validation/spec.md:78` 写「触发**法律、门禁、账本、读模型**四类失败路径」；
-> 而 `c15` 的七条码来源逐条为 `world-core/tests/contract.rs:714`（本体坏 JSON）、
-> `:718`（门禁未声明能力）、`:728`（门禁未授权写入）、`:738`（门禁不可逆加摩擦）、
-> `:748`（法律违反信纸）、`:758`（通道坏请求）、`:767`（读模型坏账本）
-> —— **没有一条账本路径**。全仓唯一的账本码断言在 `world-core/tests/cli.rs:155` 逐字
-> `err.contains("ext.world.Ledger.NoChain"),`，而 `world-core/check.sh` **从不跑 `--test cli`**。
->
-> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs:770-776` 逐字
-> `for c in &codes { assert!(has_code(c), "错误缺少 \`ext.world.<域>.<原因>\` 前缀：{c}"); }`
-> 与 `assert!(unique.len() >= 6, "错误码区分度不足，只拿到 {unique:?}");`；
-> 反例侧 `:779` 逐字 `assert_eq!(code_of("门禁拒绝：能力未声明"), None);`
-> ——**没有账本类别**。⇒ 需补断言（列进 tasks）。
 
 系统 SHALL 在失败路径上给出机器可读的错误码（如 `ext.world.*`），使调用方按码判定，
 SHALL NOT 要求调用方去匹配中文散文措辞。
@@ -163,21 +105,6 @@ SHALL NOT 要求调用方去匹配中文散文措辞。
       由同函数的 `world-core/tests/contract.rs:779` 承担。
 
 ### Requirement: 错误码契约的已知边界
-
-> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。
-> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。
-> 本节**不新增能力**：它挂在既有能力 `envelope-validation` 之下，只声明**该既有能力的边界**。
->
-> **改的是哪一类问题**：④ 与项目文档冲突（规格把"已知无码"的出口包在了全称句里）。
->
-> `audit.md` **E1** 后半：实测法律类存在无码出口。项目文档**已自认**此项。
->
-> **证据是哪条测试的哪个断言**：
-> ① 静态墙三条断言逐条标「⚠ **无码**」：`world-core/docs/S2-设计/WC-IC-001-v0.1.md:350`（符号链接）、
->    `:351`（mode 位）、`:352`（属主断言）；
-> ② 策略版本不符出口也是散文：`world-core/src/gate.rs:113-117` 逐字
->    `if version != 1 { return Err(format!( "门禁策略版本不支持：期望 1，实得 {version}（法律版本不符即拒绝启动）" )); }`
-> ③ **上述四处今天都没有"它不带码"的断言** ⇒ 需补断言（列进 tasks）。
 
 系统 SHALL 逐条登记**已知的无码失败出口**，使"凡失败路径都带码"这一全称句不成立：
 

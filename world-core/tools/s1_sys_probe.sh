@@ -113,7 +113,12 @@ echo "  沙箱 : $SB"
 echo "  用例 : TC-042 / TC-046 / TC-047 / TC-048 / TC-049 / TC-050 / TC-051 / TC-052"
 
 # ══ 种子：本账 2 条 + 一条真实落盘行副本（供手写变异用）══════════════════
-W append change '{"subject":"world://sys/a","path":"p","before":null,"after":1}' >/dev/null 2>&1
+# 为什么主体/字段换成 `world://notice/a` ＋ `muted`：这是**检查用数据**，而写进世界的东西
+# 必须在出厂本体里声明过（书 §5.3；执行者 `src/ontology.rs::check_concepts`）。
+# 原先的 `world://sys/a#p` 两个名字都没声明过 ⇒ 这一条当场 rc=2、账本 0 行，
+# 下面**所有**依赖"账本里有东西"的断言（P⊆S、同源、排版样本…）跟着一起红。
+# 换的只是落笔的格子，检查内容一字未改。
+W append change '{"subject":"world://notice/a","path":"muted","before":null,"after":true}' >/dev/null 2>&1
 W append act '{"capability":"notice.mute","verb":"do","request_id":"r-1","params":{}}' >/dev/null 2>&1
 assert_eq "种子：账本 2 行" "2" "$(wc -l <"$L" | tr -d ' ')"
 REAL1="$(head -1 "$L")"
@@ -219,6 +224,9 @@ for KIND in language visual; do
 done
 
 # 反假④⑤：注入一个 S 中不存在的三元组 ⇒ 比对器**必须**报非空（证明它有牙）
+# ⚠ 注射点必须跟着**种子的字段名**走：原先锚在 `      p = `（旧种子 `world://sys/a#p` 的字段行），
+#   种子换成已声明的 `notice/a#muted` 之后，字段行是 `      muted = `——锚不改，注入就永远不发生，
+#   ④⑤ 会变成"注射器没跑却报通过"的假绿（本项目 §六"脚本根本没跑"那一类）。
 python3 - "$VIS_TXT" "$SB/vis_injected.txt" <<'PY'
 import sys
 src, dst = sys.argv[1], sys.argv[2]
@@ -226,7 +234,9 @@ lines = open(src, encoding="utf-8").read().rstrip("\n").split("\n")
 out = []
 for line in lines:
     out.append(line)
-    if line.startswith("      p = "):
+    if line.startswith("      muted = "):
+        # 注入的三元组**故意**不是一个已声明的实体：它要证明的是"投影里多出一条 S 里没有的事实
+        # 会被抓到"。它不是写入世界的账本事件（只进临时文本），本体校验看不到它，故不改名。
         out.append("  world://sys/ghost")
         out.append("      phantom = 42")
 open(dst, "w", encoding="utf-8").write("\n".join(out) + "\n")
@@ -429,7 +439,15 @@ if [ ! -f tools/visual_layout_audit.py ]; then
   bad "① 缺 tools/visual_layout_audit.py（独立审计脚本）——用例不可执行"
 else
   W project visual >"$SB/sample_normal.txt" 2>/dev/null
-  W append change '{"subject":"world://sys/nl","path":"esc","before":null,"after":"a\nb\tc"}' >/dev/null 2>&1
+  # 为什么换成 `world://job/nl` ＋ `status`：本样本要的是"**值里含换行/制表符**"（编号 ① 与
+  # 样本 [newline]），故不能再写 `world://sys/nl` ＋ `esc` 那两个没声明过的名字。
+  # 出厂本体里字段只有两格：`notice.muted`（bool）与 `job.status`（`enum(todo,doing,done)` 的**说明文字**）。
+  # `job.status` 的取值是**字符串**，与"值里带 \n／\t"同属 JSON 字符串这一类 —— 故取它。
+  # ⚠ 如实说清限额：`status` 的说明文字里列了三个枚举值，而这个样本的值不在那三个里；
+  #   本体**刻意不解释**字段的取值说明（`src/ontology.rs` 加载 `concepts` 的口径 2：那些文字
+  #   是自由文本、不是机器 schema），所以机器上查不出这一层——这一层是**已知的口径缺口**，
+  #   不因本行而新增，也不假装已闭合。为了保住这条样本的强度，宁可让它落在"已声明字段 + 未声明的取值"上。
+  W append change '{"subject":"world://job/nl","path":"status","before":null,"after":"a\nb\tc"}' >/dev/null 2>&1
   assert_rc "① 含换行/控制字符的值：追加成功（rc=0）" 0 "$?"
   W project visual >"$SB/sample_newline.txt" 2>/dev/null
   : >"$SB/empty.jsonl"

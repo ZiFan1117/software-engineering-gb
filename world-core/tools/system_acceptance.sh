@@ -108,7 +108,12 @@ echo "  用例 : TC-037 / TC-038 / TC-039 / TC-040 / TC-041"
 # ══ TC-037 · REQ-F-001 语义事件是唯一真相 ═══════════════════════════
 echo
 echo "── TC-037 · REQ-F-001 语义事件是唯一真相（只追加 + 无第二条写路径）──"
-W append change '{"subject":"world://sys/a","path":"p","before":null,"after":1}' >/dev/null 2>&1
+# ⚠ 本脚本以下所有 `append change` 的**主体与字段都取出厂本体里已声明的格子**
+#   （`ontology.json` 的 `concepts`：`notice.muted` ／ `job.status`）——
+#   书 §5.3「声明以外的东西不许落账」的执行者是 `src/ontology.rs::check_concepts`，
+#   原先的 `world://sys/*#p` 两个名字都没声明过 ⇒ 这些写入当场 rc=2、断言整片变红。
+#   换的是**落笔的格子**，不是判据：条数／seq／逐字节不变／指纹必变这些断言一字未动。
+W append change '{"subject":"world://notice/a","path":"muted","before":null,"after":true}' >/dev/null 2>&1
 assert_rc "① 首次追加成功（rc=0）" 0 $?
 assert_eq "② 账本恰有 1 行" 1 "$(wc -l <"$L" | tr -d ' ')"
 assert_eq "③ read 回读 1 条" 1 "$(W read | wc -l | tr -d ' ')"
@@ -120,7 +125,7 @@ W project language >/dev/null 2>&1
 W project check >/dev/null 2>&1
 assert_eq "⑤ state/project 执行后账本**逐字节**不变（无第二条写路径）" "$(sha "$SB/snapshot.jsonl")" "$(sha "$L")"
 
-W append change '{"subject":"world://sys/b","path":"p","before":null,"after":2}' >/dev/null 2>&1
+W append change '{"subject":"world://notice/b","path":"muted","before":null,"after":false}' >/dev/null 2>&1
 assert_rc "⑥ 第二次追加成功（rc=0）" 0 $?
 assert_eq "⑦ 账本只增：2 行" 2 "$(wc -l <"$L" | tr -d ' ')"
 assert_eq "⑧ 旧行未被改写（逐字节）" "$(head -1 "$SB/snapshot.jsonl")" "$(head -1 "$L")"
@@ -142,12 +147,16 @@ assert_eq "① 落盘行含全部 8 个必填信封字段" "MISSING=" "$(printf 
 assert_eq "② 落盘行的 world 版本 = 1" "WORLD=1" "$(printf '%s' "$ENVFIELDS" | grep '^WORLD=')"
 
 BEFORE_LINES="$(wc -l <"$L" | tr -d ' ')"
-OUT="$(W append change '{"subject":"world://sys/c","path":"p","after":true}' 2>&1)"
+# 为什么主体也换成已声明的：本条要验的是"**缺必填字段** ⇒ 拒且不落笔"。
+# 主体若用未声明的名字，拒绝就变成"两个理由都成立"（缺 before ∧ 实体没声明）——
+# 那时 `④ 点名 before` 过了也说明不了是缺字段拦下的。用已声明的 `notice/c` ＋ 已声明的 `muted`，
+# 唯一的拒绝理由就只剩"缺 before"，判据强度只增不减。
+OUT="$(W append change '{"subject":"world://notice/c","path":"muted","after":true}' 2>&1)"
 RC=$?
 assert_rc "③ 缺必填字段（change 缺 before）被拒（rc=2）" 2 "$RC"
 assert_has "④ 拒绝理由**点名**缺失字段" "$OUT" 'before'
 assert_eq "⑤ 被拒事件**不落笔**（账本行数不变）" "$BEFORE_LINES" "$(wc -l <"$L" | tr -d ' ')"
-if grep -q 'world://sys/c' "$L"; then bad "⑥ 被拒事件的内容不得出现在账本里"; else ok "⑥ 被拒事件的内容不得出现在账本里"; fi
+if grep -q 'world://notice/c' "$L"; then bad "⑥ 被拒事件的内容不得出现在账本里"; else ok "⑥ 被拒事件的内容不得出现在账本里"; fi
 
 # ══ TC-039 · REQ-F-010 状态是账本的投影 ═════════════════════════════
 echo
@@ -164,7 +173,7 @@ HDR_SEQ="$(W project language | head -1 | sed -n 's/.*last_seq=\([0-9]*\).*/\1/p
 assert_eq "③ 投影首行的 state= 与 project check 的指纹一致（同一个读模型）" "$FP1" "$HDR_STATE"
 assert_eq "④ 投影首行的 last_seq 与账本条数一致" "2" "$HDR_SEQ"
 
-W append change '{"subject":"world://sys/d","path":"p","before":null,"after":3}' >/dev/null 2>&1
+W append change '{"subject":"world://notice/d","path":"muted","before":null,"after":true}' >/dev/null 2>&1
 FP2="$(W project check | sed -n 's/.*指纹=\([^ ]*\).*/\1/p')"
 assert_ne "⑤ 反假：追加一条后状态指纹**必须变**（常量状态会在此变红）" "$FP1" "$FP2"
 
@@ -260,7 +269,7 @@ for sub in "state" "read" "project language" "check"; do
 done
 assert_eq "⑦ 四个只读命令后账本**逐字节**不变（P-01：只读接口不得写 L1）" "$B4" "$(sha "$SB/torn.jsonl")"
 assert_eq "⑧ 且**长度**不变（末尾半行未被截断）" "$S4" "$(stat -c%s "$SB/torn.jsonl")"
-WL "$L" append change '{"subject":"world://sys/tc041","path":"p","before":null,"after":9}' >/dev/null 2>&1
+WL "$L" append change '{"subject":"world://notice/tc041","path":"muted","before":null,"after":true}' >/dev/null 2>&1
 assert_rc "⑨ 对照：**可写**路径（append）仍会丢弃半行 ⇒ 走的是另一条口径（此账本无半行，故 rc=0）" 0 "$?"
 
 # —— W-04 属主断言（`--owner-uid`）＋ P-16 强制化（打错 uid 不得静默失效）——
@@ -320,7 +329,11 @@ if [ -n "$SOCKDIR" ]; then
 import socket, sys
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.connect(sys.argv[1])
-s.sendall(b'{"kind":"notice","body":{"type":"tc041","subject":"world://sys/tc041","payload":{}}}\n')
+# 为什么通告的主体也换成已声明的：这是**检查用数据**，按同一条规矩（检查用的数据必须是已声明的）
+# 不该拿未声明的名字当主体。功能上无差别——`concepts` 只管 `change`（`notice.subject` 的语义是
+# "这条通告关于谁"，不是"改了哪一格"，见 `src/ontology.rs::check_concepts` 的文档），
+# 但探针数据里不留未声明的名字，读的人就不必去分辨"这个 `sys` 到底该不该在册"。
+s.sendall(b'{"kind":"notice","body":{"type":"tc041","subject":"world://notice/tc041","payload":{}}}\n')
 print(s.recv(65536).decode("utf-8", "replace").strip())
 PY
       then

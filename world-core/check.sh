@@ -86,7 +86,12 @@ echo "  ✅ READY（本体/门禁/账本三项都开得起来）"
 #   写一条再断言"有链"且 --require-chain 通过。
 # 若写入侧哪天不再产链，这一步会当场红——把"默认受保护"变成入口断言。
 W0() { "$BIN" --ontology "$SB/ontology.json" --ledger "$SB/ledger.jsonl" --policy "$SB/policy.json" "$@"; }
-W0 append change '{"subject":"world://check/probe","path":"p","before":null,"after":1}' >/dev/null
+# 为什么写 `world://notice/probe` ＋ `muted`：这一步要的只是"写一条，再断言账本带链"，
+# 而**写进世界的东西必须在出厂本体里声明过**（书 §5.3「声明以外的东西不许落账」；
+# 执行者 `src/ontology.rs::check_concepts`）。原先写 `world://check/probe#p`——`check` 与 `p`
+# 都没声明过 ⇒ 这一行把第②步打成 rc=2。改的只是落笔的**格子**（换成 `concepts` 里真有的
+# 那一格，值 true 是 `muted: bool` 该有的形状），判据强度不变：仍然"写一条 → 有链 → --require-chain 过"。
+W0 append change '{"subject":"world://notice/probe","path":"muted","before":null,"after":true}' >/dev/null
 OUT2="$(W0 check)"
 echo "$OUT2" | grep -q '有摘要链' || { echo "  ❌ 新账本应带摘要链（WC-SCMP-001 变更请求台账 · WC-CR-003），实得：$(echo "$OUT2" | grep '链')"; exit 1; }
 W0 --require-chain check >/dev/null || { echo "  ❌ --require-chain 未通过"; exit 1; }

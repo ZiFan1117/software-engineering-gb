@@ -4,26 +4,6 @@
 
 ### Requirement: 事件按序落账并可跨进程读回
 
-> **改的是哪一类问题**：③ 证据错位（证据层级错位：规格写"新进程"，测试是**同进程** drop + reopen）
-> 兼 ① 措辞写宽（`t1` 的"逐字段一致"没有被断言）。
->
-> `audit.md` **L4**：原 `spec.md:23` 写「以新进程打开」，而 `world-core/tests/acceptance.rs:85-104`
-> 实为同进程 drop 后 reopen。`audit.md` **L5**：`t1` 的"逐字段一致"没有被断言。
->
-> **证据是哪条测试的哪个断言**：
-> ① `t2` 的实际形态：`world-core/tests/acceptance.rs:85-104` 的 `t2_events_survive_restart`
->    在一个 `#[test]` 函数内的 `{ ... }` 作用域里 drop 写者、再 reopen——**不是新进程**。
-> ② 真正合格的"跨进程"证据：`world-core/tools/s1_sys_probe2.sh:379-383` 逐字
->    `# ══ TC-070 · REQ-F-022 账本可重放（重启不丢）═════════════════════════`／
->    `echo; echo "── TC-070 · REQ-F-022 重启后事件全在且顺序不变 ──"`／
->    `assert_eq "① 两次**独立进程**读回的事件序列**逐字节相同**" "$R1" "$R2"`（由 `world-core/check.sh:145` 执行）。
-> ③ `t1` 实际断言（`world-core/tests/acceptance.rs:69-80`）：`assert_eq!(evs.len(), 3, "应有 3 条事件")`、
->    `assert_eq!(ev["seq"], json!(i as u64 + 1), "seq 必须从 1 连续递增")`、
->    `assert_eq!(ev["world"], json!(1), "信封必须带词表版本")`、
->    `assert_eq!(evs[0]["kind"], json!("change"))`、`assert_eq!(evs[0]["body"]["before"], json!(false), ...)`、
->    `assert_eq!(evs[2]["kind"], json!("notice"))`
->    ⇒ **`actor`／`id`／`at`／`flags`／`body.subject`／`body.path`／`body.after` 一个都没比** ⇒ 需补断言（列进 tasks）。
-
 系统 SHALL 把每一条语义事件按 `seq` 升序追加进同一本账，且该账 SHALL 以纯文本 JSON Lines 落盘，
 使事件在写入进程退出后仍然可读。
 
@@ -49,19 +29,6 @@ SHALL NOT 以"同进程内 drop 后 reopen"充当跨进程证据。
       （`world-core/check.sh:145` 执行）。
 
 ### Requirement: 同一本账同时只有一个写者
-
-> **改的是哪一类问题**：① 措辞写宽（原措辞超出实现前提，且反向失效未登记）。
->
-> `audit.md` **L2**：原 `spec.md:29-30` 写无条件；实现**锁只记 pid 号**，
-> 存活判据是 `/proc/<pid>` 是否存在。
->
-> **证据是哪条测试的哪个断言**：
-> ① 锁只写 pid：`world-core/src/ledger.rs:175` 逐字 `let _ = writeln!(f, "{}", std::process::id());`
-> ② 存活判据：`world-core/src/ledger.rs:182-184` 逐字
->    `let alive = pid .map(|p| Path::new(&format!("/proc/{p}")).exists()) .unwrap_or(false);`
-> ③ 断言侧：`world-core/tests/contract.rs::c08_stale_lock_is_reclaimed`、
->    `world-core/tests/contract.rs::c07_second_writer_is_refused`（由 `world-core/check.sh` 第 ③b 步执行）。
-> ④ **反向失效（pid 号被复用时不回收）今天没有断言** ⇒ 需补断言（列进 tasks）。
 
 系统 SHALL 拒绝第二个写者打开同一本账，且拒绝理由 SHALL 说明这是"单写者"约束；
 持锁进程正常退出后锁 SHALL 被释放；持有者已不存在的陈旧锁 SHALL 被自动回收。
@@ -92,21 +59,6 @@ SHALL NOT 以"同进程内 drop 后 reopen"充当跨进程证据。
 
 ### Requirement: 残缺的尾部被丢弃，`seq` 空洞拒绝启动
 
-> **改的是哪一类问题**：④ 与项目文档冲突（规格把一个更宽的、会**静默物理删除完整事件**的行为
-> 写成了较窄的"丢弃解析失败的最后一行"）。
->
-> `audit.md` **L3**：实现按**最后一个 `\n`** 截断（直接 `set_len` 落盘），**不看能否解析**；
-> 一条**完整合法 JSON 但缺末尾换行**的行会被静默物理删除并复用 `seq`。
->
-> **证据是哪条测试的哪个断言**：
-> ① 截断判据：`world-core/src/ledger.rs:276-279` 逐字
->    `let keep = match raw.iter().rposition(|b| *b == b'\n') { Some(pos) => pos + 1, // 保留到最后一个换行（含） None => 0, // 一个换行都没有 ⇒ 整个文件都是半行 };`
-> ② 落盘删除：`world-core/src/ledger.rs:280-289`（`set_len(keep)`）。
-> ③ 这条边界由实现**自己如实写过**：`world-core/src/ledger.rs:385` 逐字
->    `/// ② 若粘连处含此前已 ack 的事件，启动时"截到最后一个 \n"会**静默删掉**它们；`
-> ④ 断言侧：`world-core/tests/acceptance.rs::t3_partial_line_is_discarded` 正面背书"半行被丢弃"，
->    **但没有断言"完整合法 JSON 缺末尾换行也会被删"** ⇒ 需补断言（列进 tasks）。
-
 系统 SHALL 在启动读账本时把文件**截到最后一个换行符**（只追加模型下唯一可能残缺的位置），
 且当 `seq` 出现空洞时 SHALL 拒绝启动，而不是静默接受。
 
@@ -132,16 +84,6 @@ SHALL NOT 以"同进程内 drop 后 reopen"充当跨进程证据。
 
 ### Requirement: 账本文件恒以行边界收尾
 
-> **改的是哪一类问题**：③ 证据错位（出厂脚本同名两处，证据行只写 `check.sh` 未给路径）。
->
-> `audit.md` **L8** 后半：原 `spec.md:19/25/36` 只写 `check.sh`，而仓里**有两个同名脚本**，
-> 根 `check.sh` **完全不碰 world-core**。
->
-> **证据是哪条测试的哪个断言**：`world-core/tests/contract.rs::c22_file_always_ends_on_a_line_boundary`
-> 位于 `--test contract` 全套之内，由 `world-core/check.sh` 第 ③b 步（`:103`）执行。
-> 仓根 `check.sh` 全文 49 行只跑 `agentd` 的 `go build` / `go vet` / `go test`（`:28-40`），
-> **没有一行涉及 `world-core`**。
-
 系统 SHALL 保证写出的账本文件始终以换行符结束，
 使"每行一条事件"这一分帧约定在任何时刻都成立。
 
@@ -153,23 +95,6 @@ SHALL NOT 以"同进程内 drop 后 reopen"充当跨进程证据。
       （由 **`world-core/check.sh`** 第 ③b 步执行——仓根另有一个同名 `check.sh`，它不涉及 `world-core`）
 
 ### Requirement: 摘要链检出局部篡改，并如实声明其边界
-
-> **改的是哪一类问题**：④ 与项目文档冲突（**P0 必做项**：把已知【高】级缺陷写成已成立行为）。
->
-> `audit.md` **L1**：原 `spec.md:111` 把「v1 兼容」写成已成立，而项目自己把这条路径登记为
-> **【高】级自杀缺陷**——`world-core/docs/S0-立项/WC-SCMP-001-v0.1.md:2537` 逐字
-> 「### K-3【高】在 v1（无链）账本上做一次正常 `append` 会把世界锁死 —— 升级路径自杀」。
->
-> **证据是哪条测试的哪个断言**：
-> ① 「无链账本仍能打开」这一句的**全部**依据是 `world-core/tests/contract.rs:1026` 逐字
->    `assert_eq!(w3.ledger().last_seq(), 1, "无链账本仍应能打开（v1 兼容）");`
->    —— 它只断言了**打开**这一步，**没有断言打开之后能不能正常写入**。
-> ② K-3 的后果链由文档逐字给出：`WC-SCMP-001-v0.1.md:2541` 逐字
->    「**后果（EV-11b）**：无链账本 → `check` 警告但 `READY`（**设计意图是兼容**）→ 一次合法 `append` 成功 → 下次打开 `Ledger.MixedChain … 拒绝使用`。」
->    同件 `:2542` 逐字「**触发场景不是攻击，是升级**：任何历史账本在升级后的第一次提交都会命中。」
-> ③ **这条路径今天没有任何自动化断言** ⇒ 需补断言（列进 tasks）——
->    `MixedChain` 在仓库内只出现在 `world-core/tests/contract.rs:845`（注释）与 `:879`（`c17` 函数级）；
->    启动路径的拒绝由 `world-core/src/lib.rs:105` 逐字 `ledger.load_chain()?;` 触发，**无函数级断言**。
 
 系统 SHALL 为每条写出的事件带上摘要链，并把链的核验接在**启动路径**上：
 账本被局部改写、重排或插入时 SHALL 拒绝启动。
@@ -218,18 +143,6 @@ SHALL NOT 以"同进程内 drop 后 reopen"充当跨进程证据。
 
 ### Requirement: 回滚是追加补偿事件，不是改写历史
 
-> **改的是哪一类问题**：① 措辞写宽（原措辞把"系统提供回滚操作"读成了能力，
-> 而系统里**没有回滚操作**）。
->
-> `audit.md` **L7**：原 `spec.md:116/120` 口径与 SRS 不一致。
->
-> **证据是哪条测试的哪个断言**：`world-core/tests/acceptance.rs:563-569` 逐字
-> `// ② 回滚：追加一条**补偿事件**（旧值/新值互换）`／
-> `w.commit( "change", "world://user", event::change_body(subj, "muted", json!(true), json!(false)), )`
-> ⇒ **回滚动作由测试自己再提交一条互换的 `change` 完成**，不是系统提供的操作。
-> SRS 的口径更准：`world-core/docs/S1-需求/WC-SRS-001-v0.1.md:257` 逐字
-> 「| `REQ-F-014` | 回滚 = 追加补偿事件 | P1 | 不得修改或删除历史；**回滚通过追加一条普通 `change` 完成** |…」
-
 系统 SHALL 以"追加一条补偿事件"的方式实现回滚，
 SHALL NOT 修改或删除已经写下的事件。
 
@@ -248,29 +161,6 @@ SHALL NOT 修改或删除已经写下的事件。
 ## ADDED Requirements
 
 ### Requirement: 无链账本的升级路径边界
-
-> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。
-> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。
-> 本节**不新增能力**：它挂在既有能力 `ledger-integrity` 之下，只声明**该既有能力的边界**——
-> 照本能力对摘要链"整本重写按设计检不出"那条的既有写法，**把边界本身写成 Requirement/Scenario**。
->
-> **改的是哪一类问题**：④ 与项目文档冲突（**P0 必做项**）。这就是 `audit.md` **L1** 与 **L6**。
->
-> 缺陷原文：`world-core/docs/S0-立项/WC-SCMP-001-v0.1.md:2537` 逐字
-> 「### K-3【高】在 v1（无链）账本上做一次正常 `append` 会把世界锁死 —— 升级路径自杀」；
-> `:2544` 给出最小补丁逐字「**最小补丁**：`append` 必须尊重 `self.chained`——`false` 时
-> **要么继续写无链事件**（保持"整本无链"这个稳定态），**要么启动时即拒写并给 migrate 指引**；
-> 两者择一，**不能继续写链**。」
->
-> **证据是哪条测试的哪个断言**：
-> ① **今天没有任何自动化断言**：`MixedChain` 在仓库内只出现在
->    `world-core/tests/contract.rs:845`（注释）与 `:879`（`c17` 函数级）；
->    启动路径的拒绝由 `world-core/src/lib.rs:105` 逐字 `ledger.load_chain()?;` 触发，
->    系统级证据只有手工留档（`world-core/docs/理论/专家评审/复跑-九项保证-2026-09-27-VM.md:130-140`）。 〔该件已按作者指示退场；解析根＝`git show bf2eae7:<原路径>`〕
-> ② 实现侧：`world-core/src/ledger.rs:506` 逐字 `self.chained = true;`（只在有链时置位），
->    而 `world-core/src/ledger.rs:518-519` 逐字 `pub fn is_chained(&self) -> bool { self.chained }`
->    ⇒ 该状态位**只用于显示**，未参与 `append` 的写入决策。
-> ⇒ **本 Requirement 的全部断言今天都不存在** ⇒ 需补断言（列进 tasks）。
 
 系统 SHALL 保证：在**无链（v1）账本**上做一次合法 `append` 之后，
 该账本 SHALL 仍可被打开——即"整本无链"是一个**稳定态**，
@@ -300,22 +190,6 @@ SHALL NOT 修改或删除已经写下的事件。
       `world-core/docs/S0-立项/WC-SCMP-001-v0.1.md:2537`（`K-3`）与 `:2541`（后果链）。
 
 ### Requirement: 承诺与证据的绑定强度
-
-> **为什么用 ADDED**：这是一条**新的 Requirement 实体**（原规格没有这一条）。
-> `openspec validate --strict` 要求 `## MODIFIED` 的标题必须在 `openspec/specs/` 下逐字存在。
-> 本节**不新增能力**：它挂在既有能力 `ledger-integrity` 之下，只声明**该既有能力的边界**。
->
-> **改的是哪一类问题**：① 措辞写宽（基线自己的验证口径只到"名字存在性"这一级，
-> 规格未声明这一点）。
->
-> `audit.md` **L9**：`fc-2026-001` 的 `tasks.md:16/17/22`、`design.md:121` 逐字把核对写成
-> 「证据行指向真实存在的测试名」「6 份规格 / 40 条证据 / 0 条未命中」。
-> **名字存在 ≠ 断言的真是那件事**：本轮六路审计抓到的正是这个差值
-> （机械命中 40/40，而语义相符远低于此）。
->
-> **证据是哪条测试的哪个断言**：**没有断言**——这正是本条要声明的边界。
-> 现行的机核只到存在性一级，且 `openspec/**` 不在受控清单里：
-> `world-core/tools/doc_integrity.py` 全文检索 `openspec` **零命中**。
 
 本规格的每一条 Scenario 末尾的证据行 SHALL 指向**真实存在**的测试函数。
 

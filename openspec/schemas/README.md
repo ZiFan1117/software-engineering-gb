@@ -4,7 +4,7 @@
 软件开发流程（国标／国际标准那套）里的**好经验**——影响分析、≥2 方案、评审与签字、需求号追溯——作为**件内栏位与附表**存在。
 **不另立流程册、不设"同一批文件两处登记"，也不写"一行指针"。**
 
-落在 `openspec/schemas/opsx-swe-gb/`，项目级 schema 优先级最高，`openspec new change <name> --schema opsx-swe-gb` 即可用。
+落在 `openspec/schemas/opsx-swe-gb/`。**默认档由 `openspec/config.yaml` 的 `schema:` 决定**（本仓已钉 `schema: opsx-swe-gb`；`--schema` 只是逐个 change 的覆盖开关）。⚠ 本行原写「项目级 schema 优先级最高」——**与实测相反**：实测决定默认档的是 `config.yaml`，把它改回默认值，每个新 change 就会静默退回 4 产物原生链（守卫判据③ 就是盯这一条的）。`openspec new change <name> --schema opsx-swe-gb` 即可用。
 
 **主本**：`D:\Code\10-openspec-swe-gb\schemas\`（**改主本，再同步到这里**）。
 **主本必须同时含本 README 与 `opsx-swe-gb/` 下六个文件**——缺任何一件即为断链；两处逐文件 sha256 应一致。

@@ -12,6 +12,8 @@
 
 > **裸 `Step N` 视为无效引用**——本文件引用 Step 处一律写「项目 Step N」或「上游 Step N」；对照表唯一权威处 = `WC-MODREG-001` §2.2，其他文档只引用、不复写对照表。
 
+> **本文件不设修订记录**：历次改动的「为什么改、依据哪一条」写在 **git 提交信息**里；正文只写**现在是什么**。
+
 > **本文件与 HLD 的分工**：HLD 回答"分几层、为什么这么分"；LLD 回答
 > "**每个模块里具体是什么数据结构、每个函数做什么、错了怎么办**"。
 > 因此本文不重复架构理由，只写可实现、可复核的细节，并**逐条挂到测试**——
@@ -196,12 +198,3 @@
 | 下游 | `WC-UT-001`（单元测试记录）、`WC-RV-R4-*`（逐模块准出）、`WC-TS-001`（测试用例）、`WC-TR-001`（系统测试报告） |
 | 代码 | `world-core/src/**`（**实测 14 个文件**：`lib.rs`/`main.rs`/`ledger.rs`/`gate.rs`/`guard.rs`/`ontology.rs`/`readmodel.rs`/`checkpoint.rs`/`channel.rs`/`event.rs`/`error.rs` + `src/project/{mod,language,visual}.rs`）、`world-core/tests/**`（`acceptance.rs`/`contract.rs`/`cli.rs`/`perf.rs`）、`world-core/check.sh` |
 
----
-
-## 十三、修订记录
-
-| 版本 | 日期 | 修订人 | 修订类型 | 修订内容摘要 | 关联变更单 |
-|---|---|---|---|---|---|
-| v0.1 | 2026-09-26 | AI（DeepSeek Harness） | 新建 | 首次定义（单文件覆盖 `M01`–`M09`） | — |
-| v0.1 | 2026-09-27 | AI（DeepSeek Harness） | 文档修正 | **更新 §十二 的"格式/需求载体"行**：`WC-CKFMT-001`/`WC-PFMT-001-v0.1`/`WC-LFMT-001-v0.1`/`WC-ONT-001-v0.1`/`WC-IRS-001-v0.1` **5 份文件实测全部实存**（并行落位），并注明仍不声称"格式已受控" | `WC-R4-DISP-001` §二 A 组 |
-| v0.1 | 2026-09-27 | AI（DeepSeek Harness） | 文档修正 | **依 `WC-R4-DISP-001` F 组处置**（8 行）：① §五 `decide` 的"主体在白名单"改为"**主体在 `irreversible_actors` 内**"（**关键**：否则只照 LLD 实现会得到"任何白名单主体都可执行不可逆动作"）+ 补 `requires_approval` 不参与裁决的记述（E-5 待裁定）；② §七 补「不变量」（`base_seq` 与 `state.last_seq` 关系、`base_seq=0` 合法性、是否携带 `world`/`vocab_hash`）与「失败形态与处置」两行，并按模板 `IN-5` 补「单元测试设计对应表」（含"本模块 `#[test]` 计数 = 0"的显式声明与理由）；③ §一 加载算法与 `guard.rs` **三道检查**对齐（补 `assert_not_symlink`）并订正静态墙的**实测位置**；④ §十 `M04` 测试映射补 `cli01`–`cli06`，并补 68 项口径的复算说明；⑤ §六 补「期望渲染样本」三个字节级基准（空账本／普通值／含控制字符）；⑥ §三 `from_json` 行补"三条必须校验"+ 与 `WC-IC-001 §2.3 不变量①` 的订正关系；⑦ 头部"份数口径"行与 §十一 #1 按"`WC-CR-002` D1 已被否决"改写（E-3 待裁定）；⑧ §二 补全 `Ledger.*` 19 个叶子码与 `sink` 字段的登记；⑨ §十一 新增 #8–#10（检查点不携带 `world`/`vocab_hash`、`requires_approval` 语义、排版验证面）；⑩ §十二 补格式/需求载体与逐文件代码清单 | `WC-R4-DISP-001` §二 F 组 |

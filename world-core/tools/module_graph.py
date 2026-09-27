@@ -51,9 +51,13 @@ r"""module_graph.py —— 机核层的守卫：把 `WC-ATOM-001` §四 机核�
        经模块树归属到本模块 ⇒ 该文件的用例算它的；一个锚点都不指 ⇒ 报「测试缺」。
        （`tests/*.rs` 整文件 `use world_core;` 而无具名子模块者——即 CLI 端到端用例——
        归 `src/main.rs` 的宿主模块，即「运行时入口」；理由写在 `test_anchor()`。）
-     · **契约** ＝ 文档或规格里有落点：`docs/S2-设计/WC-IC-M<NN>-*.md` 分册存在，
+     · **契约** ＝ 文档或规格里有落点：`docs/S2-设计/WC-IC-001-v0.1.md`（接口契约**一册**）
+       里有一条**含本模块号的标题**（形如 `### §5.1 \`M01\` …`），
        **或** `openspec/specs/**/spec.md` 里有 Requirement 的证据行指到本模块的测试锚点
-       （`WC-ATOM-001` §三：「规格条目（一条 Requirement）＋ `WC-IC-M*` 模块接口契约」）。
+       （`WC-ATOM-001` §三：「规格条目（一条 Requirement）＋ `WC-IC-001` 里的模块接口契约节」）。
+       **2026-09-27 改**：原按 `docs/S2-设计/WC-IC-M<NN>-*.md` **分册存在**判 —— 那 11 册已按
+       「文档不要太散」**并入 `WC-IC-001` 一册**（每模块一节），故判据改为
+       **「在 `WC-IC-001` 里找得到该模块的节」**；判据强度不变：**找不到该模块号即仍报「契约缺」**。
      另有**覆盖面**一项：`src/**/*.rs` 里**没有任何模块号认领**的文件（`WC-MODREG-001` §4.3 #1
        自己登记的缺口就是 `src/error.rs`）逐条列出。
 
@@ -86,6 +90,8 @@ MODREG_REL = os.path.join("docs", "S2-设计", "WC-MODREG-001-v0.1.md")
 SRC_REL = "src"
 TESTS_REL = "tests"
 IC_DIR_REL = os.path.join("docs", "S2-设计")
+#: 接口契约**一册**（`WC-ATOM-001` §三 的模块契约落点；`M01`–`M10` 各一节，判据③ 按节标题找模块号）。
+IC_BOOK_REL = os.path.join("docs", "S2-设计", "WC-IC-001-v0.1.md")
 SPECS_REL = os.path.join("openspec", "specs")
 
 #: A-1 的字数上限（`WC-ATOM-001` §二 A-1：「必须有且只有一句 `intent`（≤30 字）」）。
@@ -803,19 +809,19 @@ def j_a2_four_in_one(wc, rows, reg_path, source, anchors, spec_idx, shared=None)
                        "（判据＝该用例函数体内出现本模块源码路径的文件名/目录名标识符，"
                        "或 `world_core::<子模块>`；CLI 端到端用例归程序入口）"
                        % (loc, mid, TESTS_REL))
-        # 契约
-        book = sorted(
-            f for f in (os.listdir(os.path.join(wc, IC_DIR_REL))
-                        if os.path.isdir(os.path.join(wc, IC_DIR_REL)) else [])
-            if re.fullmatch(r"WC-IC-%s-v\d+\.\d+\.md" % mid, f)
-        )
+        # 契约：`WC-IC-001`（一册）里**含本模块号的标题** ⇒ 有落点
+        book = os.path.join(wc, IC_BOOK_REL)
+        hits = []
+        if os.path.isfile(book):
+            hits = [i for i, ln in enumerate(read_text(book).split("\n"), 1)
+                    if ln.lstrip().startswith("#") and ("`%s`" % mid) in ln]
         cited = []
         for a in anchors.get(mid, []):
             cited.extend(a["used_by"])
-        if not book and not cited:
-            bad.append("%s —— %s **契约缺**：既没有 `%s/WC-IC-%s-*.md` 分册，"
+        if not hits and not cited:
+            bad.append("%s —— %s **契约缺**：`%s` 里没有任何含 `%s` 的标题（模块接口契约节），"
                        "也没有 `openspec/specs/**/spec.md` 里任何 Requirement 的证据行指向它的测试锚点"
-                       % (loc, mid, IC_DIR_REL.replace("\\", "/"), mid))
+                       % (loc, mid, rel(wc, book), mid))
     # 覆盖面：src 下没有任何模块号认领、也**不在 §2.1 共同模块声明里**的 .rs
     unclaimed = []
     for f in source["files"]:
@@ -975,9 +981,16 @@ SANDBOX_TESTS = {
     ),
 }
 
-SANDBOX_BOOK = """# `WC-IC-%(mid)s-v0.1` · 模块接口契约（沙盒）
+SANDBOX_BOOK = """# `WC-IC-001-v0.1` · 模块接口契约（沙盒）
 
-## §1 本册范围
+## §5 模块接口契约（一模块一节）
+
+%(sections)s
+"""
+
+SANDBOX_BOOK_SECTION = """### §5.%(k)d `%(mid)s` 沙盒模块 %(mid)s —— 模块接口契约
+
+#### §1 本册范围
 - 模块号：**`%(mid)s`**
 """
 
@@ -993,9 +1006,12 @@ def _build_sandbox(root, wc_name="world-core"):
         _write(os.path.join(wc, r), t)
     for r, t in SANDBOX_TESTS.items():
         _write(os.path.join(wc, r), t)
-    for mid in ("M01", "M02", "M03", "M04"):
-        _write(os.path.join(wc, "docs", "S2-设计", "WC-IC-%s-v0.1.md" % mid),
-               SANDBOX_BOOK % {"mid": mid})
+    _write(
+        os.path.join(wc, IC_BOOK_REL),
+        SANDBOX_BOOK % {"sections": "\n".join(
+            SANDBOX_BOOK_SECTION % {"k": k, "mid": mid}
+            for k, mid in enumerate(("M01", "M02", "M03", "M04"), start=1))},
+    )
     _write(
         os.path.join(root, SPECS_REL, "cap-a", "spec.md"),
         "# cap-a Specification\n\n## Purpose\n沙盒用最小规格。\n\n## Requirements\n\n"
@@ -1010,6 +1026,31 @@ def _write(p, text):
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with io.open(p, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
+
+
+def _drop_module_section(text, mid):
+    """从沙盒契约册里**删掉某个模块的整节**（标题 → 下一个同级/更高级标题）。
+
+    `None` 表示「该模块的节找不到」（调用方必须把它当失败报出来，不许静默）。
+    """
+    lines = text.split("\n")
+    start = None
+    for i, ln in enumerate(lines):
+        if ln.lstrip().startswith("#") and ("`%s`" % mid) in ln:
+            start = i
+            break
+    if start is None:
+        return None
+    lvl = len(lines[start]) - len(lines[start].lstrip("#"))
+    j = start + 1
+    while j < len(lines):
+        s = lines[j].lstrip()
+        if s.startswith("#"):
+            l2 = len(s) - len(s.lstrip("#"))
+            if l2 <= lvl:
+                break
+        j += 1
+    return "\n".join(lines[:start] + lines[j:])
 
 
 def _reg_edit(path, old, new, tag, failures):
@@ -1095,13 +1136,19 @@ def self_test():
 
         _write(reg, SANDBOX_MODREG)
 
-        # ── 反例④：A-2 的「契约」件——删掉 M03 分册，并让指向它的证据行**失效** ──
-        # 沙盒里 M03 的契约落点原本**两处都在**（分册 ＋ 规格证据行）：
-        # 删分册而证据行仍有效 ⇒ 不该红（判据不能比事实更严）；
+        # ── 反例④：A-2 的「契约」件——删掉 `WC-IC-001` 里 M03 的**节**，并让指向它的证据行**失效** ──
+        # 沙盒里 M03 的契约落点原本**两处都在**（契约册里的节 ＋ 规格证据行）：
+        # 删节而证据行仍有效 ⇒ 不该红（判据不能比事实更严）；
         # 两处都掉 ⇒ 必须红。
-        book = os.path.join(wc, "docs", "S2-设计", "WC-IC-M03-v0.1.md")
+        book = os.path.join(wc, IC_BOOK_REL)
         keepb = read_text(book)
-        os.remove(book)
+        rump = _drop_module_section(keepb, "M03")
+        if rump is None:
+            # 自证材料脱节 ⇒ 报失败但**不 return**（后面还有别的反例要跑），并跳过本条
+            failures.append("反例④ —— 自证材料脱节：契约册里找不到含 `M03` 的标题（锚与册格式脱节）")
+            print("  反例④（删 M03 节且证据行失锚 => 判据③ 应红）：*没跑（材料脱节）")
+            rump = keepb
+        _write(book, rump)
         rep4a = run()
         not_red_keeps_citation = not is_red(rep4a, "a2_four_in_one")[0]
         spec = os.path.join(root, SPECS_REL, "cap-a", "spec.md")
@@ -1110,13 +1157,13 @@ def self_test():
                                    "`tests/contract.rs::c99_not_a_real_test`", 1))
         red, off = is_red(run(), "a2_four_in_one")
         hit = any("M03" in x and "契约缺" in x for x in off)
-        print("  反例④（删 M03 分册且证据行失锚 ⇒ 两处契约落点都没了 => 判据③ 应红；"
-              "仅删分册时不应红=%s）：%s"
+        print("  反例④（删 `WC-IC-001` 里 M03 的节且证据行失锚 ⇒ 两处契约落点都没了 => 判据③ 应红；"
+              "仅删节时不应红=%s）：%s"
               % (not_red_keeps_citation, "已红 OK" if (red and hit) else "*没红"))
         if not (red and hit):
             failures.append("反例④未变红或未报「契约缺」")
         if not not_red_keeps_citation:
-            failures.append("反例④附条：仅删分册就红了（判据比事实更严）")
+            failures.append("反例④附条：仅删节就红了（判据比事实更严）")
         _write(book, keepb)
         _write(spec, keeps)
 
