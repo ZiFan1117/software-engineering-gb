@@ -633,33 +633,221 @@ assert_eq "⑧ 受控文件 WC-SQAP-001 **一个字节都没改**（两个反例
   "SAME" "$( [ "$(sha "$SQ")" = "$(sha "$SB/sqap_orig.md")" ] && echo SAME || echo DIFF )"
 
 
-# ══ TC-076 · REQ-F-026 的**已登记边界守卫**（不是"需求已满足"的证据）═════════
-echo; echo "── TC-076 · REQ-F-026 四边界**当前未实现**这一已登记事实的可执行守卫 ──"
-# 为什么要有它：REQ-F-026 已按**丙类显式裁剪 CT-08** 登记（四个数值为【候选】，AI 不得编造）；
-# 其原集成列引用的 TC-045 已判「从未实存·作废不回收」⇒ 不得继续占用列位。
-# 本条把"**四边界当前一个都没有**"这一**已登记事实**做成可执行断言：
-# 一旦有人实现其中任一边界，本条**会红**，从而强制 RTM 与 SRS 同步更新。
+# ══ TC-076 · REQ-F-026 通道四个资源边界：出厂数值 + 逐项超限即拒 ══════════════
+echo; echo "── TC-076 · REQ-F-026 四边界：出厂配置里的四个数值 + 逐项超限即拒（真二进制）──"
+# 为什么本条现在长这样（★ 判据换向，**按旧判据自己写下的处置执行**）：
+#   旧 TC-076 断言的是「四边界**当前一个都没有**」这一**已登记事实**，并逐字写明
+#   「一旦有人实现其中任一边界，本条**会红**，从而强制 RTM 与 SRS 同步更新」。
+#   本轮第 2 组把四个边界落地 ⇒ 那条守卫**如期变红**，本条按它自己写下的处置换成
+#   「四边界已有数值且真的生效」的正向断言。
+# ⚠ 仍未办的一件事（**不属本工区文件面**，只登记）：WC-SRS-001 §三 的 REQ-F-026 行、
+#   WC-RTM-001.csv 第 32 行、WC-IRS-001 §3.7.7、openspec/BRIDGE.md 仍写"四个边界一个都没有／
+#   【待验证】"⇒ 那些**文档**的同步由归档那一轮统一处置（与本 change tasks.md 第 10 组同体例）。
 H="$(W --help 2>&1)"
-assert_not_has "① v1 CLI **不提供 serve 子命令**（故四边界无端到端观测面）——据 --help 实测" "$H" '^  serve'
-assert_has "② CLI 只提供 9 个只读/写入子命令（与已登记口径一致）" "$H" 'project check'
-python3 - "$SB/ontology.json" "$SB/policy.json" <<'PY'
+assert_not_has "① v1 CLI **不提供顶层 serve 子命令**（通道仍是子命令，无长驻顶层服务）——据 --help 实测" "$H" '^  serve'
+assert_has "② --help 写明四个数值取自 --policy 的 channel_limits（接线看得见）" "$H" 'channel_limits'
+
+# ③ **四个数值在出厂配置里齐备**（旧的③打印「无任何资源边界数值」却**什么也没查**——
+#    它只检查了本体里没有 serve 这个词，属装饰型断言；现按它自己的话去查真东西）。
+python3 - "$SB/policy.json" "$SB/ontology.json" <<'PY'
 import json, sys
-o = json.load(open(sys.argv[1], encoding="utf-8"))
-p = json.load(open(sys.argv[2], encoding="utf-8"))
-assert "serve" not in json.dumps(o), "本体不应出现 serve 相关键"
-open(sys.argv[2] + ".ok", "w").write("ok")
+pol = json.load(open(sys.argv[1], encoding="utf-8"))
+ont = json.load(open(sys.argv[2], encoding="utf-8"))
+blk = pol.get("channel_limits")
+assert isinstance(blk, dict), "出厂配置里必须有 channel_limits 块"
+keys = ["max_connections", "max_line_bytes", "max_msgs_per_sec", "idle_timeout_ms"]
+for k in keys:
+    v = blk.get(k)
+    assert isinstance(v, int) and not isinstance(v, bool) and v > 0, f"channel_limits.{k} 必须是非零整数，实得 {v!r}"
+assert blk["max_connections"] == 1, "v1 顺序受理 ⇒ 并发上限只能是 1"
+# 本体侧**不得**出现这类数值（旧③的意图；现按真检查落实）
+flat = json.dumps(ont, ensure_ascii=False)
+for k in keys:
+    assert k not in flat, f"本体里不应出现资源边界数值 {k}"
+print("LIMITS=" + ",".join(f"{k}={blk[k]}" for k in keys))
 PY
-ok "③ 本体与策略内**无任何资源边界数值**（四个数值仍为【候选】，未写死）"
-if grep -qE 'set_read_timeout|set_write_timeout' src/channel.rs; then
-  bad "④ **应当失败**：src/channel.rs 已出现读/写超时设置 ⇒ 四边界中至少一项已实现，本条必须变红并同步 RTM/SRS"
+ok "③ 出厂配置里四个数值齐备且非零（并发上限=1），本体里没有这类数值"
+
+# ④ **源码面**：四条边界的落点必须在实现里（旧④⑤断言的是"**没有**"——现在是"有"）。
+#    ⚠ 这里**必须按单项**判（先 `set_read_timeout`、再 `set_write_timeout`）：
+#    实测过一次"合起来 grep"的假绿——把 `serve_stream` 里的两句删掉之后，
+#    `refuse_pending` 里还有一句 `set_write_timeout`，于是 `set_read_timeout|set_write_timeout`
+#    照样命中 ⇒ **读超时没了而本条仍是绿的**。判据按"哪一侧"分开写，才不会互相顶替。
+if grep -qE 'set_read_timeout' src/channel.rs && grep -qE 'set_write_timeout' src/channel.rs; then
+  ok "④ 超时边界：src/channel.rs 里读/写两侧各有超时设置（删掉任一 ⇒ 本条必红）"
 else
-  ok "④ 反例方向核验：src/channel.rs **无** set_read_timeout/set_write_timeout ⇒ 超时边界**确未实现**（与已登记口径一致）"
+  bad "④ **应当失败**：src/channel.rs 里读不到 set_read_timeout 或 set_write_timeout ⇒ 超时边界不成立"
 fi
-if grep -qE 'max_line|line_limit|max_bytes|MAX_LINE' src/channel.rs; then
-  bad "⑤ **应当失败**：src/channel.rs 已出现单行上限常量 ⇒ 单行上限已实现，本条必须变红"
+if grep -qE 'max_line_bytes' src/channel.rs && grep -qE 'fill_buf' src/channel.rs; then
+  ok "⑤ 单行边界：src/channel.rs 里有带上限的读法（max_line_bytes ＋ fill_buf）（删掉即变红）"
 else
-  ok "⑤ 反例方向核验：src/channel.rs **无**单行上限常量 ⇒ 单行上限**确未实现**"
+  bad "⑤ **应当失败**：src/channel.rs 里读不到单行上限的读法 ⇒ 单行边界没实现"
 fi
+if grep -qE 'max_msgs_per_sec|TooManyConnections' src/channel.rs; then
+  ok "⑥ 限流与并发边界：src/channel.rs 里有限流与并发上限的落点（删掉即变红）"
+else
+  bad "⑥ **应当失败**：src/channel.rs 里读不到限流／并发上限的落点"
+fi
+
+# ── 端到端：真二进制、真账本；四个数值在**配置副本**上改（改小 ⇒ 行为随之变，
+#    这同时是"数值可配置、不是硬编码在代码里"的实测）─────────────────────────
+SOCKDIR="$SB/run"; mkdir -p "$SOCKDIR"; chmod 700 "$SOCKDIR"
+: >"$SB/tc076.jsonl"; chmod 600 "$SB/tc076.jsonl"
+L76="$SB/tc076.jsonl"
+CLI="$SB/gcli.py"
+cat >"$CLI" <<'PY'
+import socket, sys
+sock, mode = sys.argv[1], sys.argv[2]
+def one(payload):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(10)
+    s.connect(sock)
+    if payload is not None:
+        s.sendall(payload)
+    data = b""
+    try:
+        while True:
+            b = s.recv(65536)
+            if not b:
+                break
+            data += b
+    except socket.timeout:
+        pass
+    s.close()
+    return data.decode("utf-8", "replace").strip()
+if mode == "file":            # file <path>：发文件那一行
+    print(one(open(sys.argv[3], "rb").read()))
+elif mode == "silent":        # 连上不发
+    print(one(None))
+elif mode == "burst":         # burst <n> <path>：连 n 次、每次发同一行
+    n = int(sys.argv[3]); payload = open(sys.argv[4], "rb").read()
+    for _ in range(n):
+        print(one(payload))
+PY
+python3 - "$SB" <<'PY'
+import io, json, sys
+sb = sys.argv[1]
+def notice(pad):
+    return json.dumps({"kind": "notice", "body": {"type": "tc076", "subject": "world://notice/tc076", "payload": "a" * pad}}, separators=(",", ":"))
+ok = notice(0)
+io.open(sb + "/req_ok.json", "w", encoding="utf-8").write(ok + "\n")
+pad = 256 - len(ok)
+line = notice(pad)
+assert len(line) == 256, (len(line), 256)
+io.open(sb + "/req_exact.json", "w", encoding="utf-8").write(line + "\n")
+io.open(sb + "/req_over.json", "w", encoding="utf-8").write(notice(pad + 1) + "\n")
+PY
+
+# g076_cfg <dst> <k=v>...：把出厂策略复制一份，改 channel_limits 的若干格
+g076_cfg() {
+  local dst="$1"; shift
+  python3 - "$SB/policy.json" "$dst" "$@" <<'PY'
+import json, sys
+src, dst = sys.argv[1], sys.argv[2]
+pol = json.load(open(src, encoding="utf-8"))
+for kv in sys.argv[3:]:
+    k, v = kv.split("=")
+    if v == "DROP":
+        pol["channel_limits"].pop(k)
+    else:
+        pol["channel_limits"][k] = int(v)
+json.dump(pol, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+PY
+  chmod 600 "$dst"
+}
+# g076_srv <tag> <policy> <n>：后台起真二进制通道服务端，等套接字出现
+G_PID=""
+g076_srv() {
+  local tag="$1" pol="$2" n="$3"
+  printf '{"channel":1,"listeners":[{"socket":"%s","actor":"world://agent/tc076","uid":%s}]}\n' \
+    "$SOCKDIR/$tag.sock" "$(id -u)" >"$SB/$tag.channel.json"
+  chmod 600 "$SB/$tag.channel.json"
+  rm -f "$SOCKDIR/$tag.sock"
+  timeout 25 "$BIN" --ontology "$SB/ontology.json" --ledger "$L76" --policy "$pol" \
+    --channel "$SB/$tag.channel.json" channel serve "$SOCKDIR/$tag.sock" "$n" \
+    >"$SB/$tag.srv.log" 2>&1 &
+  G_PID=$!
+  local i=0
+  while [ "$i" -lt 100 ]; do [ -S "$SOCKDIR/$tag.sock" ] && break; sleep 0.1; i=$((i + 1)); done
+}
+g076_kill() { [ -n "$G_PID" ] && kill "$G_PID" 2>/dev/null; wait "$G_PID" 2>/dev/null; G_PID=""; }
+
+# ⑦ 单行上限（出厂值 4096 改小成 256）：正好 256 字节 ⇒ 放行；257 字节 ⇒ 拒且不落笔
+g076_cfg "$SB/p_line.json" max_line_bytes=256
+BEFORE="$(wc -l <"$L76" | tr -d ' ')"
+g076_srv exact "$SB/p_line.json" 1
+OUT="$(python3 "$CLI" "$SOCKDIR/exact.sock" file "$SB/req_exact.json" 2>&1)"
+assert_has "⑦a **正控**：正好等于单行上限（256 字节）的请求必须放行（防"把上限实现成一律拒"）" "$OUT" '"ok":true'
+g076_kill
+assert_eq "⑦b 放行的那一条真的落笔（账本 +1）" "$((BEFORE + 1))" "$(wc -l <"$L76" | tr -d ' ')"
+BEFORE="$(wc -l <"$L76" | tr -d ' ')"
+g076_srv over "$SB/p_line.json" 1
+OUT="$(python3 "$CLI" "$SOCKDIR/over.sock" file "$SB/req_over.json" 2>&1)"
+assert_has "⑦c 257 字节 ⇒ 必须拒，且**点名**单行上限与它的当前值" "$OUT" 'Channel\.LineTooLong.*max_line_bytes=256'
+assert_eq "⑦d 超限**不落笔**（REQ-F-026 判据②：世界状态不变）" "$BEFORE" "$(wc -l <"$L76" | tr -d ' ')"
+g076_kill
+
+# ⑧ 空闲超时（改小成 300ms）：连上不发请求 ⇒ 必须被拒且点名空闲超时
+g076_cfg "$SB/p_idle.json" idle_timeout_ms=300
+g076_srv idle "$SB/p_idle.json" 1
+T0="$(date +%s%N)"
+OUT="$(python3 "$CLI" "$SOCKDIR/idle.sock" silent 2>&1)"
+T1="$(date +%s%N)"
+assert_has "⑧a 静默连接 ⇒ 必须拒，且**点名**空闲超时与它的当前值" "$OUT" 'Channel\.IdleTimeout.*idle_timeout_ms=300'
+DT=$(((T1 - T0) / 1000000))
+if [ "$DT" -ge 250 ] && [ "$DT" -lt 5000 ]; then
+  ok "⑧b 断开发生在时限内（实测 ${DT}ms：≥250ms 说明没把还在等的活连接当空闲拒掉，<5000ms 说明真的断了）"
+else
+  bad "⑧b 断开耗时 ${DT}ms 不在 [250,5000) 区间内"
+fi
+g076_kill
+
+# ⑨ 每秒消息数（改小成 2）：同一秒内第 3 条必须被拒，账本只增 2 行
+#    n 给 9（不是 3）：被拒的那条**不计入**已处理数 ⇒ 给 3 会让服务端在第 2 条之后
+#    就退出，第 3 条连接会拿到"连接被拒"而不是本用例要的 `RateLimited`。
+g076_cfg "$SB/p_rate.json" max_msgs_per_sec=2
+BEFORE="$(wc -l <"$L76" | tr -d ' ')"
+g076_srv rate "$SB/p_rate.json" 9
+OUT="$(python3 "$CLI" "$SOCKDIR/rate.sock" burst 3 "$SB/req_ok.json" 2>&1)"
+NOK="$(printf '%s' "$OUT" | grep -c '"ok":true')"
+assert_eq "⑨a 上限 2 ⇒ 前 2 条放行" "2" "$NOK"
+assert_has "⑨b 第 3 条必须拒，且**点名**每秒上限与它的当前值" "$OUT" 'Channel\.RateLimited.*max_msgs_per_sec=2'
+assert_eq "⑨c 只有放行的 2 条落笔（超限不落笔）" "$((BEFORE + 2))" "$(wc -l <"$L76" | tr -d ' ')"
+g076_kill
+
+# ⑩ 并发上限：v1 顺序受理 ⇒ 只能为 1；给 2 ⇒ **拒启**（不许在配置里假装能并发），且**不建套接字**
+g076_cfg "$SB/p_conc.json" max_connections=2
+rm -f "$SOCKDIR/conc.sock"
+printf '{"channel":1,"listeners":[{"socket":"%s","actor":"world://agent/tc076","uid":%s}]}\n' \
+  "$SOCKDIR/conc.sock" "$(id -u)" >"$SB/conc.channel.json"
+OUT="$(timeout 20 "$BIN" --ontology "$SB/ontology.json" --ledger "$L76" --policy "$SB/p_conc.json" \
+  --channel "$SB/conc.channel.json" channel serve "$SOCKDIR/conc.sock" 1 2>&1)"; RC=$?
+assert_rc "⑩a max_connections=2 ⇒ 拒启（rc=2）" 2 "$RC"
+assert_has "⑩b 拒启理由点名 BadConcurrency 与当前值" "$OUT" 'BadConcurrency.*max_connections = 2'
+if [ -S "$SOCKDIR/conc.sock" ]; then
+  bad "⑩c 拒启时**不得**建套接字（没有边界的通道不该上电）"
+else
+  ok "⑩c 拒启时不建套接字（没有边界的通道不该上电）"
+fi
+
+# ⑪ 缺块 = 不许上电：删掉一项 ⇒ 点名那一项；**整块**删掉 ⇒ NoLimits
+g076_cfg "$SB/p_missing.json" max_msgs_per_sec=DROP
+OUT="$(timeout 20 "$BIN" --ontology "$SB/ontology.json" --ledger "$L76" --policy "$SB/p_missing.json" \
+  --channel "$SB/conc.channel.json" channel serve "$SOCKDIR/conc.sock" 1 2>&1)"; RC=$?
+assert_rc "⑪a 少一项 ⇒ 拒启（rc=2）" 2 "$RC"
+assert_has "⑪b 拒启理由点名缺的那一项" "$OUT" 'BadLimits.*max_msgs_per_sec'
+python3 - "$SB/p_missing.json" "$SB/p_none.json" <<'PY'
+import json, sys
+pol = json.load(open(sys.argv[1], encoding="utf-8"))
+pol.pop("channel_limits")
+json.dump(pol, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+PY
+chmod 600 "$SB/p_none.json"
+OUT="$(timeout 20 "$BIN" --ontology "$SB/ontology.json" --ledger "$L76" --policy "$SB/p_none.json" \
+  --channel "$SB/conc.channel.json" channel serve "$SOCKDIR/conc.sock" 1 2>&1)"; RC=$?
+assert_rc "⑪c 整块缺失 ⇒ 拒启（rc=2；**代码里没有这四个数的缺省值**的端到端形态）" 2 "$RC"
+assert_has "⑪d 拒启理由点名 NoLimits" "$OUT" 'NoLimits'
+
 
 # ── 汇总 ─────────────────────────────────────────────────────────────
 echo

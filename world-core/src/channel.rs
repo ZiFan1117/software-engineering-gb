@@ -42,16 +42,44 @@
 //!   "listeners": [ { "socket": "/run/world/agent-1.sock", "actor": "world://agent/1", "uid": 1001 } ] }
 //! ```
 //!
+//! ## 四个资源边界（`REQ-F-026`）
+//!
+//! 「一条连接就能拖垮世界」是这个入口的固有风险，故四个边界各有数值、各有超限行为，
+//! 且超限**拒得可核**（点名错误码 ＋ 上限的**当前值**，并回一行给对端）：
+//!
+//! | 边界 | 数值从哪来 | 超限错误码 | 可核形态 |
+//! |---|---|---|---|
+//! | 并发连接数 | `Limits::max_connections`（出厂配置；v1 只能为 1） | `Channel.TooManyConnections` | 与服务重叠期间到达的连接被拒 |
+//! | 单条消息字节 | `Limits::max_line_bytes` | `Channel.LineTooLong` | 读到超限那一刻即停，**不无限缓冲** |
+//! | 每秒消息数 | `Limits::max_msgs_per_sec`（**每身份**，跨连接累计） | `Channel.RateLimited` | 同一秒内第 n+1 条被拒 |
+//! | 空闲超时 | `Limits::idle_timeout_ms`（读一行 / 写一行共用） | `Channel.IdleTimeout` | 连上不发请求即被断开 |
+//!
+//! 四个数**只**来自出厂配置——本模块**没有**这四个数的任何缺省值：
+//! 由 `Limits::from_policy` 读出；读不到即拒启——「通道的资源边界没有数值就不许受理」，
+//! 与「策略空表不许上电」同一条纪律。
+//!
+//! 四者**都不落笔**（世界状态不变）；**都不留账本流水**（理由见 `Limits::from_policy`
+//! 与出厂配置 `channel_limits._not_logged` 一栏：M09 按 `IF-006-R04` 不持有账本写句柄）。
+//!
 //! ## v1 的局限（不假装满足）
 //!
 //! - 只在 **Unix** 上可用（`cfg(unix)`）；
-//! - `serve_once` 每次只处理**一个连接**就返回——足够验证"身份绑定"这件事，
-//!   长驻服务与并发留待后续（且需与 `A-01` 单写者锁一并设计）；
+//! - **顺序受理**：一次只服务一个连接。故 `max_connections` **只能为 1**——
+//!   给更大的值即拒启（`Channel.BadConcurrency`）。真正的并发受理需要多线程服务端
+//!   与单写者串行化（书 §6.4「序号由唯一写账者分配」），本轮**未做**，
+//!   也不假装做到了；
+//! - 库内裸原语 `serve_once`／`serve_n` 是**显式不设界**的（`Limits::none()`）：
+//!   它们是"一次一连接"的原语、不是产品入口，且被 `tests/contract.rs::c14` 直调
+//!   （该文件不在本工区的文件面内）。**产品入口**（`world-core … channel accept|serve`）
+//!   一律经 `Limits::from_policy` 取四个数值，取不到即拒启。⇒ 裸原语这条口子
+//!   **如实登记**，未合上；
 //! - 不做鉴权之外的传输保护（本机 Unix 套接字 + 文件权限即其边界）。
 
 use serde_json::{json, Value};
-use std::io::{BufRead, BufReader, Write};
+use std::collections::BTreeMap;
+use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 /// **通道对内核提出的唯一要求**：把一条已经验明身份的请求交给世界落笔。
 ///
@@ -147,6 +175,166 @@ impl ChannelConfig {
     }
 }
 
+/// **四个资源边界的数值**（`REQ-F-026`）。
+///
+/// | 字段 | 边界 | 单位 | 超限错误码 |
+/// |---|---|---|---|
+/// | `max_connections` | 并发连接数 | 条 | `Channel.TooManyConnections` |
+/// | `max_line_bytes` | 单条消息字节数（**不含**行尾换行） | 字节 | `Channel.LineTooLong` |
+/// | `max_msgs_per_sec` | 每秒消息数（**每身份**，跨连接） | 条/秒 | `Channel.RateLimited` |
+/// | `idle_timeout_ms` | 空闲超时（读一行请求 / 写一行应答共用） | 毫秒 | `Channel.IdleTimeout` |
+///
+/// ⚠️ **代码里没有这四个数的缺省值**：它们只来自出厂配置（`from_policy`）。
+/// 这一条不是文风问题——一有缺省值，"数值是多少"就有了第二个权威载体，
+/// 而配置改不动行为时**没有任何东西会红**。机器判据：配置里缺 `channel_limits`
+/// 块 ⇒ `Channel.NoLimits` 拒启（见 `tests/channel_bounds.rs::l05`）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    pub max_connections: usize,
+    pub max_line_bytes: usize,
+    pub max_msgs_per_sec: u32,
+    pub idle_timeout_ms: u64,
+}
+
+impl Limits {
+    /// 从**出厂策略**文件读四个数值（本仓的落点是 `world-core/policy.json` 的
+    /// `channel_limits` 块）。
+    ///
+    /// 为什么落在这里而不是新立一份出厂 `channel.json`：该文件本仓不存在，
+    /// 且「是否补一份出厂 `channel.json`」在 `WC-SCMP-001` §8.4 **`G-28`** 记着
+    /// **待人裁定**（本工区不代选）；`ontology.json` 受词表身份约束（动一个非 `_` 键
+    /// 就换掉 `fnv1a64` 身份）。⇒ 四个数放在已受控的那份出厂配置里。
+    ///
+    /// **fail-closed**：缺块、缺项、取 0、或并发上限 ≠ 1，一律**拒启**
+    /// （`Channel.NoLimits` / `Channel.BadLimits` / `Channel.BadConcurrency`），
+    /// 并**点名**是哪一项、当前值是多少。「没写」不许被读成「不设界」——
+    /// 与 `ChannelConfig::load` 对空 `listeners` 的口径同源（那里的错误码是
+    /// `Channel.NoListeners`，理由逐字为「没有身份映射的通道等于无门之门」）。
+    pub fn from_policy(path: &Path) -> Result<Self, String> {
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| format!("ext.world.Channel.ReadFail: {}: {e}", path.display()))?;
+        let v: Value = serde_json::from_str(&text)
+            .map_err(|e| format!("ext.world.Channel.BadJson: {}: {e}", path.display()))?;
+        let blk = v.get("channel_limits").ok_or_else(|| {
+            format!(
+                "ext.world.Channel.NoLimits: {} 里没有 `channel_limits` 块——\
+                 通道的四个资源边界（并发连接数/单条消息字节/每秒消息数/空闲超时）没有数值，\
+                 就不许受理（REQ-F-026）",
+                path.display()
+            )
+        })?;
+        let num = |k: &str| -> Result<u64, String> {
+            blk.get(k).and_then(Value::as_u64).ok_or_else(|| {
+                format!(
+                    "ext.world.Channel.BadLimits: {} 的 channel_limits.{k} 缺失或不是非负整数",
+                    path.display()
+                )
+            })
+        };
+        let max_connections = num("max_connections")?;
+        let max_line_bytes = num("max_line_bytes")?;
+        let max_msgs_per_sec = num("max_msgs_per_sec")?;
+        let idle_timeout_ms = num("idle_timeout_ms")?;
+        for (k, n) in [
+            ("max_connections", max_connections),
+            ("max_line_bytes", max_line_bytes),
+            ("max_msgs_per_sec", max_msgs_per_sec),
+            ("idle_timeout_ms", idle_timeout_ms),
+        ] {
+            if n == 0 {
+                return Err(format!(
+                    "ext.world.Channel.BadLimits: {} 的 channel_limits.{k} = 0——\
+                     本版不提供「不设界」的配置写法：边界要么有值，要么不许上电",
+                    path.display()
+                ));
+            }
+        }
+        // v1 是**顺序受理**（一次一连接）⇒ 并发上限只能是 1。
+        // 给更大的值 = 要求"真正的并发受理"，而 v1 做不到 ⇒ **拒启，不许假装**。
+        if max_connections != 1 {
+            return Err(format!(
+                "ext.world.Channel.BadConcurrency: {} 的 channel_limits.max_connections = {max_connections}，\
+                 而 v1 是顺序受理（一次一连接）⇒ 只支持 1。\
+                 真正的并发受理需要多线程服务端与单写者串行化（书 §6.4），本轮未做",
+                path.display()
+            ));
+        }
+        if max_msgs_per_sec > u64::from(u32::MAX) {
+            return Err(format!(
+                "ext.world.Channel.BadLimits: {} 的 channel_limits.max_msgs_per_sec = {max_msgs_per_sec} 超出上界",
+                path.display()
+            ));
+        }
+        Ok(Self {
+            max_connections: max_connections as usize,
+            max_line_bytes: max_line_bytes as usize,
+            max_msgs_per_sec: max_msgs_per_sec as u32,
+            idle_timeout_ms,
+        })
+    }
+
+    /// **显式不设界**（哨兵值，**不是**四个数的缺省值）。
+    ///
+    /// 只给库内裸原语 `serve_once`／`serve_n` 用：它们是"一次一连接"的**原语**
+    /// （`tests/contract.rs::c14` 直调，该文件不在本工区文件面内），
+    /// 而 `tests/contract.rs::c14` 要验的是"身份来自内核"这件事。
+    /// 产品入口一律经 `from_policy`——**这条口子如实登记在模块文档的「v1 的局限」里**。
+    pub fn none() -> Self {
+        Self {
+            max_connections: usize::MAX,
+            max_line_bytes: usize::MAX,
+            max_msgs_per_sec: u32::MAX,
+            idle_timeout_ms: 0,
+        }
+    }
+
+    /// 是否是不设界的哨兵（`none()`）。
+    pub fn is_none(&self) -> bool {
+        *self == Self::none()
+    }
+}
+
+/// 一条通道的**会话状态**：限流窗口（每身份一份）。
+///
+/// 为什么不放在一次 `serve_once` 的局部：一次跨进程往返天然是**两个连接**
+/// （先交意图、后交结果，见 `serve_n` 的文档），而"每秒消息数"要跨连接累计才成立。
+pub struct Session {
+    limits: Limits,
+    windows: BTreeMap<String, (Instant, u32)>,
+}
+
+impl Session {
+    pub fn new(limits: Limits) -> Self {
+        Self {
+            limits,
+            windows: BTreeMap::new(),
+        }
+    }
+
+    pub fn limits(&self) -> Limits {
+        self.limits
+    }
+
+    /// 记一次请求并按**每秒消息数上限**裁决（固定窗口：1 秒）。
+    ///
+    /// 超限 ⇒ `Channel.RateLimited` 并**点名上限与当前计数**。
+    /// 计数在裁决**之前**自增：被拒的那一条也占窗口，否则"每秒上限"挡不住连打。
+    fn admit(&mut self, actor: &str, now: Instant) -> Result<(), String> {
+        let win = self.windows.entry(actor.to_string()).or_insert((now, 0));
+        if now.duration_since(win.0) >= Duration::from_secs(1) {
+            *win = (now, 0);
+        }
+        win.1 += 1;
+        if win.1 > self.limits.max_msgs_per_sec {
+            return Err(format!(
+                "ext.world.Channel.RateLimited: 每秒消息数上限 max_msgs_per_sec={}（本秒第 {} 条）",
+                self.limits.max_msgs_per_sec, win.1
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// 一条请求的解析结果。
 #[derive(Debug, PartialEq)]
 pub struct Request {
@@ -239,7 +427,7 @@ pub fn bind(expect: &Listener) -> Result<std::os::unix::net::UnixListener, Strin
     Ok(listener)
 }
 
-/// **连续收 `n` 个连接**（v1 的"长驻"形态）。
+/// **连续收 `n` 个连接**（v1 的"长驻"形态）—— `serve_n_with` 的**不设界**薄壳。
 ///
 /// 为什么需要它：一次跨进程往返天然是**两个连接**（先交意图、后交结果）。
 /// 每次调用方都自己 `bind` 一遍，就等于把套接字反复删建——那既不是"总线"该有的样子，
@@ -248,6 +436,10 @@ pub fn bind(expect: &Listener) -> Result<std::os::unix::net::UnixListener, Strin
 /// 口径：**收满 `n` 个就把监听者交还给调用方**（不自己退出），
 /// 由调用方决定还要不要继续收。任一连接处理失败**不中止后续**——
 /// 一次坏请求不该让总线停摆；但错误会如实打印。
+///
+/// ⚠️ 本函数传 `Limits::none()`：**不受四个资源边界约束**。它是库内裸原语；
+/// **产品入口**走 `serve_n_with` ＋ `Limits::from_policy`（见 `src/main.rs` 的
+/// `cmd_channel`）。这条口子如实登记在模块文档的「v1 的局限」里。
 #[cfg(unix)]
 pub fn serve_n(
     sink: &mut impl RequestSink,
@@ -255,43 +447,175 @@ pub fn serve_n(
     expect: &Listener,
     n: usize,
 ) -> Result<usize, String> {
+    serve_n_with(sink, listener, expect, &mut Session::new(Limits::none()), n)
+}
+
+/// **收 `n` 个连接**，**四个资源边界真的生效**的那一条路（`REQ-F-026`）。
+///
+/// 与 `serve_n` 的差别**只有一处**：界限从 `session` 来（产品入口由出厂配置填），
+/// 于是四条边界的判定只有**一份实现**（`serve_stream` 与 `refuse_pending`）。
+///
+/// 并发上限怎么落地（v1 顺序受理，故 `max_connections` 只能为 1）：
+/// 服务一条连接**期间**到达的连接，都是"同时受理"的违反者 ⇒
+/// **每次服务结束、下一次阻塞受理之前**，把此刻还在队列里的连接逐条拒掉
+/// （`refuse_pending`），再继续等下一条。这样"同时开两条 ⇒ 第二条被拒"是
+/// 可判定的，而不是"取决于调度"。
+#[cfg(unix)]
+pub fn serve_n_with(
+    sink: &mut impl RequestSink,
+    listener: &std::os::unix::net::UnixListener,
+    expect: &Listener,
+    session: &mut Session,
+    n: usize,
+) -> Result<usize, String> {
     let mut ok = 0usize;
-    for _ in 0..n {
-        match serve_once(sink, listener, expect) {
+    while ok < n {
+        let (stream, _) = listener
+            .accept()
+            .map_err(|e| format!("ext.world.Channel.AcceptFail: {e}"))?;
+        match serve_stream(&mut *sink, stream, expect, session) {
             Ok(_) => ok += 1,
             Err(e) => eprintln!("[FAIL] {e}"),
+        }
+        let refused = refuse_pending(listener, session.limits())?;
+        if refused > 0 {
+            eprintln!(
+                "[FAIL] ext.world.Channel.TooManyConnections: 并发上限 max_connections={}，\
+                 服务期间到达的 {refused} 条连接一并拒绝",
+                session.limits().max_connections
+            );
         }
     }
     Ok(ok)
 }
 
+/// 受理并服务**一个**连接 —— `serve_once_with` 的**不设界**薄壳（见 `serve_n` 的同一条说明）。
 #[cfg(unix)]
 pub fn serve_once(
     sink: &mut impl RequestSink,
     listener: &std::os::unix::net::UnixListener,
     expect: &Listener,
 ) -> Result<Value, String> {
+    serve_once_with(sink, listener, expect, &mut Session::new(Limits::none()))
+}
+
+/// 受理并服务**一个**连接，四个资源边界按 `session` 生效。
+#[cfg(unix)]
+pub fn serve_once_with(
+    sink: &mut impl RequestSink,
+    listener: &std::os::unix::net::UnixListener,
+    expect: &Listener,
+    session: &mut Session,
+) -> Result<Value, String> {
     let (stream, _) = listener
         .accept()
         .map_err(|e| format!("ext.world.Channel.AcceptFail: {e}"))?;
+    serve_stream(sink, stream, expect, session)
+}
 
-    // ① 身份已由**套接字文件的权限**保证：只有 expect.uid 连得上（见 bind()）。
-    //    因此这里不需要（也无法用）peer_cred——它在本工具链上仍是不稳定 API。
+/// 把此刻**还在队列里**的连接逐条拒掉（`Channel.TooManyConnections`）。
+///
+/// 只在设了界（`max_connections` ≠ 哨兵）时动手；`Limits::none()` 下直接返回 0，
+/// 于是裸原语 `serve_n` 的行为与本改动**之前一字不差**。
+///
+/// 为什么用非阻塞 `accept` 而不是"数一数"：队列长度没有可移植的读法，
+/// 而"此刻还能不能收"只能由 `accept` 自己回答（`WouldBlock` ＝ 队列空了）。
+#[cfg(unix)]
+fn refuse_pending(
+    listener: &std::os::unix::net::UnixListener,
+    lim: Limits,
+) -> Result<usize, String> {
+    if lim.is_none() {
+        return Ok(0);
+    }
+    listener
+        .set_nonblocking(true)
+        .map_err(|e| format!("ext.world.Channel.AcceptFail: 设非阻塞失败：{e}"))?;
+    let mut n = 0usize;
+    let out = loop {
+        match listener.accept() {
+            Ok((mut s, _)) => {
+                let _ = s.set_nonblocking(false);
+                if lim.idle_timeout_ms > 0 {
+                    let d = Duration::from_millis(lim.idle_timeout_ms);
+                    let _ = s.set_write_timeout(Some(d));
+                }
+                let msg = format!(
+                    "ext.world.Channel.TooManyConnections: 并发上限 max_connections={}，\
+                     本连接到达时已有 1 条在服务（v1 顺序受理：服务期间到达的连接一律拒）",
+                    lim.max_connections
+                );
+                let _ = writeln!(s, "{}", json!({"ok": false, "error": msg}));
+                n += 1;
+            }
+            Err(e) if e.kind() == ErrorKind::WouldBlock => break Ok(n),
+            Err(e) => break Err(format!("ext.world.Channel.AcceptFail: {e}")),
+        }
+    };
+    // 无论成败都要把监听者还原成阻塞模式：否则下一轮 `accept` 会空转。
+    listener
+        .set_nonblocking(false)
+        .map_err(|e| format!("ext.world.Channel.AcceptFail: 恢复阻塞失败：{e}"))?;
+    out
+}
+
+/// 服务**一条已受理的连接**：读一行 → 限流 → 解析 → 自称核对 → 落笔 → 回一行。
+///
+/// 顺序是刻意的：**资源边界在前、法律与门禁在后**——
+/// 一条超长/超频/静默的连接**根本不是一条请求**，不该走到闸前面去。
+/// 身份那一段（自称核对与"actor 取自映射"）**一字未改**：四边界与它无关，
+/// 也不得借这 four 条口子放宽它。
+///
+/// 拒得可核：资源边界的每一条拒绝都**点名**（错误码 ＋ 上限的**当前值**）并**回一行**
+/// `{"ok":false,"error":…}` 给对端；**不落笔**（`REQ-F-026` 判据②）。
+#[cfg(unix)]
+fn serve_stream(
+    sink: &mut impl RequestSink,
+    stream: std::os::unix::net::UnixStream,
+    expect: &Listener,
+    session: &mut Session,
+) -> Result<Value, String> {
+    let lim = session.limits();
     let mut out = stream;
 
-    // ② 读一行请求
-    let mut line = String::new();
-    {
-        let mut r = BufReader::new(&out);
-        r.read_line(&mut line)
-            .map_err(|e| format!("ext.world.Channel.ReadFail: {e}"))?;
+    // ① 空闲超时（`REQ-F-026` ①）：读一行请求 / 写一行应答**各有上限**。
+    //    用同一个数：它们是同一条连接的同一段等待宽限。
+    if lim.idle_timeout_ms > 0 {
+        let d = Duration::from_millis(lim.idle_timeout_ms);
+        out.set_read_timeout(Some(d))
+            .map_err(|e| format!("ext.world.Channel.ReadFail: 设读超时失败：{e}"))?;
+        out.set_write_timeout(Some(d))
+            .map_err(|e| format!("ext.world.Channel.WriteFail: 设写超时失败：{e}"))?;
     }
+
+    // ② 读一行请求，**带单行上限**（`REQ-F-026` ④：超限即拒收，而不是无限缓冲）
+    let read = {
+        let mut r = BufReader::new(&out);
+        read_line_bounded(&mut r, lim.max_line_bytes, lim.idle_timeout_ms)
+    };
+    let line = match read {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = writeln!(out, "{}", json!({"ok": false, "error": e}));
+            return Err(e);
+        }
+    };
+
     if line.trim().is_empty() {
         return Err("ext.world.Channel.EmptyRequest: 空请求".to_string());
     }
+
+    // ③ 限流（`REQ-F-026` ②）：**每身份**每秒多少条，跨连接累计。
+    if let Err(e) = session.admit(&expect.actor, Instant::now()) {
+        let _ = writeln!(out, "{}", json!({"ok": false, "error": e}));
+        return Err(e);
+    }
+
     let req = parse_request(line.trim())?;
 
-    // ③ 自称必须与内核身份一致
+    // ④ 身份已由**套接字文件的权限**保证：只有 expect.uid 连得上（见 bind()）。
+    //    因此这里不需要（也无法用）peer_cred——它在本工具链上仍是不稳定 API。
+    //    自称必须与内核身份一致（这一段与本改动无关，**不许放宽**）。
     if let Some(claimed) = &req.claimed_actor {
         if claimed != &expect.actor {
             let msg = format!(
@@ -303,7 +627,7 @@ pub fn serve_once(
         }
     }
 
-    // ④ 落笔：actor 取自映射，不取自请求。
+    // ⑤ 落笔：actor 取自映射，不取自请求。
     //
     //    `trace`（因果）**透传**：请求里给了就带上信封。跨进程的"请求—结果"配对
     //    靠它闭环——结果事件的 `trace` 指向意图事件的 `id`（`M10` 接线，2026-09-27）。
@@ -324,6 +648,51 @@ pub fn serve_once(
             Err(e)
         }
     }
+}
+
+/// 读一行，**带单行上限**（`REQ-F-026` ④）。
+///
+/// 口径：**不含行尾换行**的字节数 ≤ `max`；超过即 `Channel.LineTooLong`，
+/// 并在**读到超限的那一刻就停**——剩下的字节不再往内存里搬
+/// （判据逐字：「超限即拒收，而不是无限缓冲」）。
+///
+/// 空闲超时（`WouldBlock`/`TimedOut`）在这里翻译成 `Channel.IdleTimeout`：
+/// 这条连接一直没把一行说完，属于"空闲"，不属于"读坏了"。
+#[cfg(unix)]
+fn read_line_bounded<R: BufRead>(r: &mut R, max: usize, idle_ms: u64) -> Result<String, String> {
+    let mut buf: Vec<u8> = Vec::new();
+    loop {
+        let avail = match r.fill_buf() {
+            Ok(a) => a,
+            Err(e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {
+                return Err(format!(
+                    "ext.world.Channel.IdleTimeout: 空闲超时 idle_timeout_ms={idle_ms}（读一行请求）"
+                ));
+            }
+            Err(e) => return Err(format!("ext.world.Channel.ReadFail: {e}")),
+        };
+        if avail.is_empty() {
+            break; // 对端关闭：把已读到的当成一行（与 read_line 同口径）
+        }
+        let (used, done) = match avail.iter().position(|b| *b == b'\n') {
+            Some(i) => (i + 1, true),
+            None => (avail.len(), false),
+        };
+        let content = if done { used - 1 } else { used };
+        if content > max.saturating_sub(buf.len()) {
+            return Err(format!(
+                "ext.world.Channel.LineTooLong: 单行上限 max_line_bytes={max} 字节，\
+                 本行不含换行已达 {} 字节",
+                buf.len() + content
+            ));
+        }
+        buf.extend_from_slice(&avail[..used]);
+        r.consume(used);
+        if done {
+            break;
+        }
+    }
+    String::from_utf8(buf).map_err(|e| format!("ext.world.Channel.ReadFail: 不是合法 UTF-8：{e}"))
 }
 
 #[cfg(test)]

@@ -32,6 +32,8 @@ world-core —— 世界核心（语义事件是唯一真相）
   channel bind <socket>      按 --channel 配置建套接字（0600 + chown 到该身份）
   channel accept <socket>    接受一个连接，把请求经**唯一写入口**落笔（一次一条）
   channel serve <socket> <n> 连续接受 n 个连接（v1 长驻形态；一次往返 = 两个连接）
+                             四条资源边界（并发连接数/单条消息字节/每秒消息数/空闲超时）
+                             取自 --policy 的 channel_limits 块；缺块即拒启（rc=2）
   carrier capabilities       列出执行清单里的能力（**只执行、不裁决**的载体侧）
   carrier check              校验执行清单（坏清单即非零退出，不静默放过）
   carrier undo               列出执行清单里「动手前要先做撤销点」的能力
@@ -707,6 +709,11 @@ fn cmd_checkpoint(o: &Path, l: &Path, p: &Path, rest: &[String]) -> ExitCode {
 ///
 /// ⚠️ 本仓**不提供出厂 `channel.json`**（`WC-SCMP-001` §8.4 `G-28` 记"是否补出厂文件**待人裁定**"），
 /// 故 `--channel` 指向的文件由部署方给出；缺文件即 `ext.world.Channel.ReadFail` 拒启。
+///
+/// **四个资源边界**（`REQ-F-026`）走**生产这一条路**：`accept`／`serve` 受理之前，
+/// 先从 `--policy` 的 `channel_limits` 块读出四个数值（`Limits::from_policy`），
+/// 读不到即 `rc=2` **拒启**——「通道的资源边界没有数值就不许受理」。
+/// `bind` 不受四条边界约束（它不读消息，只建套接字）。
 #[cfg(unix)]
 fn cmd_channel(o: &Path, l: &Path, p: &Path, cfg: &Path, rest: &[String]) -> ExitCode {
     use world_core::channel::{self, ChannelConfig};
@@ -767,6 +774,17 @@ fn cmd_channel(o: &Path, l: &Path, p: &Path, cfg: &Path, rest: &[String]) -> Exi
             } else {
                 1
             };
+            // **四个资源边界先取数**（`REQ-F-026`）：四条边界的数值**只**来自出厂配置，
+            // 代码里没有缺省值 ⇒ 取不到就**拒启**（不许拿"没配"当"不设界"）。
+            // 放在 `bind` 之前：连套接字都不该建——一个没有边界的通道不该上电。
+            let limits = match channel::Limits::from_policy(p) {
+                Ok(x) => x,
+                Err(e) => {
+                    eprintln!("[FAIL] {e}");
+                    return ExitCode::from(2);
+                }
+            };
+            let mut sess = channel::Session::new(limits);
             let lst = match channel::bind(&expect) {
                 Ok(x) => x,
                 Err(e) => {
@@ -782,7 +800,7 @@ fn cmd_channel(o: &Path, l: &Path, p: &Path, cfg: &Path, rest: &[String]) -> Exi
                 }
             };
             if sub == "accept" {
-                return match channel::serve_once(&mut w, &lst, &expect) {
+                return match channel::serve_once_with(&mut w, &lst, &expect, &mut sess) {
                     Ok(ev) => {
                         println!("{}", serde_json::to_string(&ev).unwrap_or_default());
                         ExitCode::SUCCESS
@@ -793,13 +811,21 @@ fn cmd_channel(o: &Path, l: &Path, p: &Path, cfg: &Path, rest: &[String]) -> Exi
                     }
                 };
             }
-            match channel::serve_n(&mut w, &lst, &expect, n) {
+            match channel::serve_n_with(&mut w, &lst, &expect, &mut sess, n) {
                 Ok(ok) => {
                     println!("== world-core channel serve ==");
                     println!(
                         "  套接字 : {}  actor={}",
                         expect.socket.display(),
                         expect.actor
+                    );
+                    println!(
+                        "  资源边界: 并发连接数={} 单条消息字节={} 每秒消息数={} 空闲超时={}ms（取自 {}）",
+                        limits.max_connections,
+                        limits.max_line_bytes,
+                        limits.max_msgs_per_sec,
+                        limits.idle_timeout_ms,
+                        p.display()
                     );
                     println!("  已处理 : {ok} / {n} 个连接");
                     ExitCode::SUCCESS
