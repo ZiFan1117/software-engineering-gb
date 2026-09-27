@@ -194,12 +194,67 @@ def j5_coverage_change(repo):
             "未实现的能力失去落点，等于把「未定」当「已定」"]
 
 
+# 结论栏里"已签"的取值；其余（待签／退回／驳回／空缺）一律判未签
+SIGNED = ("批准", "通过", "有条件通过")
+
+
+def _verdict_of(review_text):
+    """从 review.md 里取「结论」栏的取值（支持表格式与 `**结论**：x` 两种写法）。"""
+    for line in review_text.splitlines():
+        if "结论" not in line:
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        for idx, c in enumerate(cells):
+            if "结论" in c and idx + 1 < len(cells):
+                v = cells[idx + 1].strip("* 　")
+                if v:
+                    return v
+        m = re.search(r"结论\D{0,4}[:：]\s*(.+)$", line.strip())
+        if m:
+            return m.group(1).strip("* 　")
+    return ""
+
+
+def j6_archived_review_signed(repo):
+    """⑥ 归档件的评审必须**已签**：结论 ∈ {批准,通过,有条件通过}，且批准人栏非空、非占位。
+
+    **为什么单列一条**：判据① 只判"在场"，它是**内容盲**的——一份"结论：待签"的 review 照样通过它。
+    评审没签字却在账上记成"已归档"，正是本项目最忌的形态（把未定当已定）。
+    **只对归档件判红**：在办件还没到归档，不该被这条挡住。
+    """
+    bad = []
+    arch = Path(repo) / "openspec" / "changes" / "archive"
+    if not arch.is_dir():
+        return []
+    for d in sorted(arch.iterdir()):
+        if not d.is_dir() or d.name.startswith("."):
+            continue
+        rv = d / "review.md"
+        if not rv.is_file():
+            continue                                     # 在场与否归判据①
+        text = read_text(rv)
+        verdict = _verdict_of(text)
+        if not verdict:
+            bad.append("%s —— review.md 里读不出「结论」栏（签字留人不等于可以没有结论栏）" % rel(repo, rv))
+            continue
+        if not any(verdict.startswith(k) for k in SIGNED):
+            bad.append("%s —— 结论 =「%s」：**未签**（已签应为 %s 之一）；"
+                       "归档前必须签，缺签一律回退补签" % (rel(repo, rv), verdict, "/".join(SIGNED)))
+            continue
+        m = re.search(r"批准人[^|\n]*\|([^|\n]*)", text)
+        who = (m.group(1).strip() if m else "")
+        if (not who) or ("待" in who) or ("补姓名" in who) or who in ("—", "-", "无"):
+            bad.append("%s —— 结论已签，但**批准人栏是空的或占位**（实得：%s）" % (rel(repo, rv), who or "空"))
+    return bad
+
+
 JUDGMENTS = [
     ("① 归档硬前置（归档目录必须有 review.md）", j1_archive_review),
     ("② 证据存在性（证据行的函数/脚本必须真实存在）", j2_evidence),
     ("③ 默认档守卫（config.yaml 必须为 %s）" % SCHEMA_NAME, j3_default_schema),
     ("④ 编号桥覆盖（BRIDGE.md 必须覆盖规格树下每条 Requirement）", j4_bridge_coverage),
     ("⑤ 覆盖在册（cover-* change 未归档且 tasks 有未勾项）", j5_coverage_change),
+    ("⑥ 归档件的评审已签（结论 ∈ 批准/通过/有条件通过，且批准人非空）", j6_archived_review_signed),
 ]
 
 
@@ -224,7 +279,10 @@ SANDBOX = {
         "- **WHEN** 跑沙盒\n- **THEN** 通过\n"
         "- **证据**：`tests/t.rs::the_test`\n"
     ),
-    "openspec/changes/archive/2026-01-01-sandbox/review.md": "# Review\n\n结论：通过\n",
+    "openspec/changes/archive/2026-01-01-sandbox/review.md": (
+        "# Review\n\n| 项 | 内容 |\n|---|---|\n"
+        "| **结论** | 通过 |\n| **批准人** | 沙盒批准人（非占位）|\n"
+    ),
     "openspec/changes/archive/2026-01-01-sandbox/tasks.md": "- [x] 1.1 沙盒\n",
     "openspec/changes/cover-gap/tasks.md": "- [ ] 1.1 未实现的能力（在册）\n",
     "openspec/BRIDGE.md": "# 编号桥\n\n| 承诺 | 号 |\n|---|---|\n| REQ-X-001 沙盒需求 | REQ-X-001 |\n",
@@ -298,11 +356,30 @@ def self_test():
         if not ok:
             failures.append("反例⑤未变红")
 
+        # 反例 6：归档件的 review 未签（结论＝待签）——判据① 是内容盲的，必须由⑥抓住
+        rv2 = Path(tmp) / "openspec/changes/archive/2026-01-01-sandbox/review.md"
+        backup6 = rv2.read_text(encoding="utf-8")
+        rv2.write_text("# Review\n\n| 项 | 内容 |\n|---|---|\n| **结论** | 　**待签** |\n| **批准人** | 项目负责人（本人签署时补姓名） |\n",
+                      encoding="utf-8", newline="\n")
+        r6 = run_all(tmp)[5]
+        ok6 = not r6["ok"]
+        print("  反例⑥（归档件 review 未签 => 判据⑥ 应红）：%s" % ("已红 OK" if ok6 else "*没红"))
+        if not ok6:
+            failures.append("反例⑥未变红")
+        # 反例 6b：结论已签但批准人是占位——① 与 ⑥ 都应只看 ⑥ 抓它
+        rv2.write_text("# Review\n\n| 项 | 内容 |\n|---|---|\n| **结论** | 批准 |\n| **批准人** | 　**待签** |\n",
+                       encoding="utf-8", newline="\n")
+        ok6b = not run_all(tmp)[5]["ok"]
+        print("  反例⑥b（结论已签但批准人占位 => 判据⑥ 应红）：%s" % ("已红 OK" if ok6b else "*没红"))
+        if not ok6b:
+            failures.append("反例⑥b未变红")
+        rv2.write_text(backup6, encoding="utf-8", newline="\n")
+
     if failures:
         print("  => 自证不通过：%s" % "；".join(failures))
         print("  => 按本项目口径：**这条守卫是装饰，拒绝合入**。")
         return 1
-    print("  => 自证通过：五条判据**逐条**在反例下变红、在正控下全绿。")
+    print("  => 自证通过：**六条判据**逐条在反例下变红、在正控下全绿。")
     return 0
 
 

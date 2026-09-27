@@ -146,7 +146,11 @@ artifacts:
         详细设计说明中该模块章节已更新"——**代码没写完就没什么可审的**。
         所以本件的 R4 节在 apply 之后、**归档之前**填、签字。
 
-      因此：**本件是归档的硬前置**（由 `spec_bridge.py` 拦）。缺本件的 change 不许归档。
+      因此：**本件是归档的硬前置**，由两处共同承担：`openspec validate --archived`（tasks 全勾）
+      ＋ `spec_bridge.py` 判据①（归档目录必须有本件）。
+      ⚠ **`openspec archive` 命令本身不拦**（实测：缺本件、甚至 0/1 tasks 未勾时，`archive --yes` 仍 `rc=0`）
+      ⇒ 二选一：**归档前先跑 `python3 world-core/tools/spec_bridge.py`**，或**归档后立即跑它、红了就回退**。
+      另：**未签的本件不算已归档**——判据⑥ 读结论栏与批准人栏，未签/占位一律判红。
 
       必填：
       - **变更号与档位**：CR/FC 号，R4 还是 R5；

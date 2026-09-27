@@ -29,7 +29,7 @@
 | # | 规则 | 落点 / 判据 |
 |---|---|---|
 | 1 | 规格树下**每条 Requirement** 都必须在 `openspec/BRIDGE.md` 在册（有号或显式标「无号」） | 守卫判据④ |
-| 2 | 归档目录必须有非空 `review.md`，且结论栏**不许代签** | 守卫判据① ＋ `schema.yaml` 的 R5/R4 硬约定 |
+| 2 | 归档目录必须有非空 `review.md`；**归档件的结论栏必须已签**（结论 ∈ 批准／通过／有条件通过）**且批准人非空**，代签或占位一律判红 | 守卫判据①（在场）＋ **判据⑥（已签）**；`schema.yaml` 的 R5/R4 硬约定 |
 | 3 | `openspec/config.yaml` 的 `schema:` 必须为 `opsx-swe-gb`（**别让它被改回默认档**——那会让每个新 change 静默退回 4 产物原生链，评审与证据守卫全部消失） | 守卫判据③ |
 | 4 | 承载覆盖缺口的 `cover-*` change **必须存在且未归档**，其 `tasks.md` 保留未勾项（＝未实现的东西在册、可见、不装成已成立） | 守卫判据⑤ |
 | 5 | 融合档 schema 的**主本与副本对账**：主本 `D:\Code\10-openspec-swe-gb\schemas\` ↔ 本仓 `openspec/schemas/`，**七件逐文件 sha256 一致**；主本缺任何一件即为断链 | `openspec/schemas/README.md` §五 |

@@ -78,7 +78,8 @@ openspec/changes/<change>/
 - **R4（模块评审）＝ 后置闸。** 准入是「代码已提交（含单元测试）、附提交号」——**代码没写完就没什么可审的**。在 apply 之后、**归档之前**填、签字。
 
 因此 `review` 的 `requires` 是 `tasks`，`apply.requires` 只是 `tasks`。
-**归档门禁**由两处共同承担：`openspec validate --archived`（tasks 必须全勾）＋ **`spec_bridge.py`**（归档目录必须有 `review.md`）。
+**归档门禁**由两处共同承担：`openspec validate --archived`（tasks 必须全勾）＋ **`spec_bridge.py`**（判据①：归档目录必须有 `review.md`；判据⑥：归档件的结论栏必须已签、批准人非空）。
+⚠ **`openspec archive` 命令本身不拦**（实测：缺 `review.md`、甚至 tasks 未勾，`archive --yes` 仍 `rc=0`）⇒ **归档前/后必须跑一次守卫**，红了就回退补缺或补签。
 
 ---
 
