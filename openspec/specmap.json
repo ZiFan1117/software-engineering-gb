@@ -496,14 +496,12 @@
       "- 不可逆、主体**不在**该白名单内 ⇒ `AwaitApproval`（加摩擦到拒绝执行）：SHALL 落一条",
       "`gate.awaiting-approval` 通告，理由 SHALL 明说 v1 **没有审批通道**、不要等批准，并写出风险等级。",
       "摩擦的落点是**动作的不可逆等级**，不是执行者身份：`friction` 只看能力是否可逆，**与请求者是谁无关**；",
-      "身份只在下一步决定后果（放行并留旗标／拒绝执行）。⇒ 出厂配置下",
-      "\"唯一能做不可逆动作的主体恰是完全免检的主体\"**不成立**：`world-core/policy.json:32` 的白名单只含",
-      "`world://user`，而它执行不可逆动作时**必留**摩擦旗标。本口径 SHALL NOT 被读成\"有审批环节\"。"
+      "身份只在下一步决定后果（放行并留旗标／拒绝执行）。**本口径 SHALL NOT 被读成\"有审批环节\"。**"
      ],
      "scenarios": [
       {
        "title": "不可逆能力触发摩擦",
-       "line": 55,
+       "line": 53,
        "when": "一个**不在** `irreversible_actors` 内的主体提交一个不可逆能力",
        "then": "门禁加摩擦路径被触发，落一条 `gate.awaiting-approval` 通告，理由明说 v1 无审批通道",
        "ev": [
@@ -512,7 +510,7 @@
       },
       {
        "title": "同一个主体对不可逆动作必加摩擦",
-       "line": 66,
+       "line": 64,
        "when": "**同一个在册主体**（`world://user`，出厂不可逆白名单里唯一那一个）分别提交一件可逆动作与一件不可逆动作",
        "then": "可逆动作免检且事件不带摩擦旗标（但照样落账）；不可逆动作放行且事件带 `gate.friction:high`，",
        "ev": [
@@ -521,7 +519,7 @@
       },
       {
        "title": "拒绝流水必须说清它拒绝了什么",
-       "line": 74,
+       "line": 72,
        "when": "一个**不在允许名单**的主体提交带保留前缀的通告",
        "then": "被拒，且门禁写下的通告里含被拒内容的指纹字段",
        "ev": [
@@ -542,7 +540,7 @@
     },
     {
      "title": "门禁配置在被管者不可写的域",
-     "line": 94,
+     "line": 92,
      "text": [
       "系统 SHALL 在启动时检查**法律与账本文件的权限 mode 位及其所在目录的权限**；",
       "当法律可被 group/other 写、或账本可被 group/other 写（含其所在目录）时 SHALL 拒绝启动。",
@@ -555,7 +553,7 @@
      "scenarios": [
       {
        "title": "法律可被他人写时拒绝启动",
-       "line": 106,
+       "line": 104,
        "when": "本体文件的权限使他人可写",
        "then": "世界拒绝启动",
        "ev": [
@@ -564,7 +562,7 @@
       },
       {
        "title": "账本可被他人写时拒绝启动",
-       "line": 112,
+       "line": 110,
        "when": "账本文件的权限使他人可写",
        "then": "世界拒绝启动",
        "ev": [
@@ -573,7 +571,7 @@
       },
       {
        "title": "属主断言能识别错误属主",
-       "line": 118,
+       "line": 116,
        "when": "显式以与预期不符的属主运行属主断言",
        "then": "断言报错而不是放行",
        "ev": [
@@ -584,7 +582,7 @@
     },
     {
      "title": "运行中的世界不重读策略",
-     "line": 126,
+     "line": 124,
      "text": [
       "系统 SHALL 在启动时装载一次策略；运行期间 SHALL NOT 重新读取策略文件，",
       "使\"这一次裁决依据的是哪一版法律\"是确定的。"
@@ -592,7 +590,7 @@
      "scenarios": [
       {
        "title": "运行中改动策略文件不影响本次运行",
-       "line": 131,
+       "line": 129,
        "when": "世界运行期间改动策略文件，再提交一个该改动本应影响的动作",
        "then": "裁决结果与启动时装载的策略一致",
        "ev": [
@@ -603,7 +601,7 @@
     },
     {
      "title": "闸读得到风险等级，且载体可逆与世界可逆互校（不一致即拒启）",
-     "line": 138,
+     "line": 136,
      "text": [
       "闸 SHALL **读得到**风险等级（`risk`），取自载体执行清单（与策略同目录的 `cap.d/*.json`），",
       "并 SHALL 用在**摩擦的轻重与拒绝流水**上（`gate.friction:low`/`:medium`/`:high`；无清单 ⇒ `:unlisted`）。",
@@ -622,7 +620,7 @@
      "scenarios": [
       {
        "title": "两处配置互校冲突 ⇒ 拒绝启动且不落笔",
-       "line": 156,
+       "line": 154,
        "when": "同一能力在世界侧声明 `reversible: false`、在载体执行清单里声明 `risk: low`、`confirm: never`",
        "then": "拒绝启动，拒绝理由含 `ext.world.Gate.ReversibilityMismatch` 并点名该能力、",
        "ev": [
@@ -631,7 +629,7 @@
       },
       {
        "title": "两处一致即正常启动，且闸读得到等级",
-       "line": 166,
+       "line": 164,
        "when": "两处对同一能力同向声明（可逆 ↔ `risk: low`/`confirm: never`；不可逆 ↔ `risk: high`/`confirm: required`），",
        "then": "世界正常启动；闸读到的等级与该能力清单里写的 `risk` 一致；**留撤销点不使启动被拒**",
        "ev": [
@@ -640,7 +638,7 @@
       },
       {
        "title": "载体可逆不等于世界可逆",
-       "line": 177,
+       "line": 175,
        "when": "一项能力在载体侧留了撤销点（`undo: before-each`），而世界侧标 `reversible: false`",
        "then": "门禁按\"世界不可逆\"处置（该动作必带摩擦：白名单内放行并留旗标、白名单外加摩擦到拒绝执行），",
        "ev": [
@@ -651,7 +649,7 @@
     },
     {
      "title": "通告的闸，以及门禁不可绕过的部分实现边界",
-     "line": 189,
+     "line": 187,
      "text": [
       "通告 SHALL 过闸，两条纪律各自可单独判真假：",
       "① 带保留前缀（`gate.`）的通告类型 SHALL 只许内核自己写，外部提交一律拒；",
@@ -666,7 +664,7 @@
      "scenarios": [
       {
        "title": "保留前缀通告只许内核自己写",
-       "line": 203,
+       "line": 201,
        "when": "一个外部主体提交 `type` 以 `gate.` 开头的通告",
        "then": "被拒，错误串含 `ext.world.Gate.NoticeNotAllowed`，且伪造通告不落笔",
        "ev": [
@@ -675,7 +673,7 @@
       },
       {
        "title": "不在册主体不得写普通通告，在册主体必须能写",
-       "line": 209,
+       "line": 207,
        "when": "一个不在白名单的主体提交普通通告；对照组由在册主体提交同样形状的通告",
        "then": "前者被拒（`ext.world.Gate.NoticeRejected`），后者通过",
        "ev": [
@@ -684,7 +682,7 @@
       },
       {
        "title": "门禁不可绕过的未做部分被如实声明",
-       "line": 215,
+       "line": 213,
        "when": "查阅本能力的覆盖声明",
        "then": "祖先链遍历、通道层与 Landlock 自缚三项标为**未做**",
        "ev": [
@@ -695,7 +693,7 @@
     },
     {
      "title": "〔无号·待流程侧增补〕通告的闸",
-     "line": 222,
+     "line": 220,
      "text": [
       "**通告 SHALL 与变更、动作一样过门禁**：主体只能发它被允许发的通告；不该由它发的通告 SHALL 被拒，拒绝 SHALL 留下可核的流水。",
       "（两条纪律已在实现里落地：① 带保留前缀（`gate.`）的通告类型只许内核自己写；② 非保留前缀的通告，其 `actor` 必须在主体白名单内——执行者是 `world-core/src/lib.rs::adjudicate_notice`。）",
@@ -704,7 +702,7 @@
      "scenarios": [
       {
        "title": "越权通告被拒且留痕",
-       "line": 228,
+       "line": 226,
        "when": "一个未被允许的主体提交一条本不该由它发的通告",
        "then": "提交被拒、不落笔，且账本里留下一条说明**拒绝了什么**的流水",
        "ev": [
@@ -715,7 +713,7 @@
     },
     {
      "title": "〔无号·待流程侧增补〕可逆性判定与出厂配置互校",
-     "line": 240,
+     "line": 238,
      "text": [
       "闸 SHALL 读得到动作的风险等级，并按**动作的不可逆等级**决定是否加摩擦；载体层的撤销点与世界状态的可逆性 SHALL **各自成立且互不冒充**，两处出厂配置冲突时 SHALL 拒绝启动。",
       "（书第五章 5.5 判红的三件事今天已逐条落地：闸读得到风险等级（`world-core/src/gate.rs:73` 逐字 `pub risk: Option<CarrierRisk>,`，等级由 `world-core/src/gate.rs:445` 逐字 `cap.risk = carrier.lookup(name).map(|m| m.risk);` 接进能力表）；两处出厂配置互校、不一致即拒启（`world-core/src/gate.rs::cross_check_reversibility`，其调用在 `world-core/src/gate.rs:442`）；摩擦挂在**动作的不可逆等级**上、不挂在执行者身份上（`world-core/src/gate.rs:578` 逐字 `.filter(|c| !c.reversible)`）。）"
@@ -723,7 +721,7 @@
      "scenarios": [
       {
        "title": "同一个主体对不可逆动作必加摩擦",
-       "line": 245,
+       "line": 243,
        "when": "白名单内的主体对一件声明为不可逆的动作提交请求",
        "then": "**加摩擦**（在账本上留下可核痕迹：事件带 `gate.friction:<等级>` 旗标）；对可逆动作则免检但留痕",
        "ev": [
@@ -3162,31 +3160,31 @@
   {
    "cap": "gate-enforcement",
    "req": "运行中的世界不重读策略",
-   "line": 126,
+   "line": 124,
    "file": "openspec\\specs\\gate-enforcement\\spec.md"
   },
   {
    "cap": "gate-enforcement",
    "req": "闸读得到风险等级，且载体可逆与世界可逆互校（不一致即拒启）",
-   "line": 138,
+   "line": 136,
    "file": "openspec\\specs\\gate-enforcement\\spec.md"
   },
   {
    "cap": "gate-enforcement",
    "req": "通告的闸，以及门禁不可绕过的部分实现边界",
-   "line": 189,
+   "line": 187,
    "file": "openspec\\specs\\gate-enforcement\\spec.md"
   },
   {
    "cap": "gate-enforcement",
    "req": "〔无号·待流程侧增补〕通告的闸",
-   "line": 222,
+   "line": 220,
    "file": "openspec\\specs\\gate-enforcement\\spec.md"
   },
   {
    "cap": "gate-enforcement",
    "req": "〔无号·待流程侧增补〕可逆性判定与出厂配置互校",
-   "line": 240,
+   "line": 238,
    "file": "openspec\\specs\\gate-enforcement\\spec.md"
   },
   {
