@@ -248,6 +248,42 @@ def j6_archived_review_signed(repo):
     return bad
 
 
+# 「让路三要素」：任何一次"不按书来"的处置，三样都必须写全（书自己的纪律：冲突时要说明谁让）
+WAIVER_KEYS = (("让的是哪一条", r"让的是哪一条"),
+               ("为什么要让", r"为什么要让|为什么让"),
+               ("谁批的", r"谁批的|谁批"))
+
+
+def j7_waiver_registered(repo):
+    """⑦ 让路登记：件里只要声明了"谁让"，三要素就必须写全。
+
+    为什么单列一条：书自己的纪律说「规格与流程文档**不受**十条写作纪律约束，但**冲突时要说明谁让**」；
+    而 `schemas/README.md` §〇 又写「不写＝违规」。半写的让路（只写"谁让"两字、不写让哪一条／为什么／谁批的）
+    与不写等价——这是"承诺与实现不符"的又一处入口。
+    **只在件里出现了"谁让"时才检**：不声明让路的 change 不会被这条误伤。
+    """
+    bad = []
+    ch = Path(repo) / "openspec" / "changes"
+    if not ch.is_dir():
+        return []
+    for d in sorted(ch.iterdir()):
+        if not d.is_dir() or d.name.startswith(".") or d.name == "archive":
+            continue
+        files = sorted(d.rglob("*.md"))
+        # 按**件整体**判：三要素只要在该 change 的任一产物里写全即可（不必挤在同一份文件里）
+        texts = {f: read_text(f) for f in files}
+        union = "\n".join(texts.values())
+        if "谁让" not in union:
+            continue                                     # 没声明让路 ⇒ 不受本条约束
+        missing = [label for label, pat in WAIVER_KEYS if not re.search(pat, union)]
+        if missing:
+            where = "、".join(rel(repo, f) for f in files)
+            bad.append("%s —— 声明了让路，却缺 %s（书纪律：冲突时要说明谁让；半写＝不写）"
+                       % (rel(repo, d), "、".join("「%s」" % m for m in missing)))
+            bad.append("      （本条按件整体判：查的是 `%s` 的全部 `.md`）" % where)
+    return bad
+
+
 JUDGMENTS = [
     ("① 归档硬前置（归档目录必须有 review.md）", j1_archive_review),
     ("② 证据存在性（证据行的函数/脚本必须真实存在）", j2_evidence),
@@ -255,6 +291,7 @@ JUDGMENTS = [
     ("④ 编号桥覆盖（BRIDGE.md 必须覆盖规格树下每条 Requirement）", j4_bridge_coverage),
     ("⑤ 覆盖在册（cover-* change 未归档且 tasks 有未勾项）", j5_coverage_change),
     ("⑥ 归档件的评审已签（结论 ∈ 批准/通过/有条件通过，且批准人非空）", j6_archived_review_signed),
+    ("⑦ 让路登记（声明了「谁让」的件必须写全：让哪一条／为什么／谁批的）", j7_waiver_registered),
 ]
 
 
@@ -285,6 +322,13 @@ SANDBOX = {
     ),
     "openspec/changes/archive/2026-01-01-sandbox/tasks.md": "- [x] 1.1 沙盒\n",
     "openspec/changes/cover-gap/tasks.md": "- [ ] 1.1 未实现的能力（在册）\n",
+    # 正控用的"让路登记"：三要素齐全（判据⑦ 只在件里出现「谁让」时才检）
+    "openspec/changes/cover-gap/design.md": (
+        "# Design\n\n## 与书的关系（谁让）\n\n"
+        "- **让的是哪一条**：`schema.yaml:65-66`「只装已成立且可复现的行为」。\n"
+        "- **为什么要让**：书是上位，Purpose 不是行为承诺。\n"
+        "- **谁批的**：作者（2026-01-01 指示）。\n"
+    ),
     "openspec/BRIDGE.md": "# 编号桥\n\n| 承诺 | 号 |\n|---|---|\n| REQ-X-001 沙盒需求 | REQ-X-001 |\n",
     "world-core/tests/t.rs": "fn the_test() {}\n",
 }
@@ -349,12 +393,16 @@ def self_test():
             failures.append("反例④未变红")
         br.write_text(backup, encoding="utf-8", newline="\n")
 
-        # 反例 5：撤掉覆盖 change
-        shutil.rmtree(Path(tmp) / "openspec/changes/cover-gap")
+        # 反例 5：撤掉覆盖 change（**改用改名、不删目录**——后面的反例还要用这个目录；
+        #          新名不能以 `cover-` 开头，否则判据⑤ 仍会把它算作在册）
+        cg = Path(tmp) / "openspec/changes/cover-gap"
+        cg_hidden = Path(tmp) / "openspec/changes/_hidden-gap"
+        cg.rename(cg_hidden)
         ok = not run_all(tmp)[4]["ok"]
         print("  反例⑤（覆盖 change 不在册 => 判据⑤ 应红）：%s" % ("已红 OK" if ok else "*没红"))
         if not ok:
             failures.append("反例⑤未变红")
+        cg_hidden.rename(cg)
 
         # 反例 6：归档件的 review 未签（结论＝待签）——判据① 是内容盲的，必须由⑥抓住
         rv2 = Path(tmp) / "openspec/changes/archive/2026-01-01-sandbox/review.md"
@@ -374,6 +422,17 @@ def self_test():
         if not ok6b:
             failures.append("反例⑥b未变红")
         rv2.write_text(backup6, encoding="utf-8", newline="\n")
+
+        # 反例 7：件里声明了「谁让」，但三要素缺一样（只写"谁让"两字、不写谁批的）
+        dm = Path(tmp) / "openspec/changes/cover-gap/design.md"
+        backup7 = dm.read_text(encoding="utf-8")
+        dm.write_text("# Design\n\n## 与书的关系（谁让）\n\n- **让的是哪一条**：`schema.yaml:65-66`。\n- **为什么要让**：书是上位。\n",
+                      encoding="utf-8", newline="\n")
+        ok7 = not run_all(tmp)[6]["ok"]
+        print("  反例⑦（声明了谁让却缺「谁批的」 => 判据⑦ 应红）：%s" % ("已红 OK" if ok7 else "*没红"))
+        if not ok7:
+            failures.append("反例⑦未变红")
+        dm.write_text(backup7, encoding="utf-8", newline="\n")
 
     if failures:
         print("  => 自证不通过：%s" % "；".join(failures))
