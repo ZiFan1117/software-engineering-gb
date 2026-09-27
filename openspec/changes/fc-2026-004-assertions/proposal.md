@@ -27,4 +27,4 @@
 
 （无。**本 change 不改规格级行为**——它补的是断言。）
 
-> ⚠ **一处让路登记**（2026-09-28 补）：本 change 的提交 `0a77d26` **动了主规格一行**（`openspec/specs/ledger-integrity/spec.md`：把"`check.sh:145` 执行"改成"**第 ⑥ 步**执行——写步骤名、不写行号"）。按 skill §一，让路三要素写在 `design.md` 的「一处让路登记」小节里（**让的是哪一条／为什么／谁批的**）。
+> ⚠ **两处让路登记**（2026-09-28 补；★ 首版只写了一处）：本 change 的提交**两次**动了主规格——① `0a77d26` → `openspec/specs/ledger-integrity/spec.md`、② `3ba916f` → `openspec/specs/read-model/spec.md`，两处都是把**行号引用**改成**步骤名**（例：把"`check.sh:145` 执行"改成"**第 ⑥ 步**执行"）。按 skill §一，让路三要素写在 `design.md` 的「一处让路登记」小节里（**让的是哪一条／为什么／谁批的**）。

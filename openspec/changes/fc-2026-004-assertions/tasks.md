@@ -72,6 +72,9 @@
       **未做（截至本工区交件时点，如实登记）**：`openspec/changes/fc-2026-004-assertions/review.md` **尚不存在**——`openspec status --change fc-2026-004-assertions` 现文逐字 `[ ] review`。**缺的就是它**：三句话（祖先链遍历／通道层／Landlock 自缚各一句「不可机核、由评审签字承担」）写进 `review.md` 的 R5 节后本条才可勾。该件**由人备料与签署**（本仓口径：签字只在评审通过后、按作者指示落笔），本工区**不代建、不代签**。
 
 
+      **★ 订正（2026-09-28，评审席裁定后；与 `5.6` **同法**——上一轮只改了 `5.6`、漏了本条，这是同一轮里的第二例）**：原文那句「**不代建、不代签**」**理由不成立**——评审席查了仓内既有做法：`archive/2026-09-28-fc-2026-002-spec-revisions/review.md` **正是 agent 在 `2669173` 建的**，其正文逐字「**本件先由执行者备料，结论栏留人**」／「**本档由谁备料** | 执行者（AI）；**评审与批准均为人的职责**」。
+      ⇒ 正确口径：**备料可做**（建 `review.md`、把三句话说全），**判定与签署不可替**（批准人与结论留空，等人）。**保持未勾是对的**（本条验收逐字写着"由人填"）。
+      ⇒ **并且它不是归档前置**：前置是 `review.md` **这份件**（守卫判据① 只对**归档目录**查它）。
 ## 4. 补断言 · 账本与证据链
 
 > **读数环境（2026-09-28）**：主机无 Rust 工具链，全部读数取自 VM `world`（Arch Linux，cargo 1.98.1）的**隔离树** `/root/wc-b` ＝ `git archive HEAD`（`05a1acd`）＋本工区测试补丁（工作区当时正被并行工区改 `src/**` 与**同一批** `tests/**`，直测会拿到别人的半成品污染过的读数）；变异在 `/tmp/mut-b` 副本上做。基线：`cargo test --locked --test contract` ＝ `29 passed; 0 failed; 1 ignored`（rc=0）、`--test cli` ＝ `12 passed`（rc=0）、`--test acceptance` ＝ `17 passed`（rc=0）。
@@ -84,7 +87,7 @@
 - [x] 4.2 补一条断言固定 `K-3` 的**当下边界**：无链账本 + 一次合法 `append` ⇒ 下次打开报 `MixedChain`。**验收**：断言存在且在修复落地前为绿（证明边界形状）。
       - **断言**：`world-core/tests/contract.rs:1647`（`fn c30_k3_boundary_chainless_ledger_plus_one_append_reports_mixed_chain`）。**变异**：`src/ledger.rs` 的混用判定 `if !has.iter().all(|b| *b)` 前加 `false &&` ⇒ `--test contract -- c30_` rc=101（`FAILED. 0 passed; 1 failed`，`panicked at tests/contract.rs:1323`）；恢复后 rc=0（`ok. 1 passed`）。
 
-- [x] 4.3 补一条断言：`c21` 的"无链账本仍能打开"**只到只读为止**——即断言打开后**写入会失败**（与 4.2 同一形态的另一侧）。**验收**：断言存在；出处 `world-core/tests/contract.rs:1026`。
+- [x] 4.3 补一条断言：`c21` 的"无链账本仍能打开"**只到只读为止**——即断言打开后**写入会失败**（与 4.2 同一形态的另一侧）。**验收**：断言存在；出处 `world-core/tests/contract.rs` 的 **`fn c21_is_chained_reflects_reality`**（★ 订正：原写 `:1026`——那里落在 **`fn c16_chain_detects_local_tampering`** 里，**是指错了用例、不是行号漂移**）。
       - **断言**：`world-core/tests/contract.rs:1688`（`fn c31_chainless_ledger_opens_readonly_and_refuses_writes`）。**变异**：`src/ledger.rs` 的 `open_readonly` 内部改回 `OpenMode::ReadWrite` ⇒ `--test contract -- c31_` rc=101（`panicked at tests/contract.rs:1349`）；恢复后 rc=0。
 
 - [x] 4.4 把 `t1` 的"逐字段一致"补全：逐个断言 `actor`／`id`／`at`／`flags`／`body.subject`／`body.path`／`body.after`（今天只比 `len`／`seq`／`world`／`kind`／`body.before`）。**验收**：新增断言 ≥ 7 条；变异（改 `world-core/src/event.rs` 的某个字段构造）⇒ 至少一条变红。
@@ -152,15 +155,17 @@
       **这不是缺陷**：归档后的 change 不再出现在"在册 change"里。⇒ 该条的验收面**改由 6.1 的归档面覆盖**（`validate --archived` 已含它）。**原命令与改判都逐字留在这里，不许悄悄换判据。**
 
 - [x] 6.3 **不越界取证**：实测 `git status --short -uall` ⇒ **输出为空**（工作区干净、全部已入库）。
-      ⇒ 比条目要求的更强：**本 change 没有把任何越界改动留在树里**；`openspec/specs/**` 零改动。
+      ⇒ **★ 订正（2026-09-28，评审席第二、三轮各判一次后）**：本句原写「**本 change 没有把任何越界改动留在树里**；`openspec/specs/**` 零改动」——**那是假话**。**双坐标（按本仓口径 = 当时 ＋ 现在）**：
+      · **当时**（写下本句时，`75dc0d6`）：**成立**——那一刻 `openspec/specs/**` 确实零改动；
+      · **现在**：**不成立**——本 change 后来**两次**动了主规格：`0a77d26` 动 `openspec/specs/ledger-integrity/spec.md`、`3ba916f` 动 `openspec/specs/read-model/spec.md`。两处的**让路三要素**见 `design.md` 的「**两处**让路登记」。⇒ **结论**：本句只对"当时"成立，**不许被引用为"本 change 未越界"**。
       **时点**：2026-09-28 01:37，HEAD `75dc0d6`。
 
 - [x] 6.4 **出厂判据强度——原验收写 `rc=0`，已按实改成"唯一红项不是本 change 引起"**：
-      **★ 订正（2026-09-28，评审席实测后）**：本条原写「`CHECK_RC=1`、25 个 ✅、唯一 ❌ 是第 ⑨ 步」——**今天实测是 `CHECK_RC=0`、41 个 ✅、0 个 ❌、12 步全过**（那条真源码环 `M04↔M09` 在本条写下后 **4 分钟**由 `746dff2` 关掉）。⇒ **判据改成"以 `bash check.sh` 的输出为准，本处不复述读数"**，并把当时的读数按双坐标留档如下（它当时是真读数）：
+      **★ 订正（2026-09-28，评审席实测后）**：本条原写「`CHECK_RC=1`、25 个 ✅、唯一 ❌ 是第 ⑨ 步」——**那次实测是 `CHECK_RC=0`、41 个 ✅、0 个 ❌、12 步全过**（★ 那是**当时的**读数：本仓后来又加了 `③c`，现在实测 **43 ✅ / 13 步**——**读数一律现取，本处只记当时值**）（那条真源码环 `M04↔M09` 在本条写下后 **4 分钟**由 `746dff2` 关掉）。⇒ **判据改成"以 `bash check.sh` 的输出为准，本处不复述读数"**，并把当时的读数按双坐标留档如下（它当时是真读数）：
       · **当时**（写下本条时）：`CHECK_RC=1`，**25 个 ✅**，**唯一 ❌ 是第 ⑨ 步机核层守卫**（逐字 `❌ 机核层守卫（WC-ATOM-001 §四：单意图／四件同夹／deps==import 且无环） 失败（rc=1）`），而该步自己的读数是 **`通过 2 / 失败 1`**——那**唯一一条红是真源码环 `M04↔M09`**（在册真缺陷，方案与反例已备）。
-      **★ 为什么不写 rc=0**：写了就是"把没做到写成做到了"。**判据改成**：rc=1 **且**逐条核对唯一红项**不是本 change 引起**——本 change 只加断言，机核红项是源码面的结构性缺陷，**与本 change 无关**（且它在 `fc-2026-004` 建件之前就在册）。
+      **★ 为什么不写 rc=0**：写了就是"把没做到写成做到了"。**（原判据，已作废，留痕）**：rc=1 **且**逐条核对唯一红项**不是本 change 引起**——它在"第 ⑨ 步仍红"那个时点上是成立的；★ 2026-09-28：**该判据已作废**（⑨ 已转绿、`check.sh` 已 `rc=0`），现行判据见上一条订正（"**以 `bash check.sh` 的输出为准，本处不复述读数**"）。**留此句只为留痕，不得作为现行判据引用。**
 
-- [x] 6.5 **补跑 `check.sh` 不跑的用例**：实测（VM，`CARGO_TARGET_DIR=/tmp/g65`）
+- [x] 6.5 **补跑"③c 落地前 `check.sh` 不跑"的那几条用例**：实测（VM，`CARGO_TARGET_DIR=/tmp/g65`）——★ 2026-09-28：`③c` 落地后**它们已被 `check.sh` 全量跑到**，本条的历史意义只是"当时补跑过"
       ```
       cargo test --locked --test acceptance   ⇒ ACCEPTANCE_RC=0   test result: ok. 17 passed; 0 failed
       cargo test --locked --test cli          ⇒ CLI_RC=0          test result: ok. 14 passed; 0 failed

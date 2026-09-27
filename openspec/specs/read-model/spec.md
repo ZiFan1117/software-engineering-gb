@@ -30,7 +30,7 @@
       —— **⚠ 原证据行括注的"（`check.sh` 步骤 ③）"写法有歧义**：仓里有两个同名脚本，
       仓根 `check.sh` 完全不碰 `world-core`（`audit.md` **L8** 后半）
       ⇒ 本 change 一律写全 **`world-core/check.sh`** 并注明步骤号；
-      本节该步确实执行 `t7`（`world-core/check.sh` 的 **③ 三条专属验收测试**那一步逐字——★ 2026-09-28 订正：原写 `check.sh:98`，**行号会烂**，按本仓口径改写成**步骤名**
+      本节该步确实执行 `t7`（由 `world-core/check.sh` 的 **③ 三条专属验收测试**那一步执行，命令逐字
       `cargo test --locked --test acceptance -- t1_ t2_ t7_`）。
 
 #### Scenario: 坏账本不得产出"看起来正常"的读模型

@@ -135,7 +135,7 @@ step "③c 其余测试二进制（**全量，不写死清单**——任何新�
 # `write_side`／`channel_bounds`／`projection_leaf`／`ontology_ext`／`trace_notice`／`cli`／`delivery`／`perf`）
 # **从不被出厂门禁执行**。⇒ "每条要求都要有会红的断言"这句话，会被"门禁不跑它"削掉一大半。
 # 本步**不写死清单**（写死就会烂）：跑整棵 `cargo test --locked`，新文件自动进闸。
-run_tail 6 "全量测试（含本批新增的全部断言）" cargo test --locked
+cargo test --locked 2>&1 | grep -E 'running [0-9]+ tests|test result:' | sed 's/^/  /'   # 与 ③／③b 同形：每个 target 的结果都进日志
 
 step "④ 投影与同源核对（REQ-F-018/019/020）"
 W() { "$BIN" --ontology "$SB/ontology.json" --ledger "$SB/ledger.jsonl" --policy "$SB/policy.json" "$@"; }
