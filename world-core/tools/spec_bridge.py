@@ -99,6 +99,36 @@ def j1_archive_review(repo):
     return bad
 
 
+def looks_like_location(tok):
+    """这个反引号 token 是不是**一个位置**（＝在声称"某处存在某物"）？
+
+    为什么需要这一层（2026-09-27 扩面到 delta 后一次照出的）：
+    判据② 的扫描面一扩到 delta，立刻报了 21 条"脚本不存在"，但逐条看全是**位置引用**与**行文强调**——
+    `world-core/src/gate.rs:44-48`（源码位置）、`risk`／`K-3`／`REQ-F-015`（标识符）、`:32`／`【未能校验】`（行文）。
+    这些**不是"声称某脚本存在"**，拿"脚本是否存在"去判它们是**判据用错了尺子**。
+    ⇒ 只对"长得像位置"的 token 追存在性：
+      ① 带路径分隔符：`world-core/...`、`openspec/...`
+      ② 带代码/文档后缀：`.rs`／`.py`／`.sh`／`.md`／`.json`／`.csv`／`.yaml`／`.yml`／`.toml`
+      ③ 带 `::`（`文件::函数` 形态）
+    其余一律按**行文**处置（不追存在性）。**delta 因此不必为迁就判据而改写**
+    （合并时立下的不变式是"delta 逐字节未动"）。
+    """
+    if "::" in tok:
+        return True
+    if "/" in tok or "\\" in tok:
+        return True
+    low = tok.lower()
+    return low.endswith((".rs", ".py", ".sh", ".md", ".json", ".csv", ".yaml", ".yml", ".toml"))
+
+
+def strip_line_suffix(tok):
+    """`world-core/src/gate.rs:44-48` ⇒ `world-core/src/gate.rs`（**行号是引用的一部分，不是路径**）。
+
+    只剥**末尾**的 `:数字` 或 `:数字-数字`；`path::fn` 形态不在此处理（它有 `::`，走 check_token 的形态 A）。
+    """
+    return re.sub(r":\d+(?:-\d+)?$", "", tok.strip())
+
+
 def check_token(repo, tok):
     tok = tok.strip()
     if "::" in tok:                                   # 形态 A：文件::函数名
@@ -110,7 +140,8 @@ def check_token(repo, tok):
         if re.search(r"\bfn\s+" + re.escape(fn.strip()) + r"\s*[(<]", src):
             return True, ""
         return False, "文件在，但函数不存在"
-    parts = tok.split()                               # 形态 B：脚本（可带 --self-test 等参数）
+    p = strip_line_suffix(tok)                        # 形态 B：路径（可带 :行号）／脚本（可带参数）
+    parts = p.split()
     if parts:
         f = resolve_src(repo, parts[0])
         if f is None:
@@ -120,22 +151,38 @@ def check_token(repo, tok):
 
 
 def j2_evidence(repo):
+    """② 证据存在性：证据行的 token 必须指向真实存在的函数/脚本。
+
+    **扫描面含 delta**（2026-09-27 扩）：`openspec/changes/**/specs/**/spec.md` 里的证据行
+    在**归档合并**时才会进主规格——只扫主规格等于**漏检一整片**，而且是在归档那一刻才红（太晚）。
+    实测：扩面前 delta 侧有 1 条无 token 的证据行（`fc-2026-002/specs/ledger-integrity/spec.md:189`），
+    当天不变红、合并后必红；已按同一口径改为 `- **证据（待补）**：`。
+    """
     bad = []
-    for spec in sorted((Path(repo) / "openspec" / "specs").rglob("spec.md")):
-        for i, line in enumerate(read_text(spec).splitlines(), 1):
-            m = EVIDENCE_RE.search(line)
-            if not m:
+    roots = [(Path(repo) / "openspec" / "specs", "spec.md")]
+    ch = Path(repo) / "openspec" / "changes"
+    if ch.is_dir():
+        roots.append((ch, "spec.md"))                   # delta：归档时会并入主规格 ⇒ 同一把尺子
+    for root, pat in roots:
+        for spec in sorted(root.rglob(pat)):
+            if "archive" in spec.parts:                 # 归档件自有历史口径，不追改
                 continue
-            toks = re.findall(r"`([^`]+)`", m.group(1))
-            if not toks:
-                bad.append("%s:%d —— 证据行里没有反引号包起来的 token。"
-                           "**若本条尚无断言，请改用 `- **证据（待补）**：` 并写明落点**——"
-                           "用「证据」这个标记而不给 token，形态上等于声称存在" % (rel(repo, spec), i))
-                continue
-            for tok in toks:
-                ok, why = check_token(repo, tok)
-                if not ok:
-                    bad.append("%s:%d —— `%s`：%s" % (rel(repo, spec), i, tok, why))
+            for i, line in enumerate(read_text(spec).splitlines(), 1):
+                m = EVIDENCE_RE.search(line)
+                if not m:
+                    continue
+                toks = re.findall(r"`([^`]+)`", m.group(1))
+                if not toks:
+                    bad.append("%s:%d —— 证据行里没有反引号包起来的 token。"
+                               "**若本条尚无断言，请改用 `- **证据（待补）**：` 并写明落点**——"
+                               "用「证据」这个标记而不给 token，形态上等于声称存在" % (rel(repo, spec), i))
+                    continue
+                for tok in toks:
+                    if not looks_like_location(tok):
+                        continue                        # 行文强调／标识符：不追存在性（见 looks_like_location）
+                    ok, why = check_token(repo, tok)
+                    if not ok:
+                        bad.append("%s:%d —— `%s`：%s" % (rel(repo, spec), i, tok, why))
     return bad
 
 
