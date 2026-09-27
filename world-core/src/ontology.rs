@@ -290,6 +290,12 @@ impl Ontology {
         self.required.clone()
     }
 
+    /// 信封里**可选**的格（`envelope.optional`）。与 [`Ontology::envelope_required`] 同源，
+    /// 供"逐格核对可读面"这类判据**从本体派生**清单用（别处不许手抄格名）。
+    pub fn envelope_optional(&self) -> Vec<String> {
+        self.optional.clone()
+    }
+
     /// **各家族已声明的必填格**（`families.<家族>.required`；出厂本体实测 `change` 4／`act` 3／`notice` 2）。
     ///
     /// 与 [`Ontology::envelope_required`] 同一用途（读模型侧的缺格判据）；同样只交**纯数据**

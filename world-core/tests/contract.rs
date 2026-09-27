@@ -2224,29 +2224,79 @@ fn c36_every_declared_envelope_cell_is_readable_from_some_read_view() {
         String::from_utf8(out.stdout).expect("stdout 是 UTF-8")
     };
 
-    // ① 逐条读事件 ⇒ `id`／`at`／`actor`／`flags` 四格都读得到
+    // ① **逐格从本体派生**（`required ∪ optional`）——**不手抄格名**（新加一格自动进判据）；
+    //    判据是**值**不是字样：把 `read` 的每一行**解析成 JSON**，与**账本那一行**逐键比。
+    //    （评审席的对抗探针正是这一条的证据：让 `read` 打印 `"actor":null`（键在、值毁）时，
+    //      "找字样"的写法仍然全绿——那是 skill §五「搜字样 ≠ 认结构」。）
+    let ont_obj = world_core::ontology::Ontology::load(&on).expect("加载本体");
+    let mut declared = ont_obj.envelope_required();
+    for f in ont_obj.envelope_optional() {
+        if !declared.contains(&f) {
+            declared.push(f);
+        }
+    }
     let raw = run(&["read"]);
-    for f in ["\"id\"", "\"at\"", "\"actor\"", "\"flags\""] {
+    let ev: Value = serde_json::from_str(raw.lines().next().expect("`read` 必须有输出"))
+        .expect("`read` 的首行必须是 JSON");
+    let disk: Value = serde_json::from_str(
+        fs::read_to_string(&lp)
+            .expect("读账本")
+            .lines()
+            .next()
+            .expect("账本必须有行"),
+    )
+    .expect("账本首行必须是 JSON");
+    // **前提**：必填格必须都在账本里（否则下面的"逐格比"是空的）
+    for f in &ont_obj.envelope_required() {
         assert!(
-            raw.contains(f),
-            "`read` 的输出里读不到信封格 {f} ⇒ 那一格**没有读法读得到**（`REQ-F-032` 的另一半不成立）"
+            disk.get(f).is_some(),
+            "账本里连必填格 `{f}` 都没有 ⇒ 本用例的逐格比对无从谈起"
         );
     }
-
-    // ② 投影头部 ⇒ `world` 读得到
-    let lang = run(&["project", "language"]);
+    let mut compared = 0usize;
+    for f in &declared {
+        if let Some(want) = disk.get(f) {
+            assert_eq!(
+                ev.get(f),
+                Some(want),
+                "`read` 里 `{f}` 的值与账本不一致（键在、值不对 ⇒ 读法退化），实得：{:?}",
+                ev.get(f)
+            );
+            compared += 1;
+        }
+    }
     assert!(
-        lang.contains("world="),
-        "投影头部里读不到 `world=` ⇒ 那一格没有读法读得到，实得首行：{}",
-        lang.lines().next().unwrap_or("")
+        compared >= ont_obj.envelope_required().len(),
+        "逐格比对只覆盖了 {compared} 格，少于必填格数 ⇒ 读法面没有查全"
     );
 
-    // ③ **取舍那一面**：这几格**不进** `state --json`（进了反而是层间混淆）
-    let st = run(&["state", "--json"]);
-    for f in ["\"actor\"", "\"flags\"", "\"at\""] {
-        assert!(
-            !st.contains(f),
-            "`state --json` 里出现了逐事件格 {f} ⇒ 读模型把**逐事件**的事实混进了**折叠产物**（那是层间混淆，不是覆盖）"
-        );
-    }
+    // ② 投影头部 ⇒ `world` 以**本体声明的那个真实值**露出（不是找 `world=` 字样）
+    let lang = run(&["project", "language"]);
+    let head = lang.lines().next().unwrap_or("");
+    assert!(
+        head.contains(&format!("world={}", ont_obj.world())),
+        "投影头部里读不到 `world={}`（本体的真值），实得首行：{head}",
+        ont_obj.world()
+    );
+
+    // ③ **取舍那一面**：`state --json` 的**顶层键集合恰为**这五个
+    //    （结构判据，不找字样：否则世界里真有一条名为 `actor` 的**路径**时会**假红**）
+    let st: Value =
+        serde_json::from_str(&run(&["state", "--json"])).expect("`state --json` 必须是 JSON");
+    let mut keys: Vec<String> = st
+        .as_object()
+        .expect("`state --json` 必须是对象")
+        .keys()
+        .cloned()
+        .collect();
+    keys.sort();
+    let mut want: Vec<String> = ["acts", "last_seq", "notices", "objects", "seen"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    want.sort();
+    assert_eq!(
+        keys, want,
+        "`state --json` 的顶层键集合不符 ⇒ 要么漏了状态面，要么把**逐事件格**混了进来（层间混淆）"
+    );
 }
