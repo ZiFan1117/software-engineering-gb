@@ -2117,6 +2117,22 @@ fn c35_the_ledger_alone_reproduces_the_same_state_elsewhere() {
         proc_a, proc_b,
         "**两个独立进程**、乙地只带账本：`state --json` 的输出必须逐字节相同"
     );
+    // ★ 2026-09-28（承评审席建议）：同样三条检查**也施加到 CLI 的输出** `proc_b` ——
+    // 这样"状态里带了本机路径/文件名"这一类，**⑤ 自己也抓得到**，
+    // 不必只靠下面那处"甲/乙两进程输出逐字节相同"的比对（评审席的变异 B 就是这一类）。
+    for (tag, s) in [
+        ("甲地目录", here_s.as_str()),
+        ("乙地目录", there_s.as_str()),
+    ] {
+        assert!(
+            !proc_b.contains(s),
+            "CLI 的 `state --json` 输出里出现了{tag} `{s}` ⇒ **本机路径漏进了输出**，实得：{proc_b}"
+        );
+    }
+    assert!(
+        !proc_b.contains("history.jsonl"),
+        "CLI 的 `state --json` 输出里出现了账本文件名 ⇒ **本机文件名漏进了输出**，实得：{proc_b}"
+    );
 
     // **毒化对照**：把甲地那份本机缓存改坏 ⇒ 甲地再跑，结果**必须不变**
     fs::write(&ckpt, b"{ \"poisoned\": true }").expect("毒化缓存");
@@ -2157,4 +2173,80 @@ fn c35_the_ledger_alone_reproduces_the_same_state_elsewhere() {
         state_a, state_t,
         "把账本里 `change` 的 `body.after` 翻了面，复算结果却**没变** ⇒ '相同'可能是'它根本没读账本'"
     );
+}
+
+// ── c36 ── **已声明的信封格，至少有一份读法读得到**（`REQ-F-032` 的另一半 / `1.1`）──────
+//
+// `c34` 管的是"类型符不符"，`c35` 管的是"历史带不带得走"，`h08` 管的是"缺格即拒"与"覆盖表承重"。
+// **本用例管的是**：法律声明的那几个信封格——`world` / `id` / `at` / `actor` / `flags`——
+// **每一格都有一份读法读得到**（书那句「每个已声明的字段至少有一份读法可读」）。
+//
+// 逐格的**可读面**（现取事实，不是推测）：
+// · `world` ⇒ **投影头部**（`project language` 的首行含 `world=`；见 `src/project/mod.rs::header_line`）；
+// · `id`／`at`／`actor`／`flags` ⇒ **逐条读事件**（CLI `read` 把账本行原样打印成 JSON Lines）。
+//
+// **同时钉住"取舍"那一面**：这几格**不进** `state --json`（读模型是**折叠产物**，
+// 世界状态按 `(主体, 路径)` 折叠 ⇒ 逐事件的 `id`／`at`／`actor`／`flags` 无处安放）。
+// 那是**取舍**，不是缺口 —— 所以本用例**既断言"读得到"，也断言"状态里没有"**，两句一起才说得清。
+#[test]
+fn c36_every_declared_envelope_cell_is_readable_from_some_read_view() {
+    let dir = tmpdir("c36");
+    let lp = dir.join("history.jsonl");
+    let on = ontology();
+    let po = policy();
+    {
+        let mut w = World::open(&on, &lp, &po).expect("开世界");
+        w.commit(
+            "change",
+            "world://user",
+            event::change_body("world://notice/n-1", "muted", json!(null), json!(true)),
+        )
+        .expect("change");
+    }
+    let bin = env!("CARGO_BIN_EXE_world-core");
+    let run = |args: &[&str]| -> String {
+        let out = Command::new(bin)
+            .arg("--ontology")
+            .arg(&on)
+            .arg("--ledger")
+            .arg(&lp)
+            .arg("--policy")
+            .arg(&po)
+            .args(args)
+            .output()
+            .expect("跑真二进制");
+        assert!(
+            out.status.success(),
+            "`{args:?}` 必须成功，实得 rc={:?}；stderr={}",
+            out.status.code(),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).expect("stdout 是 UTF-8")
+    };
+
+    // ① 逐条读事件 ⇒ `id`／`at`／`actor`／`flags` 四格都读得到
+    let raw = run(&["read"]);
+    for f in ["\"id\"", "\"at\"", "\"actor\"", "\"flags\""] {
+        assert!(
+            raw.contains(f),
+            "`read` 的输出里读不到信封格 {f} ⇒ 那一格**没有读法读得到**（`REQ-F-032` 的另一半不成立）"
+        );
+    }
+
+    // ② 投影头部 ⇒ `world` 读得到
+    let lang = run(&["project", "language"]);
+    assert!(
+        lang.contains("world="),
+        "投影头部里读不到 `world=` ⇒ 那一格没有读法读得到，实得首行：{}",
+        lang.lines().next().unwrap_or("")
+    );
+
+    // ③ **取舍那一面**：这几格**不进** `state --json`（进了反而是层间混淆）
+    let st = run(&["state", "--json"]);
+    for f in ["\"actor\"", "\"flags\"", "\"at\""] {
+        assert!(
+            !st.contains(f),
+            "`state --json` 里出现了逐事件格 {f} ⇒ 读模型把**逐事件**的事实混进了**折叠产物**（那是层间混淆，不是覆盖）"
+        );
+    }
 }
