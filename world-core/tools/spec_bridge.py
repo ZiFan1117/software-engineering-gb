@@ -702,6 +702,45 @@ def j13_secmap_freshness(repo):
     return bad
 
 
+def j15_doc_lists_match_reality(repo):
+    """⑮ 两份"清单表"必须 ≡ 实际（**双向**）：`WC-ST-001` 的测试件清单 ≡ `world-core/tests/*.rs`；
+    `WC-AT-001` 的步骤清单 ≡ `check.sh` 的 `step "…"` 首词。
+
+    为什么单列一条：那两份文档**自己登记过**这个缺口，逐字——
+    「**★ 这张表会漂（如实登记）**：本文档**不自带门禁**——新增一个测试文件而忘了改这张表，**没有任何判据会红**。
+    **要防这类漂移，得让门禁承担**（把「文档里的清单 ≡ 目录里的实际文件」做成一条会红的检查）——**今天没有这条判据**。」
+    实测（2026-09-28）：`WC-ST-001` 列 **9** 个测试件、实有 **13** 个（缺的四个**全是本批新增**）；
+    `WC-AT-001` 列 **11** 步、`check.sh` 实有 **13** 步（缺 `①b`／`③c`）。⇒ 本判据就是那份文档要的那条检查。
+
+    **★ 射程（如实写）**：只核「**清单 ≡ 实际**」，**不核**表里那些"这个文件测什么／这一步做什么"的描述对不对
+    ——那要人读。**双向**：文档多了也红（防"表里留着已经删掉的件"）。
+    """
+    import glob as _glob
+    bad = []
+    st = Path(repo) / "world-core" / "docs" / "S5-测试" / "WC-ST-001-v0.1.md"
+    tests_dir = Path(repo) / "world-core" / "tests"
+    if st.is_file() and tests_dir.is_dir():
+        text = st.read_text(encoding="utf-8")
+        listed = set(re.findall(r"`([a-z_]+\.rs)`", text))
+        actual = {os.path.basename(p) for p in _glob.glob(str(tests_dir / "*.rs"))}
+        for n in sorted(actual - listed):
+            bad.append("WC-ST-001-v0.1.md §一 —— 测试件 `%s` **在实际目录里、表里没有**（新增文件忘改表 ⇒ 本判据会红）" % n)
+        for n in sorted(listed - actual):
+            bad.append("WC-ST-001-v0.1.md §一 —— 表里列了 `%s`，**实际目录里没有**（删了文件忘改表）" % n)
+    at = Path(repo) / "world-core" / "docs" / "S6-验收" / "WC-AT-001-v0.1.md"
+    ck = Path(repo) / "world-core" / "check.sh"
+    if at.is_file() and ck.is_file():
+        a = at.read_text(encoding="utf-8")
+        c = ck.read_text(encoding="utf-8")
+        listed = set(re.findall(r"(?m)^\|\s*([①-⑨][a-z]?)\s*\|", a))
+        actual = set(re.findall(r'(?m)^step\s+"([①-⑨][a-z]?)\s', c))
+        for n in sorted(actual - listed):
+            bad.append("WC-AT-001-v0.1.md §二 —— 步骤 `%s` **在 `check.sh` 里有、表里没有**（加了一步忘改表）" % n)
+        for n in sorted(listed - actual):
+            bad.append("WC-AT-001-v0.1.md §二 —— 表里列了步骤 `%s`，**`check.sh` 里没有**" % n)
+    return bad
+
+
 JUDGMENTS = [
     ("① 归档硬前置（归档目录必须有 review.md）", j1_archive_review),
     ("② 证据存在性（证据行的函数/脚本必须真实存在）", j2_evidence),
@@ -717,6 +756,7 @@ JUDGMENTS = [
     ("⑪ `BRIDGE.md` 与生成器的当前输出逐字节一致（生成物不许手编）", j11_bridge_in_sync_with_generator),
     ("⑫ `specmap.json` 记录了当前生成器的内容哈希（生成物不许手编）", j12_specmap_generator_hash),
     ("⑬ `节对齐.md` 记录了当前来源坐标（生成物不许手编）", j13_secmap_freshness),
+    ("⑮ 两份文档的「清单表」≡ 实际（双向）", j15_doc_lists_match_reality),
 ]
 
 
@@ -801,6 +841,22 @@ def build_sandbox(root):
     _gen_dst.parent.mkdir(parents=True, exist_ok=True)
     _gen_dst.write_bytes(_gen_src.read_bytes())            # 字节复制（哈希才对得上）
     _sha = hashlib.sha256(_gen_dst.read_bytes()).hexdigest()
+    # ★ 判据⑮ 的沙盒件：让"文档清单"与"实际"一致（表里的件都在、步骤都在）
+    _t = Path(root) / "world-core" / "tests"
+    _t.mkdir(parents=True, exist_ok=True)
+    for _n in ("acceptance.rs", "contract.rs"):
+        (_t / _n).write_text("// 沙盒\n", encoding="utf-8", newline="\n")
+    # ⚠ 沙盒是**共享**的（别的判据也会往里放件，例如 `tests/t.rs`）⇒ 这两份表必须
+    #   **按沙盒里实际有什么来生成**，否则"对照15n"会被别的判据的件误伤。
+    _st = Path(root) / "world-core" / "docs" / "S5-测试" / "WC-ST-001-v0.1.md"
+    _st.parent.mkdir(parents=True, exist_ok=True)
+    _names = sorted(p.name for p in _t.glob("*.rs"))
+    _st.write_text("".join("| `%s` | 沙盒 |\n" % n for n in _names), encoding="utf-8", newline="\n")
+    _at = Path(root) / "world-core" / "docs" / "S6-验收" / "WC-AT-001-v0.1.md"
+    _at.parent.mkdir(parents=True, exist_ok=True)
+    _ck = Path(root) / "world-core" / "check.sh"
+    _ck.write_text('step "① 构建"\n', encoding="utf-8", newline="\n")
+    _at.write_text("| ① | 构建 | rc=0 |\n", encoding="utf-8", newline="\n")
     _art = Path(root) / "openspec" / "specmap.json"
     _art.write_text(json.dumps({"caps": [], "_generator_sha256": _sha},
                                ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
@@ -1028,6 +1084,17 @@ def self_test():
 
         # 对照 13n：**不该红的** —— 沙盒里那份图的坐标与来源是对得上的
         _green(12, "13n", "图的来源坐标与当前来源一致")
+
+        # ── 反例 15：往 `WC-ST-001` 的表里**删一行**（文档与实际不再一致）──
+        st15 = Path(tmp) / "world-core/docs/S5-测试/WC-ST-001-v0.1.md"
+        back15 = st15.read_text(encoding="utf-8")
+        st15.write_text(re.sub(r"(?m)^\| `[a-z_]+\.rs` \|[^\n]*\n", "", back15, count=1),
+                        encoding="utf-8", newline="\n")
+        _red(13, "⑮", "文档的清单表少了一件（与实际不再一致）")
+        st15.write_text(back15, encoding="utf-8", newline="\n")
+
+        # 对照 15n：**不该红的** —— 沙盒里那两份表与实际一致
+        _green(13, "15n", "清单与实际一致")
 
         # 反面自检：**每条判据都必须有反例**（没有反例的那条＝装饰）
         missing = [jname(i) for i in range(len(JUDGMENTS)) if i not in covered]
