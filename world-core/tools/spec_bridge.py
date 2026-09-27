@@ -302,10 +302,18 @@ def j6_archived_review_signed(repo):
             bad.append("%s —— 结论 =「%s」：**未签**（已签应为 %s 之一）；"
                        "归档前必须签，缺签一律回退补签" % (rel(repo, rv), verdict, "/".join(SIGNED)))
             continue
-        m = re.search(r"批准人[^|\n]*\|([^|\n]*)", text)
-        who = (m.group(1).strip() if m else "")
-        if (not who) or ("待" in who) or ("补姓名" in who) or who in ("—", "-", "无"):
-            bad.append("%s —— 结论已签，但**批准人栏是空的或占位**（实得：%s）" % (rel(repo, rv), who or "空"))
+        # ★ 2026-09-28 修：原来取**文件里第一处**「批准人」字样（不管它是不是**栏位**），
+        #   于是正文里提一句"批准人"就会把它带到错误位置、捕到空 ⇒ **误判**。
+        #   现在只认**栏位形态** `| **批准人** | 值 |`，且**列出全部栏位逐一检查**。
+        cells = re.findall(r"\|\s*\*\*批准人\*\*\s*\|([^|\n]*)", text)
+        if not cells:
+            bad.append("%s —— 结论已签，但**找不到「批准人」栏位**（应为 `| **批准人** | 姓名 |`）"
+                       % rel(repo, rv))
+            continue
+        for cell in cells:
+            who = cell.strip().strip("*\u3000 ")
+            if (not who) or ("待" in who) or ("补姓名" in who) or who in ("—", "-", "无"):
+                bad.append("%s —— 结论已签，但**批准人栏是空的或占位**（实得：%s）" % (rel(repo, rv), who or "空"))
     return bad
 
 
