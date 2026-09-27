@@ -473,7 +473,17 @@
        "when": "一个**不在允许名单**的主体提交带保留前缀的通告",
        "then": "被拒，且门禁写下的通告里含被拒内容的指纹字段",
        "ev": [
-        "tests/contract.rs::c23_notice_with_reserved_prefix_is_refused_for_outsiders"
+        "tests/contract.rs::c23_notice_with_reserved_prefix_is_refused_for_outsiders",
+        "world-core/tests/contract.rs:1291",
+        "c23_notice_with_reserved_prefix_is_refused_for_outsiders",
+        ":1316",
+        "refused",
+        ":1322-1332",
+        ".expect(\"保留前缀拒绝流水同样必须带 ",
+        " 字段（D-14）\")",
+        "assert!(refused.starts_with(\"fnv1a64:\"), …)",
+        "fc-2026-004",
+        "refused"
        ]
       }
      ]
@@ -909,7 +919,12 @@
        "line": 186,
        "when": "在修复落地之前，对一份无链账本做一次合法 `append` 后再打开",
        "then": "打开失败并报 `MixedChain` —— 本断言证明的是**边界的真实形状**，不是实现缺陷；",
-       "ev": []
+       "ev": [
+        "world-core/tests/contract.rs:1648",
+        "c30_k3_boundary_chainless_ledger_plus_one_append_reports_mixed_chain",
+        "#[test]",
+        "world-core/docs/S0-立项/WC-SCMP-001-v0.1.md"
+       ]
       }
      ]
     },
@@ -1334,7 +1349,15 @@
        "line": 100,
        "when": "查阅 CLI 的用法串与分发分支",
        "then": "其中列出 `checkpoint write` / `checkpoint verify` / `checkpoint resume` 三条子命令，",
-       "ev": []
+       "ev": [
+        "world-core/tests/cli.rs:615",
+        "cli15_usage_lists_three_checkpoint_subcommands",
+        "src/checkpoint.rs",
+        "W-03",
+        "P-09",
+        "world-core/src/main.rs",
+        "world-core/src/main.rs"
+       ]
       },
       {
        "title": "证据链的机械门禁不覆盖 openspec",
@@ -3276,7 +3299,7 @@
   "caps": 9,
   "reqs": 48,
   "scns": 85,
-  "evs": 125,
+  "evs": 146,
   "srs": 41,
   "judges": 17,
   "booksecs": 46

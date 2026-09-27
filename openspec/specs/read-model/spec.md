@@ -102,7 +102,7 @@ SHALL NOT 被表述为"v1 CLI 从不读快照"。
 - **WHEN** 查阅 CLI 的用法串与分发分支
 - **THEN** 其中列出 `checkpoint write` / `checkpoint verify` / `checkpoint resume` 三条子命令，
       且 `checkpoint` 分支在 CLI 分发表里有对应项
-- **证据（待补）**：**本条尚无断言**（列进 tasks）——实现侧为 `world-core/src/main.rs`:28-30 与 `world-core/src/main.rs`:153；
+- **证据**：`world-core/tests/cli.rs:615` 的 **`cli15_usage_lists_three_checkpoint_subcommands`**（★ 2026-09-28 订正：本条原写「**本条尚无断言**（列进 tasks）」——**那句今天不成立**，该用例 live 在册、其头注逐字「为什么单列一条：`src/checkpoint.rs` 有「整册生产零调用点」的历史（`W-03` / `P-09`）」）——实现侧为 `world-core/src/main.rs`:28-30 与 `world-core/src/main.rs`:153；
       三份仍写相反陈述的受控文档为 `world-core/docs/S4-实现/WC-UT-001-v0.1.md:54`、
       `world-core/docs/S1-需求/WC-SRS-001-v0.1.md:921`、`world-core/docs/S1-需求/WC-RTM-001.csv` 第 22 行。
 

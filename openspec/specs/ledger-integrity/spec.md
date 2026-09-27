@@ -178,7 +178,7 @@ SHALL NOT 修改或删除已经写下的事件。
 
 - **WHEN** 对一份无链（v1）账本做一次合法 `append`，再重新打开该账本
 - **THEN** 打开成功，`last_seq` 为 2，且账本未变成"部分有链、部分没有"
-- **证据（待补）**：**本条尚无断言**（列进 tasks）——本条是 K-3 的**修复判据**，实现侧今天为 `world-core/src/ledger.rs`:506
+- **证据（★ 2026-09-28 订正：原写「本条尚无断言」——**那句与实物不符**）**：**案例在册、但被 `#[ignore]` 钉住**——`world-core/tests/contract.rs:1615` 的 `c29_k3_chainless_ledger_survives_one_legal_append`，其上一行逐字`#[ignore = "K-3 未修（src/ledger.rs:146 的 chained 只写不读）：无链账本 append 一条后被判 MixedChain、世界拒启；修复落地后去掉本 ignore 即应转绿"]` ⇒ **它今天不是"没有断言"，是"有一条钉住缺口的、去掉 ignore 就该红的断言"**。本条是 K-3 的**修复判据**，实现侧今天为 `world-core/src/ledger.rs`:506
       （chained 只读不用）与 `world-core/src/lib.rs`:105（load_chain()?; 丢弃返回值）。
       **⚠ 且修复本身不属本 change**：本 change 只交规格文本，`world-core/` 一行不改
       （`design.md` §排除清单第 2 条）；断言先写、先证红，与修复同批另立 change。
@@ -188,7 +188,7 @@ SHALL NOT 修改或删除已经写下的事件。
 - **WHEN** 在修复落地之前，对一份无链账本做一次合法 `append` 后再打开
 - **THEN** 打开失败并报 `MixedChain` —— 本断言证明的是**边界的真实形状**，不是实现缺陷；
       它把"v1 兼容"限定为"**只读兼容**"，SHALL NOT 被读成"可平滑升级"
-- **证据（待补）**：**本条尚无断言**（列进 tasks）——缺陷出处为 `world-core/docs/S0-立项/WC-SCMP-001-v0.1.md`:2537（K-3）与 :2541（后果链）。
+- **证据**：`world-core/tests/contract.rs:1648` 的 **`c30_k3_boundary_chainless_ledger_plus_one_append_reports_mixed_chain`**（**live**，其上一行是 `#[test]`；其头注逐字「判据不止比错误串：还要**逐行看账本文件**，确认「半链」这个机制成立」）（★ 2026-09-28 订正：本条原写「**本条尚无断言**（列进 tasks）」——**那句今天不成立**）——缺陷出处为 `world-core/docs/S0-立项/WC-SCMP-001-v0.1.md`:2537（K-3）与 :2541（后果链）。
 
 ### Requirement: 承诺与证据的绑定强度
 

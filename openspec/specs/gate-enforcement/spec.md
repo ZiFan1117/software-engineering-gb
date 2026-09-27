@@ -86,7 +86,7 @@
       走的是**不可逆加摩擦**路径（`:1157` 逐字 `// 触发一条真实的内核裁决流水：agent 请求不可逆动作 ⇒ 加摩擦`，
       `:1167` 逐字 `.find(|ev| ev["body"]["type"] == json!("gate.awaiting-approval"))`）。
       ⇒ "保留前缀被拒路径也要带 `refused` 指纹"这一条今天**没有断言**（列进 tasks）。
-- **证据（待补）**：**本条尚无断言**（列进 tasks）——`refused` 指纹的落点是
+- **证据**：上面那条结论**已被推翻**（★ 2026-09-28 订正）：`world-core/tests/contract.rs:1291` 的 `c23_notice_with_reserved_prefix_is_refused_for_outsiders` 里**已经补上了这条断言**——逐字见 `:1316` 的注释「判据③（任务 3.2）：**这条路径写下的流水也带 `refused` 指纹**」与 `:1322-1332` 的 `.expect("保留前缀拒绝流水同样必须带 `refused` 字段（D-14）")` ＋ `assert!(refused.starts_with("fnv1a64:"), …)`（**这正是 `fc-2026-004` 的任务 3.2 补的那条**）⇒ 原文那句「本条尚无断言」**今天不成立**。`refused` 指纹的落点是
       `world-core/src/lib.rs::gate_refusal`（`:436` 逐字 `let refused = Self::refused_digest(actor, act_body);`，
       `:449` 逐字 `"refused": refused,`）；
       今天的两条 `c23` 用例一条只查错误码与理由、一条走的是不可逆加摩擦路径，都不查该指纹。
