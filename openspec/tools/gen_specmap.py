@@ -19,7 +19,12 @@ SPECS = os.path.join(REPO, "openspec", "specs")
 THEORY = os.path.join(REPO, "world-core", "docs", "理论")
 SRS = os.path.join(REPO, "world-core", "docs", "S1-需求", "WC-SRS-001-v0.1.md")
 TESTS = os.path.join(REPO, "world-core", "tests")
-OUT = os.path.join(REPO, "openspec", "specmap.json")
+OUT = os.environ.get("SPECMAP_OUT") or os.path.join(REPO, "openspec", "specmap.json")
+# ↑ 可用 `SPECMAP_OUT` 覆盖输出路径（判据⑫ 将来若要改成"重跑生成器逐字节比对"，靠它把产物写到临时目录）
+GEN_SELF = os.path.join(REPO, "openspec", "tools", "gen_specmap.py")
+with io.open(GEN_SELF, "rb") as _f:
+    _GEN_SHA = __import__("hashlib").sha256(_f.read()).hexdigest()
+
 
 def rl(p):
     with io.open(p, "r", encoding="utf-8") as f:
@@ -378,6 +383,7 @@ for v in REQ_MAP.values():
 gaps_uncovered_srs = [v for k, v in sorted(srs.items()) if v["status"] in ("red", "half") and k not in mapped_srs]
 
 data = {
+ "_generator_sha256": _GEN_SHA,   # 判据⑫ 核它（生成器变了而产物没重生成 ⇒ 红）
     "generated": "2026-09-27",
     "caps": caps, "srs": list(srs.values()), "chapters": chapters, "judges": judges,
     "tests": tests, "req_map": REQ_MAP, "cap_book": CAP_BOOK, "book_gaps": BOOK_GAPS,

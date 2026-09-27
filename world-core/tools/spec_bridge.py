@@ -16,7 +16,7 @@ OpenSpec 的 `validate` 只判**形态**（结构、Scenario 个数、delta 语�
 而这些恰恰是 `opsx-swe-gb` 的文字里承诺过的。**一个从不失败的检查不是装饰，是假证。**
 本脚本就是它们的**执行者**：任一条不成立即非零退出。
 
-判据（与 `specs/spec-governance/spec.md` 逐条对应）——**条数以 `JUDGMENTS` 为准，现 11 条**
+判据（与 `specs/spec-governance/spec.md` 逐条对应）——**条数以 `JUDGMENTS` 为准，条数由 `JUDGMENTS` 长度现算——**不写死**（写死过一次：加判据时这里就烂了）**
 -------------------------------------------------------
 ① 归档硬前置      每个 `openspec/changes/archive/*/` 必须有非空 `review.md`
 ② 证据存在性      `openspec/specs/**/spec.md` **与 delta** 里每条 `- **证据**：<token>` 的
@@ -95,7 +95,7 @@ def resolve_src(repo, p):
     return None
 
 
-# ────────────────────── 判据（条数以 `JUDGMENTS` 为准，现 11 条）──────────────────────
+# ────────────────────── 判据（条数以 `JUDGMENTS` 为准，条数由 `JUDGMENTS` 长度现算——**不写死**（写死过一次：加判据时这里就烂了））──────────────────────
 def j1_archive_review(repo):
     bad = []
     arch = Path(repo) / "openspec" / "changes" / "archive"
@@ -630,6 +630,41 @@ def j11_bridge_in_sync_with_generator(repo):
             % (BRIDGE_REL, BRIDGE_GEN_REL, _bridge_diff_hint(want, got))]
 
 
+def j12_specmap_generator_hash(repo):
+    """⑫ `openspec/specmap.json` 必须记录**它自己生成器的当前内容哈希**。
+
+    为什么单列一条：skill §九「生成物不许手编」——`BRIDGE.md` 有判据⑪ 盯着（重跑生成器逐字节比），
+    而 `specmap.json`（**149 KB、被 8 处引用**）**此前没有任何判据**；实测它的生成链原本在**仓外**、
+    产物还写在仓外，搬进仓内后一度与生成器脱节（`chapters` 7→1、`judges` 17→0 的**静默退化**）。
+    ⇒ 本条是它今天的执行者。
+
+    **★ 本判据的射程（如实写，不假装管得更多）**：它抓的是「**生成器改了、产物没重生成**」。
+    **它抓不到**「产物被手工改过数据」——那需要**重跑生成器逐字节比对**（判据⑪ 的强形态），
+    而生成器读四类输入（`openspec/specs/**`、`WC-SRS-001`、书《合订本》、`world-core/tests/**`），
+    在 `--self-test` 的沙盒里供不齐、且解析器在最小输入上不保证不崩。
+    ⇒ 强形态**登记为后续可加强项**（生成器已支持 `SPECMAP_OUT`，把产物写临时目录即可比对），**今天不做，且不冒充做了**。
+    """
+    art = Path(repo) / "openspec" / "specmap.json"
+    gen = Path(repo) / "openspec" / "tools" / "gen_specmap.py"
+    if not art.is_file():
+        return ["openspec/specmap.json —— 文件不存在（生成物缺件）"]
+    if not gen.is_file():
+        return ["openspec/tools/gen_specmap.py —— 生成器不在仓内（skill §九：**「闸在版本控制之外」等于没有闸**）"]
+    try:
+        doc = json.loads(art.read_text(encoding="utf-8"))
+    except Exception as e:
+        return ["openspec/specmap.json —— 读不出 JSON（%r）；**读不到＝失败**" % e]
+    want = hashlib.sha256(gen.read_bytes()).hexdigest()
+    got = doc.get("_generator_sha256")
+    if not got:
+        return ["openspec/specmap.json —— 没记录 `_generator_sha256` ⇒ **无法判定它是不是当前生成器的输出**；"
+                "跑 `python openspec/tools/gen_specmap.py` 重生成（**它是生成物，不许手改**）"]
+    if got != want:
+        return ["openspec/specmap.json —— 记录的生成器哈希 `%s…` 与当前 `openspec/tools/gen_specmap.py` 的 `%s…` **不一致** ⇒ "
+                "**生成器改过而产物没重生成**；跑 `python openspec/tools/gen_specmap.py` 重生成" % (got[:12], want[:12])]
+    return []
+
+
 JUDGMENTS = [
     ("① 归档硬前置（归档目录必须有 review.md）", j1_archive_review),
     ("② 证据存在性（证据行的函数/脚本必须真实存在）", j2_evidence),
@@ -643,6 +678,7 @@ JUDGMENTS = [
     ("⑨ 规格正文无改因块（**主规格 ＋ delta**；改因归该 change 的 `design.md`／`audit.md`）", j9_no_rationale_in_specs),
     ("⑩ ADDED 标题不与主规格撞车（撞了该 change 永远归不了档）", j10_delta_added_not_colliding),
     ("⑪ `BRIDGE.md` 与生成器的当前输出逐字节一致（生成物不许手编）", j11_bridge_in_sync_with_generator),
+    ("⑫ `specmap.json` 记录了当前生成器的内容哈希（生成物不许手编）", j12_specmap_generator_hash),
 ]
 
 
@@ -718,6 +754,18 @@ def build_sandbox(root):
         p = Path(root) / relp
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8", newline="\n")
+    # ★ 判据⑫ 的沙盒件：把**仓内真生成器**字节复制进去，并造一份「已同步」的 `specmap.json`
+    #   （哈希＝沙盒里那份生成器的真实哈希 ⇒ 正控应当全绿）
+    #   路径：本文件在 `world-core/tools/` ⇒ 仓根＝上两级；生成器在 `<仓根>/openspec/tools/gen_specmap.py`
+    _repo = Path(__file__).resolve().parent.parent.parent
+    _gen_src = _repo / "openspec" / "tools" / "gen_specmap.py"
+    _gen_dst = Path(root) / "openspec" / "tools" / "gen_specmap.py"
+    _gen_dst.parent.mkdir(parents=True, exist_ok=True)
+    _gen_dst.write_bytes(_gen_src.read_bytes())            # 字节复制（哈希才对得上）
+    _sha = hashlib.sha256(_gen_dst.read_bytes()).hexdigest()
+    _art = Path(root) / "openspec" / "specmap.json"
+    _art.write_text(json.dumps({"caps": [], "_generator_sha256": _sha},
+                               ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
 
 
 def self_test():
@@ -906,6 +954,18 @@ def self_test():
         br11.write_text(backup11 + "\n（手编：这一行不是生成器产出的）\n", encoding="utf-8", newline="\n")
         _red(10, "⑪", "`BRIDGE.md` 被手编（与生成器当前输出不同）")
         br11.write_text(backup11, encoding="utf-8", newline="\n")
+
+        # ── 反例 12：生成器改了、产物没重生成 —— 把产物里记录的生成器哈希改掉 ──
+        sp12 = Path(tmp) / "openspec/specmap.json"
+        backup12 = sp12.read_text(encoding="utf-8")
+        _d12 = json.loads(backup12)
+        _d12["_generator_sha256"] = "0" * 64
+        sp12.write_text(json.dumps(_d12, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+        _red(11, "⑫", "产物记录的生成器哈希与当前生成器不一致（＝改了生成器没重生成）")
+        sp12.write_text(backup12, encoding="utf-8", newline="\n")
+
+        # 对照 12：**不该红的** —— 沙盒里那份产物与生成器是同步的（哈希一致）
+        _green(11, "12n", "产物与生成器同步（哈希一致）")
 
         # 反面自检：**每条判据都必须有反例**（没有反例的那条＝装饰）
         missing = [jname(i) for i in range(len(JUDGMENTS)) if i not in covered]
