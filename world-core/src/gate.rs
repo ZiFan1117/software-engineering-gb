@@ -208,7 +208,9 @@ fn pattern_matches(pattern: &str, value: &str) -> bool {
 ///    所以和策略一样，被管者不得能改（否则改清单就能把世界弄成起不来，或把互校糊过去）。
 /// 3. 坏清单（非法 JSON、缺字段、非法分级）**即拒启**——由 `Manifest::load_dir` 报错，
 ///    本函数不改写它的错误码。
-fn load_carrier_manifests(policy_path: &Path) -> Result<(CarrierManifest, Option<PathBuf>), String> {
+fn load_carrier_manifests(
+    policy_path: &Path,
+) -> Result<(CarrierManifest, Option<PathBuf>), String> {
     let dir = policy_path
         .parent()
         .unwrap_or_else(|| Path::new("."))
@@ -730,7 +732,10 @@ mod unit {
     #[test]
     fn friction_is_decided_by_the_action_not_the_actor() {
         let p = test_policy();
-        let reversible = p.verdict("world://user", &json!({"capability": "notice.mute", "verb": "do"}));
+        let reversible = p.verdict(
+            "world://user",
+            &json!({"capability": "notice.mute", "verb": "do"}),
+        );
         assert_eq!(reversible.decision, Decision::Allow);
         assert!(
             reversible.friction.is_none(),

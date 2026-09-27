@@ -118,7 +118,12 @@ fn b02_undeclared_field_is_refused_and_nothing_lands() {
         .commit(
             "change",
             "world://user",
-            event::change_body("world://notice/n-1", "never_declared_field", json!(null), json!("y")),
+            event::change_body(
+                "world://notice/n-1",
+                "never_declared_field",
+                json!(null),
+                json!("y"),
+            ),
         )
         .expect_err("未声明的字段必须被拒");
 

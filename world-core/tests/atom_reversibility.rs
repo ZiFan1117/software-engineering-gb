@@ -133,9 +133,10 @@ fn a01_conflicting_reversibility_refuses_to_start() {
     write_manifest(&d, "ledger.compact", "low", "never", "never");
 
     let lp = d.join("ledger.jsonl");
+    // ⚠ 用 `expect_err` 而不是 `.err().expect(…)`：后者会触发 clippy 的 `err_expect`
+    //   （`cargo clippy --all-targets -- -D warnings` 下是硬错，smoke 作业会因此变红）。
     let e = World::open(&factory_ontology(), &lp, &pol)
-        .err()
-        .expect("两处配置冲突时必须拒绝启动，实得：启动成功");
+        .expect_err("两处配置冲突时必须拒绝启动，实得：启动成功");
 
     assert!(
         e.contains("ext.world.Gate.ReversibilityMismatch"),

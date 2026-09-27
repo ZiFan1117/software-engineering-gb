@@ -109,8 +109,13 @@ jobs:
           echo "$out" | grep -q READY
           # ── 新账本必须带摘要链（WC-SCMP-001 变更请求台账 · WC-CR-003）──
           # 此前只有 VM 侧的 check.sh 在盯这件事；CI 也盯上，它才真正是被强制的。
+          # ⚠ 写进世界的东西**必须在出厂本体里声明过**（书 §5.3「声明以外的东西不许落账」；
+          #   执行者 `src/ontology.rs::check_concepts`）。本行原写 `world://ci/probe` ＋ `p`——
+          #   两个名字都没声明过 ⇒ append rc=2，紧接着的 `grep -q '有摘要链'` 必失败（**CI 的 smoke 作业曾因此常红**）。
+          #   改成已声明的格子（`notice.muted` 是 `bool`，故 `after` 取 `true`）；
+          #   这一步要的只是「写一条 → 断言账本带链 → `--require-chain` 过」，判据强度不变。
           cargo run --quiet -- --ledger ci-smoke.jsonl append change \
-            '{"subject":"world://ci/probe","path":"p","before":null,"after":1}' > /dev/null
+            '{"subject":"world://notice/probe","path":"muted","before":null,"after":true}' > /dev/null
           out2=$(cargo run --quiet -- --ledger ci-smoke.jsonl check)
           echo "$out2"
           echo "$out2" | grep -q '有摘要链' || { echo "::error::新账本未带摘要链（WC-SCMP-001 变更请求台账 · WC-CR-003）"; exit 1; }
