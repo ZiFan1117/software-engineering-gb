@@ -741,6 +741,45 @@ def j15_doc_lists_match_reality(repo):
     return bad
 
 
+def j14_judges_all_claimed(repo):
+    """⑭ 书 §5.6 的**每一行判据**都必须在仓内**有人认领**。
+
+    为什么单列一条：`specmap.json` 里的 `judges`（书 §5.6 那 17 行）此前**没有逐行消费者**——
+    `rg -n 'judges' --glob '!openspec/specmap.json'` 只回生成器自身与 `spec_bridge.py` 的一句叙述
+    ⇒ **某一行在项目侧的账目消失了，没有任何判据会变红**（见 `openspec/BOOK/节落点/第五章.md` 记的"三处缺"）。
+
+    认领处（三处任一即可）：`openspec/BOOK/节落点/第五章.md` ／ `world-core/docs/S1-需求/WC-SRS-001-v0.1.md`
+    ／ 在役 `openspec/changes/cover-*/tasks.md`。
+
+    **★ 射程（如实写）**：它只核「**这一行有没有人认领**」（按**书行号**在某处出现），
+    **不核**「认领的内容对不对、落点是不是真的」——那要人读。**别把它读成"5.6 已逐项对齐"**。
+    """
+    sm = Path(repo) / "openspec" / "specmap.json"
+    if not sm.is_file():
+        return ["openspec/specmap.json —— 文件不存在（判据⑫ 已管，此处不重复报）"]
+    try:
+        doc = json.loads(sm.read_text(encoding="utf-8"))
+    except Exception as e:
+        return ["openspec/specmap.json —— 读不出 JSON（%r）" % e]
+    claims = [Path(repo) / "openspec" / "BOOK" / "节落点" / "第五章.md",
+              Path(repo) / "world-core" / "docs" / "S1-需求" / "WC-SRS-001-v0.1.md"]
+    claims += sorted((Path(repo) / "openspec" / "changes").glob("cover-*/tasks.md"))
+    texts = [(p, p.read_text(encoding="utf-8", errors="replace")) for p in claims if p.is_file()]
+    if not texts:
+        return ["书 §5.6 的判据**没有任何认领处**：`节落点/第五章.md`／`WC-SRS-001`／在役 `cover-*/tasks.md` 都不在"]
+    bad = []
+    for j in doc.get("judges", []):
+        ln = str(j.get("line", ""))
+        sec = j.get("sec", "?")
+        if not ln:
+            bad.append("judges 里 sec=%s 的那行**没有书行号** ⇒ 无从认领" % sec)
+            continue
+        if not any(re.search(r"[:：`\s]%s\b" % ln, t) for _, t in texts):
+            bad.append("书 §5.6 的 `%s`（合订本 `:%s`）**在仓内没人认领** ⇒ 写进 "
+                       "`openspec/BOOK/节落点/第五章.md`（或说明它为何不在本项目范围内）" % (sec, ln))
+    return bad
+
+
 JUDGMENTS = [
     ("① 归档硬前置（归档目录必须有 review.md）", j1_archive_review),
     ("② 证据存在性（证据行的函数/脚本必须真实存在）", j2_evidence),
@@ -757,6 +796,7 @@ JUDGMENTS = [
     ("⑫ `specmap.json` 记录了当前生成器的内容哈希（生成物不许手编）", j12_specmap_generator_hash),
     ("⑬ `节对齐.md` 记录了当前来源坐标（生成物不许手编）", j13_secmap_freshness),
     ("⑮ 两份文档的「清单表」≡ 实际（双向）", j15_doc_lists_match_reality),
+    ("⑭ 书 §5.6 的每一行判据都有人认领", j14_judges_all_claimed),
 ]
 
 
@@ -857,9 +897,16 @@ def build_sandbox(root):
     _ck = Path(root) / "world-core" / "check.sh"
     _ck.write_text('step "① 构建"\n', encoding="utf-8", newline="\n")
     _at.write_text("| ① | 构建 | rc=0 |\n", encoding="utf-8", newline="\n")
+    # ★ 判据⑭ 的沙盒件：让"认领表"覆盖沙盒 specmap 里的每一行（行号取自沙盒本身 ⇒ 正控绿）
+    _j14 = Path(root) / "openspec" / "BOOK" / "节落点" / "第五章.md"
+    _j14.parent.mkdir(parents=True, exist_ok=True)
+    _j14.write_text("| 行 | 认领 |\n|---|---|\n| 733 | 沙盒 |\n| 734 | 沙盒 |\n",
+                    encoding="utf-8", newline="\n")
     _art = Path(root) / "openspec" / "specmap.json"
-    _art.write_text(json.dumps({"caps": [], "_generator_sha256": _sha},
-                               ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+    _art.write_text(json.dumps({"caps": [], "_generator_sha256": _sha,
+                               # ★ 判据⑭ 要查 `judges` ⇒ 沙盒这份必须带（且与"认领表"的行号配套）
+                               "judges": [{"sec": "5.1", "line": 733}, {"sec": "5.2", "line": 734}]},
+                              ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
     # ★ 判据⑬ 的沙盒件（SANDBOX 节对齐）：一份"来源坐标对得上"的 41 节图 ⇒ 正控应绿
     _sm = Path(root) / "openspec" / "specmap.json"
     _sm_sha = hashlib.sha256(_sm.read_bytes()).hexdigest()
@@ -1095,6 +1142,16 @@ def self_test():
 
         # 对照 15n：**不该红的** —— 沙盒里那两份表与实际一致
         _green(13, "15n", "清单与实际一致")
+
+        # ── 反例 14：把某一行的"认领"抹掉（改掉书行号）⇒ 判据⑭ 必须红 ──
+        j14 = Path(tmp) / "openspec/BOOK/节落点/第五章.md"
+        back14 = j14.read_text(encoding="utf-8")
+        j14.write_text(re.sub(r"733", "99999", back14), encoding="utf-8", newline="\n")
+        _red(14, "⑭", "某行判据在仓内没人认领（书行号被抹掉）")
+        j14.write_text(back14, encoding="utf-8", newline="\n")
+
+        # 对照 14n：**不该红的** —— 沙盒里那份"认领表"覆盖了沙盒 specmap 的那些行
+        _green(14, "14n", "每行判据都有人认领")
 
         # 反面自检：**每条判据都必须有反例**（没有反例的那条＝装饰）
         missing = [jname(i) for i in range(len(JUDGMENTS)) if i not in covered]
