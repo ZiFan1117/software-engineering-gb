@@ -45,9 +45,15 @@
 
 ## 5. 归档
 
-- [ ] 5.1 归档本 change，使 6 份 delta 合并为 `openspec/specs/` 下的主规格
-- [ ] 5.2 归档后跑 `openspec list --specs` 确认 6 条能力在册
-- [ ] 5.3 提交（`git commit`），提交信息写明基线源自 `61c95b0` 与 VM 实跑结论
+- [x] 5.1 归档本 change，使 6 份 delta 合并为 `openspec/specs/` 下的主规格
+      → 首次归档时 delta 已正确合并（重跑时 CLI 自报 `Specs already in sync; no files changed`），
+      但"移入 `archive/`"这一步被一个**陈旧归档锁**挡住了
+      （`openspec/changes/archive/.openspec-archive.lock` 里的 pid 14792 早已不存在）。
+      删锁重跑后归档完成：`archived as '2026-09-27-baseline-verified-doctrine'`。
+- [x] 5.2 归档后跑 `openspec list --specs` 确认 6 条能力在册
+      → `channel-identity 1 / envelope-validation 5 / gate-enforcement 5 / ledger-integrity 6 / projections 3 / read-model 3`
+- [x] 5.3 提交（`git commit`），提交信息写明基线源自 `61c95b0` 与 VM 实跑结论
+      → `ef2c9a0`（规格基线本体）；归档收口另计一次提交
 
 ## 6. 基线之后的维护（不在本 change 内完成，登记为常设）
 
