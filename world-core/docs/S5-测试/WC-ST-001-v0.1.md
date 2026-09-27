@@ -52,7 +52,7 @@ ssh world 'cd /root/world/world-core && cargo test --locked'
 
 ## 三、怎么跑（出厂门禁就是测试清单）
 
-`world-core/check.sh` 是**唯一入口**，它的十步就是本项目的测试清单（步骤名由脚本自己打印，**不在此复述步数**）：
+`world-core/check.sh` 是**唯一入口**，它打印的结论清单就是本项目的测试清单（**步数以脚本自己打印的清单为准，本文档不写死**——加一步自动进清单）：
 
 ```
 bash check.sh          # rc=0 才算全过；任一步 rc≠0，它立刻 exit 1 且不吞失败

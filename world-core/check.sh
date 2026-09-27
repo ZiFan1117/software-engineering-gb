@@ -141,6 +141,13 @@ run_tail 2 "纯文本审计" python3 tools/plain_text_audit.py ontology.json pol
 echo "  ✅ 账本/词表/策略均为纯文本（UTF-8、无 NUL、无可疑控制字符、逐行可解析）"
 
 echo
+echo
+step "⑤b 需求追溯矩阵（RTM：需求 → 设计模块 → 测试用例，双向）"
+# 为什么放这里：这一步量的是**文档面的一致性**（`docs/S1-需求/WC-RTM-001.csv` ↔ `WC-SRS-001` ↔ 模块登记表），
+# 与 ⑤ 同族（都是"纸面"层面的门禁）；它**不碰**代码与账本，故放在 ⑥（真实二进制）之前。
+run_tail 6 "追溯矩阵判定器自证（造一对坏的/好的输入，**反例必红、正控必绿**）" python3 tools/trace_matrix.py --self-test
+run_tail 12 "需求追溯矩阵（RTM）" python3 tools/trace_matrix.py
+
 step "⑥ 系统级验收（TC-037–TC-040，真实二进制端到端）"
 # 为什么放在这里：`cargo test` 验模块与接口（L1/L2），本步验**产物本身**（L3）——
 # 只看退出码、真实文件字节与命令输出。它同时是 S5 起 `RTM_STRICT=true` 的
