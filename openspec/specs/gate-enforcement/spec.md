@@ -238,7 +238,6 @@ SHALL NOT 被读成"门禁在所有路径上不可绕过"。
 ### Requirement: 〔无号·待流程侧增补〕可逆性判定与出厂配置互校
 
 闸 SHALL 读得到动作的风险等级，并按**动作的不可逆等级**决定是否加摩擦；载体层的撤销点与世界状态的可逆性 SHALL **各自成立且互不冒充**，两处出厂配置冲突时 SHALL 拒绝启动。
-（书第五章 5.5 判红的三件事今天已逐条落地：闸读得到风险等级（`world-core/src/gate.rs:73` 逐字 `pub risk: Option<CarrierRisk>,`，等级由 `world-core/src/gate.rs:445` 逐字 `cap.risk = carrier.lookup(name).map(|m| m.risk);` 接进能力表）；两处出厂配置互校、不一致即拒启（`world-core/src/gate.rs::cross_check_reversibility`，其调用在 `world-core/src/gate.rs:442`）；摩擦挂在**动作的不可逆等级**上、不挂在执行者身份上（`world-core/src/gate.rs:578` 逐字 `.filter(|c| !c.reversible)`）。）
 
 #### Scenario: 同一个主体对不可逆动作必加摩擦
 
