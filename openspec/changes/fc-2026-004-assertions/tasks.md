@@ -63,19 +63,30 @@
 
 ## 4. 补断言 · 账本与证据链
 
-- [ ] 4.1 补一条断言：在**无链（v1）账本**上做一次合法 `append` 后，账本**仍可被打开**（即 `K-3` 的修复判据）。**验收**：该断言当前**必然为红**（`world-core/src/ledger.rs:506` 的 `chained` 只读不用）⇒ 连同修复一起另立 change；断言先写、先证红。
+> **读数环境（2026-09-28）**：主机无 Rust 工具链，全部读数取自 VM `world`（Arch Linux，cargo 1.98.1）的**隔离树** `/root/wc-b` ＝ `git archive HEAD`（`05a1acd`）＋本工区测试补丁（工作区当时正被并行工区改 `src/**` 与**同一批** `tests/**`，直测会拿到别人的半成品污染过的读数）；变异在 `/tmp/mut-b` 副本上做。基线：`cargo test --locked --test contract` ＝ `29 passed; 0 failed; 1 ignored`（rc=0）、`--test cli` ＝ `12 passed`（rc=0）、`--test acceptance` ＝ `17 passed`（rc=0）。
+> **工作区坐标（2026-09-28 补测：第二个坐标，防「只在我挑的树上成立」）**：整树同步后在 VM `/root/world` 上跑同三条命令 ⇒ `--test contract` ＝ `30 passed; 0 failed; 1 ignored`（rc=0）、`--test cli` ＝ `14 passed`（rc=0）、`--test acceptance` ＝ `17 passed`（rc=0）；`cargo test --locked --test contract -- --ignored c29_` ⇒ `FAILED. 0 passed; 1 failed`（rc=101，`panicked at tests/contract.rs:1633`）。⇒ 隔离树与工作区**两个坐标结论一致**（隔离树 `c29` 的 panic 在 `tests/contract.rs:1283`，是同一断言在两棵树里的不同行号）。
 
-- [ ] 4.2 补一条断言固定 `K-3` 的**当下边界**：无链账本 + 一次合法 `append` ⇒ 下次打开报 `MixedChain`。**验收**：断言存在且在修复落地前为绿（证明边界形状）。
+- [x] 4.1 补一条断言：在**无链（v1）账本**上做一次合法 `append` 后，账本**仍可被打开**（即 `K-3` 的修复判据）。**验收**：该断言当前**必然为红**（`world-core/src/ledger.rs:506` 的 `chained` 只读不用）⇒ 连同修复一起另立 change；断言先写、先证红。
+      - **断言**：`world-core/tests/contract.rs:1613`（`fn c29_k3_chainless_ledger_survives_one_legal_append`；取 **`#[ignore]` ＋ 理由** 形态，判据**原样留着**）。**变异（反向：按 `K-3` 的修复形状改）**：`src/ledger.rs` 的加链改成「只有 `chained` 账本才加」⇒ `cargo test --locked --test contract -- --ignored c29_` 由 `FAILED. 0 passed; 1 failed`（rc=101）转 `ok. 1 passed`（rc=0）；恢复后复红（rc=101）。
+        **基线红的原始输出**：`panicked at tests/contract.rs:1283:9: K-3 未修：无链账本做一次合法 append 之后，账本**仍应可被打开**；实得拒绝：ext.world.Ledger.MixedChain: 部分事件有 `chain`、部分没有——…拒绝使用`
 
-- [ ] 4.3 补一条断言：`c21` 的"无链账本仍能打开"**只到只读为止**——即断言打开后**写入会失败**（与 4.2 同一形态的另一侧）。**验收**：断言存在；出处 `world-core/tests/contract.rs:1026`。
+- [x] 4.2 补一条断言固定 `K-3` 的**当下边界**：无链账本 + 一次合法 `append` ⇒ 下次打开报 `MixedChain`。**验收**：断言存在且在修复落地前为绿（证明边界形状）。
+      - **断言**：`world-core/tests/contract.rs:1647`（`fn c30_k3_boundary_chainless_ledger_plus_one_append_reports_mixed_chain`）。**变异**：`src/ledger.rs` 的混用判定 `if !has.iter().all(|b| *b)` 前加 `false &&` ⇒ `--test contract -- c30_` rc=101（`FAILED. 0 passed; 1 failed`，`panicked at tests/contract.rs:1323`）；恢复后 rc=0（`ok. 1 passed`）。
 
-- [ ] 4.4 把 `t1` 的"逐字段一致"补全：逐个断言 `actor`／`id`／`at`／`flags`／`body.subject`／`body.path`／`body.after`（今天只比 `len`／`seq`／`world`／`kind`／`body.before`）。**验收**：新增断言 ≥ 7 条；变异（改 `world-core/src/event.rs` 的某个字段构造）⇒ 至少一条变红。
+- [x] 4.3 补一条断言：`c21` 的"无链账本仍能打开"**只到只读为止**——即断言打开后**写入会失败**（与 4.2 同一形态的另一侧）。**验收**：断言存在；出处 `world-core/tests/contract.rs:1026`。
+      - **断言**：`world-core/tests/contract.rs:1688`（`fn c31_chainless_ledger_opens_readonly_and_refuses_writes`）。**变异**：`src/ledger.rs` 的 `open_readonly` 内部改回 `OpenMode::ReadWrite` ⇒ `--test contract -- c31_` rc=101（`panicked at tests/contract.rs:1349`）；恢复后 rc=0。
 
-- [ ] 4.5 把 `t2` 的证据层级修正为**真跨进程**：把"新进程"这一层挂到 `world-core/tools/s1_sys_probe2.sh` 的 `TC-070`（`:379-383`，由 `world-core/check.sh:145` 执行），并在 `t2` 的文档注里写明它是同进程 drop + reopen。**验收**：`bash tools/s1_sys_probe2.sh` 通过；`t2` 的注释与规格一致。
+- [x] 4.4 把 `t1` 的"逐字段一致"补全：逐个断言 `actor`／`id`／`at`／`flags`／`body.subject`／`body.path`／`body.after`（今天只比 `len`／`seq`／`world`／`kind`／`body.before`）。**验收**：新增断言 ≥ 7 条；变异（改 `world-core/src/event.rs` 的某个字段构造）⇒ 至少一条变红。
+      - **断言**：`world-core/tests/acceptance.rs:82`（`t1` 内新增 **12 条** `assert*!` 语句（现算：`grep -c '^\s*assert'` 该块 ＝ 12），覆盖 `actor`×3／`id`×3／`at`／`flags`／`body.subject`×2／`body.path`／`body.after`；其中 `id`／`at`／`flags` 三条在循环里对每条事件各执行一次）。**变异**：`src/event.rs` 的 `json!(actor)` 改成常量 `"world://user"` ⇒ `--test acceptance -- t1_` rc=101（`panicked at tests/acceptance.rs:89`）；恢复后 rc=0。
+
+- [x] 4.5 把 `t2` 的证据层级修正为**真跨进程**：把"新进程"这一层挂到 `world-core/tools/s1_sys_probe2.sh` 的 `TC-070`（`:379-383`，由 `world-core/check.sh:145` 执行），并在 `t2` 的文档注里写明它是同进程 drop + reopen。**验收**：`bash tools/s1_sys_probe2.sh` 通过；`t2` 的注释与规格一致。
+      - **落点**：`world-core/tests/acceptance.rs:157`（`t2` 的文档注：写明它是**同进程** `drop` ＋ `reopen`，真跨进程那一层挂到 `TC-070`；**刻意不写行号**——任务书给的两处行号实测都对不上）。**承担者**：`world-core/tools/s1_sys_probe2.sh` 的 `TC-070`（`REQ-F-022`：① 两次**独立进程**读回逐字节相同 ② 条数＝账本行数 ③ `seq` 无缺号）。**验收读数**：`bash tools/s1_sys_probe2.sh` **rc=0**（`== 汇总：断言通过 117 项，断言失败 0 项；另行**登记**（现状为红、如实记录）2 项 ==`、`== 结论：断言全通过（TC-053 – TC-076 端到端）==`）。**变异**：`src/main.rs` 的 `cmd_read` 每行尾部加 `#pid=<本进程 pid>` ⇒ TC-070 ① 变红；恢复后 ①②③ 复绿、rc=0。⚠ 首次变异**假绿**：漏了 `cargo build`（探针跑的是**已构建**的二进制）⇒ 读的是旧二进制；补上构建即红——这正是「假证形态①：脚本根本没跑」的实例，故记在这里。
       **★ 行号订正（2026-09-28，断言工区 B 实测）**：`TC-070` 在 `world-core/tools/s1_sys_probe2.sh:413-422`（原写 `:379-383` 落在 `TC-067` 里），由 `world-core/check.sh:161`（**步骤 ⑦**）执行（原写 `:145` 是步骤 ⑥ 的注释行）。⇒ **引用一律写"命令 ＋ 步骤名"，不写行号**（行号会烂）。
-- [ ] 4.6 补一条断言固定"截到最后一个 `\n`"这条边界：末行是**完整合法 JSON 但缺末尾换行** ⇒ 被截掉且 `seq` 被复用。**验收**：断言存在且为绿；出处 `world-core/src/ledger.rs:276-289` 与实现自述 `:385`。
+- [x] 4.6 补一条断言固定"截到最后一个 `\n`"这条边界：末行是**完整合法 JSON 但缺末尾换行** ⇒ 被截掉且 `seq` 被复用。**验收**：断言存在且为绿；出处 `world-core/src/ledger.rs:276-289` 与实现自述 `:385`。
+      - **断言**：`world-core/tests/contract.rs:1728`（`fn c32_last_line_without_trailing_newline_is_cut_and_seq_is_reused`）。**变异**：`src/ledger.rs` 的 `keep` 从「最后一个换行之后」改成 `raw.len()` ⇒ `--test contract -- c32_` rc=101（`panicked at tests/contract.rs:1418`）；恢复后 rc=0。
 
-- [ ] 4.7 补一条断言固定单写者锁的**反向失效**：pid 号被复用时持有者已不存在却不会被回收。**验收**：断言存在（若不便构造，则在本 change 的 `review.md` R5 节登记为"不可机核"）；出处 `world-core/src/ledger.rs:182-184`。
+- [x] 4.7 补一条断言固定单写者锁的**反向失效**：pid 号被复用时持有者已不存在却不会被回收。**验收**：断言存在（若不便构造，则在本 change 的 `review.md` R5 节登记为"不可机核"）；出处 `world-core/src/ledger.rs:182-184`。
+      - **断言**：`world-core/tests/contract.rs:1830`（`fn c33_stale_lock_with_a_reused_live_pid_is_never_reclaimed`；含正控：**已结束子进程**的 pid ⇒ 陈锁必须被回收）。**变异**：`src/ledger.rs` 的 `alive` 恒 `false` ⇒ `--test contract -- c33_` rc=101（`panicked at tests/contract.rs:1498`）；恢复后 rc=0。
 
 - [x] 4.8 **证据链机械门禁 —— 已由 `spec_bridge.py` 判据② 承担**（2026-09-28 核）
       **实测**：`def j2_evidence`（`world-core/tools/spec_bridge.py:165`）扫 `openspec/specs/**` **＋ 所有 delta**（`openspec/changes/**/specs/**/spec.md`），判"证据行的 token 必须指向真实存在的函数/脚本"；
@@ -84,16 +95,21 @@
       **验收**：`python world-core/tools/spec_bridge.py --self-test` ⇒ rc=0 且含上列两条反例；`spec_bridge.py` 正跑判据② **[OK]**。
 
 - [x] 5.1 补一条断言固定 `project check` 的**判据只剩头部四项**：让两份投影在内容上不一致（一方少渲一半主体）而头部四项相同 ⇒ 命令**仍然报绿**。**验收**：断言存在且为绿（它固定的是边界）；出处 `world-core/src/project/mod.rs` 的 `assert_same_source`。
+      - **断言**：`world-core/tests/cli.rs:495`（`fn cli13_project_check_criterion_reads_only_the_header`）。**变异**：`src/project/mod.rs` 的 `assert_same_source` 增加「正文行数必须相同」⇒ `--test cli -- cli13_` rc=101（`panicked at tests/cli.rs:361`）；恢复后 rc=0。
       **断言在哪**：`world-core/tests/cli.rs:495`（`cli13_project_check_criterion_reads_only_the_header`）——正文取自命令自己的 `project language` 输出、砍掉一半主体行、头部一字不动 ⇒ `assert_same_source(&a,&b).is_ok()`；另配正控（改 `state=` ⇒ 必报「状态不同」）。
       **变异怎么变红**：在 `src/project/mod.rs` 的 `assert_same_source` 里加一条正文/行数比较 ⇒ 该用例变红。
       **★ 本条曾被我误删**：执行者在 `26fcd6a` 改 4.8 时把它连同相邻行一起吃掉，由断言工区 A 发现（"`tasks.md` 的 5.1 不见了"），**现按 `2669173` 的原文逐字恢复**——删条目与删代码一样是损坏，**必须留痕**。
-- [ ] 5.2 补一条断言固定"三个不等分支在命令路径上不可达"：断言 `project check` 的两份投影取自同一 `state` 与同一 `vocab`。**验收**：断言存在；出处 `world-core/src/main.rs:408-410`。
+- [x] 5.2 补一条断言固定"三个不等分支在命令路径上不可达"：断言 `project check` 的两份投影取自同一 `state` 与同一 `vocab`。**验收**：断言存在；出处 `world-core/src/main.rs:408-410`。
+      - **断言**：`world-core/tests/cli.rs:552`（`fn cli14_project_check_feeds_both_projections_the_same_state_and_vocab`）。**变异**：`src/main.rs` 的 `project visual` 喂假 `vocab` ⇒ `--test cli -- cli14_` rc=101（`panicked at tests/cli.rs:402`）；恢复后 rc=0。
 
-- [ ] 5.3 补一条断言：`Checkpoint::FORMAT` 版本不符 ⇒ 报 `ext.world.Checkpoint.BadFormat`（今天该分支零断言）。**验收**：断言存在且会红（删掉 `world-core/src/checkpoint.rs:94-99` 的判定即红）。
+- [x] 5.3 补一条断言：`Checkpoint::FORMAT` 版本不符 ⇒ 报 `ext.world.Checkpoint.BadFormat`（今天该分支零断言）。**验收**：断言存在且会红（删掉 `world-core/src/checkpoint.rs:94-99` 的判定即红）。
+      - **断言**：`world-core/tests/cli.rs:638`（`fn cli16_checkpoint_format_mismatch_is_named`）。**变异**：`src/checkpoint.rs` 的版本判定 `if fmt != Self::FORMAT` 前加 `false &&` ⇒ `--test cli -- cli16_` rc=101（`panicked at tests/cli.rs:505`）；恢复后 rc=0。
 
-- [ ] 5.4 补一条断言固定"CLI 的 `checkpoint resume` 走未核验续算路径、由事后比对兜底"：篡改快照内容 ⇒ 若续算与全量不一致则报 `ResumeMismatch` 且 `rc=2`。**验收**：断言存在；出处 `world-core/src/main.rs:556-562`。
+- [x] 5.4 补一条断言固定"CLI 的 `checkpoint resume` 走未核验续算路径、由事后比对兜底"：篡改快照内容 ⇒ 若续算与全量不一致则报 `ResumeMismatch` 且 `rc=2`。**验收**：断言存在；出处 `world-core/src/main.rs:556-562`。
+      - **断言**：`world-core/tests/cli.rs:698`（`fn cli17_checkpoint_resume_falls_back_to_post_hoc_comparison`；三段：正控／只改 `digest` ⇒ `verify` 红而 `resume` **绿**（证明它**不核验**）／只改 `state` ⇒ `verify` **绿**而 `resume` 报 `ResumeMismatch`（证明**事后比对**兜底））。**变异**：`src/main.rs` 的事后比对 `if fast.to_json() != full.to_json()` 前加 `false &&` ⇒ `--test cli -- cli17_` rc=101（`panicked at tests/cli.rs:602`）；恢复后 rc=0。
 
-- [ ] 5.5 补一条断言：CLI 用法串里列出 `checkpoint write|verify|resume` 三条子命令。**验收**：断言存在；出处 `world-core/src/main.rs:28-30` 与 `:153`。
+- [x] 5.5 补一条断言：CLI 用法串里列出 `checkpoint write|verify|resume` 三条子命令。**验收**：断言存在；出处 `world-core/src/main.rs:28-30` 与 `:153`。
+      - **断言**：`world-core/tests/cli.rs:610`（`fn cli15_usage_lists_three_checkpoint_subcommands`）。**变异**：删掉 `src/main.rs` USAGE 里的 `checkpoint resume <path>` 那一行 ⇒ `--test cli -- cli15_` rc=101（`panicked at tests/cli.rs:453`）；恢复后 rc=0。
 
 - [ ] 5.6 **待人填**（作者／评审席）：为 `REQ-N-008`（带检查点续算 ≤ 全量重算的 1/2）在 `fc-2026-004-assertions` 的 `review.md` R5 节登记为**范围外、未实现、无断言**。
       **★ 订正（2026-09-28）**：本条原文自己写着「`review.md`（**由人填**）」——而该 change 目录下**没有 `review.md`**（只有 `.openspec.yaml`／`design.md`／`proposal.md`／`tasks.md`），且评审记录按本仓口径**由人备料与签署**。
