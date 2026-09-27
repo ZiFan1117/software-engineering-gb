@@ -69,7 +69,8 @@
 | 项 | 值 |
 |---|---|
 | 验收在哪台机器 / 什么环境跑的 | VM `world`（VirtualBox Arch Linux，内核 `7.2.6-arch2-1`），工作区 `/root/world/world-core`；**主机无 Rust 工具链，一切构建与验收只在 VM 内** |
-| 版本 / 提交号 | 主机仓库 HEAD **`fd9a892`**（＝ 07 主仓 `61c95b0` 的整仓副本 ＋ OpenSpec 层）；`world-core/` 两仓**逐文件 sha256 比对 207/207 全同、0 差异** |
+| 版本 / 提交号（**★ 复核对象已冻结**，M14） | **`90cfa3d80bbed55ef6acef0c4b7aa98964fc23d9`**（`main`；冻结时点 2026-09-27 23:29:26 +0800，工作区**零改动**）。本 change 的复核一律以 `git show 90cfa3d:<path>` 为准；**冻结之后的提交属另一轮**（文档收敛 `fc-2026-003`），不在本次复核范围。 |
+| **本轮机器读数（四要素，由 `openspec/tools/collect_evidence.py` 现取）** | 时点 `2026-09-27 23:29:26 +0800`／提交号 `90cfa3d`／工作区改动 **0 件**：`openspec validate --all --strict` **10 passed, 0 failed（rc=0）**；`validate --archived` **1 passed, 0 failed（rc=0）**；`spec_bridge.py` **通过 8 / 失败 1（rc=1）**——唯一红＝判据⑥ 归档件评审未签；`spec_bridge.py --self-test` **rc=0**（九条判据 ＋ 11 反例逐条「已红 OK」、正控全绿）。**VM 独立复核（执行者跑，非工区自报）**：`bash check.sh` **rc=1，唯一 ❌ 是第 ⑧ 步规格层守卫**（红项＝⑥），②–⑦ 全过（含契约门禁「模块节 10 == 登记 10」）；`cargo test --locked` **rc=0**（125 处 `test result: ok`）。 |
 | 关键工具链版本 | cargo **1.98.1** `(797e8a9bc 2026-08-05)` / rustc **1.98.1** `(48a229cea 2026-09-01)`；Python **3.11.15**；OpenSpec CLI **1.13.2** |
 | 验收命令与原始输出在哪 | 基线复现：`ssh world "cd /root/world/world-core && bash check.sh"` → **rc=0**（构建／冒烟／三条专属测试／契约 25 项／投影同源／纯文本审计／系统级验收 52 项 0 失败／S1 验证面 59＋117 项断言 0 失败）。**本轮已跑**，用于确认"证据环境今天真的能跑" |
 | 归档环境指纹的路径 | 　**待补**（实施合入后写入 `world-core/docs/证据/`） |
