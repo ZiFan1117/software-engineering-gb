@@ -665,6 +665,43 @@ def j12_specmap_generator_hash(repo):
     return []
 
 
+def j13_secmap_freshness(repo):
+    """⑬ `openspec/BOOK/节对齐.md`（41 节对齐图）必须记录**当前**的来源坐标。
+
+    为什么单列一条：它是**生成物**（`openspec/tools/gen_secmap.py` 从 `openspec/specmap.json`
+    ＋ `openspec/BOOK/节落点/*.md` 生成），而**此前没有任何判据核它**——
+    实证（2026-09-28 现取）：图里记的是 `specmap.json` 的 `cf50089c…`，而当时现取 `91045040…`
+    ⇒ **图已经过期，没有任何判据发现**（skill §九：闸不在门禁里＝没有闸）。
+
+    **★ 本判据的射程（如实写，不假装管得更多）**：它抓的是「**来源变了而图没重生成**」
+    （核产物首部记的两个哈希 vs 当前两个文件）。**它抓不到**「图的数据被手工改过」——
+    那需要重跑生成器逐字节比对（生成器读 `specmap.json` ＋ `节落点/*.md`，在沙盒里供得起，
+    **列为可加强项**；今天不做，也不冒充做了）。
+    """
+    art = Path(repo) / "openspec" / "BOOK" / "节对齐.md"
+    if not art.is_file():
+        return ["openspec/BOOK/节对齐.md —— 文件不存在（41 节对齐图缺件；跑 `python openspec/tools/gen_secmap.py` 生成）"]
+    text = art.read_text(encoding="utf-8")
+    bad = []
+    for label, rel, pat in (("`specmap.json`", "openspec/specmap.json", r"`openspec/specmap\.json` 的 sha256 `([0-9a-f]+)…`"),
+                            ("生成器 `gen_secmap.py`", "openspec/tools/gen_secmap.py",
+                             r"生成器 `openspec/tools/gen_secmap\.py` 的 sha256 `([0-9a-f]+)…`")):
+        m = re.search(pat, text)
+        if not m:
+            bad.append("openspec/BOOK/节对齐.md —— 首部没记 %s 的哈希 ⇒ **无法判定它是不是当前生成物的输出**" % label)
+            continue
+        p = Path(repo) / rel
+        if not p.is_file():
+            bad.append("openspec/BOOK/节对齐.md —— 首部引的 %s 不在仓内" % rel)
+            continue
+        want = hashlib.sha256(p.read_bytes()).hexdigest()
+        if not want.startswith(m.group(1)):
+            bad.append("openspec/BOOK/节对齐.md —— 首部记的 %s 哈希 `%s…` 与当前 `%s…` **不一致** ⇒ "
+                       "**来源变了而图没重生成**；跑 `python openspec/tools/gen_secmap.py` 重生成"
+                       % (label, m.group(1)[:12], want[:12]))
+    return bad
+
+
 JUDGMENTS = [
     ("① 归档硬前置（归档目录必须有 review.md）", j1_archive_review),
     ("② 证据存在性（证据行的函数/脚本必须真实存在）", j2_evidence),
@@ -679,6 +716,7 @@ JUDGMENTS = [
     ("⑩ ADDED 标题不与主规格撞车（撞了该 change 永远归不了档）", j10_delta_added_not_colliding),
     ("⑪ `BRIDGE.md` 与生成器的当前输出逐字节一致（生成物不许手编）", j11_bridge_in_sync_with_generator),
     ("⑫ `specmap.json` 记录了当前生成器的内容哈希（生成物不许手编）", j12_specmap_generator_hash),
+    ("⑬ `节对齐.md` 记录了当前来源坐标（生成物不许手编）", j13_secmap_freshness),
 ]
 
 
@@ -766,6 +804,19 @@ def build_sandbox(root):
     _art = Path(root) / "openspec" / "specmap.json"
     _art.write_text(json.dumps({"caps": [], "_generator_sha256": _sha},
                                ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+    # ★ 判据⑬ 的沙盒件（SANDBOX 节对齐）：一份"来源坐标对得上"的 41 节图 ⇒ 正控应绿
+    _sm = Path(root) / "openspec" / "specmap.json"
+    _sm_sha = hashlib.sha256(_sm.read_bytes()).hexdigest()
+    # 判据⑬ 要的是 `gen_secmap.py`（不是 `gen_specmap.py`）⇒ 也要字节复制进去，哈希才对得上。
+    _gen2_src = Path(__file__).resolve().parent.parent.parent / "openspec" / "tools" / "gen_secmap.py"
+    _gen2_dst = Path(root) / "openspec" / "tools" / "gen_secmap.py"
+    _gen2_dst.write_bytes(_gen2_src.read_bytes())
+    _sha2 = hashlib.sha256(_gen2_dst.read_bytes()).hexdigest()
+    _sec = Path(root) / "openspec" / "BOOK" / "节对齐.md"
+    _sec.parent.mkdir(parents=True, exist_ok=True)
+    _sec.write_text("# 41 节对齐图（沙盒）\n\n**来源与坐标**：`openspec/specmap.json` 的 sha256 `%s…`｜"
+                    "生成器 `openspec/tools/gen_secmap.py` 的 sha256 `%s…`\n" % (_sm_sha[:16], _sha2[:16]),
+                    encoding="utf-8", newline="\n")
 
 
 def self_test():
@@ -966,6 +1017,17 @@ def self_test():
 
         # 对照 12：**不该红的** —— 沙盒里那份产物与生成器是同步的（哈希一致）
         _green(11, "12n", "产物与生成器同步（哈希一致）")
+
+        # ── 反例 13：来源变了而图没重生成 —— 把图首部记的 specmap 哈希改掉 ──
+        sec13 = Path(tmp) / "openspec/BOOK/节对齐.md"
+        backup13 = sec13.read_text(encoding="utf-8")
+        sec13.write_text(re.sub(r"(`openspec/specmap\.json` 的 sha256 `)[0-9a-f]+",
+                                r"\g<1>" + "0" * 16, backup13), encoding="utf-8", newline="\n")
+        _red(12, "⑬", "图首部记的来源哈希与当前 `specmap.json` 不一致（＝来源变了没重生成）")
+        sec13.write_text(backup13, encoding="utf-8", newline="\n")
+
+        # 对照 13n：**不该红的** —— 沙盒里那份图的坐标与来源是对得上的
+        _green(12, "13n", "图的来源坐标与当前来源一致")
 
         # 反面自检：**每条判据都必须有反例**（没有反例的那条＝装饰）
         missing = [jname(i) for i in range(len(JUDGMENTS)) if i not in covered]

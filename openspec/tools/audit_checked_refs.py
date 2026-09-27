@@ -11,13 +11,31 @@
 排除面**不写死类数**——**以输出里逐条打印的"原因串"为准**（写死就会烂：本文件自己就曾写"只有四种"，
 而当时的实际原因已有六类；改法是把类数交给输出）。判据写在代码里、可复核。
 '''
-import io, re
+import io, re, sys
 from pathlib import Path
 
 # ★ 仓根按**脚本自身位置**推（本文件在 `openspec/tools/` 下 ⇒ 仓根＝上两级）；
 #   原版写死了 `D:\Code\...`，那是「闸在版本控制之外」的同族问题（skill §九）。
 R = Path(__file__).resolve().parent.parent.parent
-COV = R / 'openspec/changes/cover-unimplemented-capabilities/tasks.md'
+def _resolve_cov() -> Path:
+    """被审对象：**在役的第一个 `cover-*`；没有就取归档里最后一个 `cover-*`**。
+
+    ★ 为什么不再写死（2026-09-28）：本工具曾把路径写死成
+    `openspec/changes/cover-unimplemented-capabilities/tasks.md`——那个 change **归档后**路径变了 ⇒ 工具直接崩
+    （`FileNotFoundError`）。这与本仓「引用写命令＋步骤名、不写行号」是同一个坑：**写死的坐标会烂**。
+    """
+    # **优先归档件**：本工具的用处是核「已完成那件」的每个已勾条目的引用能不能解析；
+    # 在役件通常还没勾几条（拿它当默认会把读数变成"已勾 0 条"，没有信息量）⇒ 用 `--cov` 显式指定。
+    arch = sorted((R / 'openspec/changes/archive').glob('*cover-*/tasks.md'))
+    if arch:
+        return arch[-1]
+    live = sorted((R / 'openspec/changes').glob('cover-*/tasks.md'))
+    if live:
+        return live[0]
+    raise SystemExit('[FAIL] 找不到任何 `cover-*/tasks.md`（在役或归档）——本工具的被审对象不在仓内')
+
+
+COV = Path(sys.argv[sys.argv.index('--cov') + 1]) if '--cov' in sys.argv else _resolve_cov()
 t = io.open(COV, encoding='utf-8', newline='').read()
 
 fn_names = set()
