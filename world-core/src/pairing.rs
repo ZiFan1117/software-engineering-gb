@@ -143,11 +143,11 @@ impl Pair {
     /// 由调用方看 [`Pair::intents`] 自己判，本函数不替它下结论。
     pub fn trace_agrees(&self) -> Option<bool> {
         let (intent, result) = (self.intents.last()?, self.results.first()?);
-        match result.get("trace").and_then(Value::as_str) {
-            // 缺省 trace：**无从判**（不是"不一致"）——`REQ-F-031` 的 v1 口径。
-            None => None,
-            Some(t) => Some(Some(t) == intent.get("id").and_then(Value::as_str)),
-        }
+        // 缺省 trace：**无从判**（不是"不一致"）——`REQ-F-031` 的 v1 口径。
+        result
+            .get("trace")
+            .and_then(Value::as_str)
+            .map(|t| Some(t) == intent.get("id").and_then(Value::as_str))
     }
 
     /// 两半齐全（至少一条意图、至少一条结果）。

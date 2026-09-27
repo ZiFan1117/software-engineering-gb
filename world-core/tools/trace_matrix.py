@@ -507,6 +507,10 @@ def print_report(
 
 def main(argv: Sequence[str] | None = None) -> int:
     make_console_encoding_safe()
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--self-test" in argv:
+        return _selftest()
+
 
     parser = argparse.ArgumentParser(
         description="需求追溯矩阵完整性校验（CI 门禁工具）"
@@ -647,6 +651,58 @@ def main(argv: Sequence[str] | None = None) -> int:
         sample_mode=args.sample,
     )
     return 1 if result.errors else 0
+
+
+# ────────────────────── 自证（每条判据配反例，反例必红） ──────────────────────
+_SELF_HEADER = ("需求编号,需求名称,优先级,需求基线版本,设计模块号,设计文档章节,接口编号,"
+                "实现代码位置,单元测试用例,集成测试用例,系统测试用例,验收测试用例,状态,备注")
+
+def _selftest() -> int:
+    """`--self-test`：**造一对"坏的／好的"输入，证明这条判据会红也会绿**。
+
+    **射程（如实写，不冒充考了全部）**：本自证只考**矩阵内部一致性**里的核心那一条——
+    「需求 → 测试用例」正向不断裂（跑时用 `--no-srs --no-registry` 关掉与外部输入有关的两项）。
+    其余校验项（与 SRS 的一致性、模块号存在性）**不在本自证射程内**。
+    """
+    import subprocess
+    import tempfile
+    rows_common = ("REQ-F-901,自证用需求,P0,v1,M01,HLD-1,IF-001,src/x.rs::f,")
+    # 反例：四个测试用例列**全空** ⇒ 正向断裂 ⇒ 必须红
+    broken = _SELF_HEADER + "\n" + rows_common + ",,,,未测试,\n"
+    # 正控：补齐四个测试用例 ⇒ 必须绿
+    # ⚠ 用例号格式由工具校验：必须 `TC-xxx`（三位数）或带类型前缀（`TC-F-xxx` 等）。
+    #   第一版我写成 `TC-1…TC-4` ⇒ **正控被判红**——那是**夹具写错**，不是工具没牙（如实留痕）。
+    good = _SELF_HEADER + "\n" + rows_common + "TC-101,TC-201,TC-301,TC-401,已测试,\n"
+
+    failures = []
+    with tempfile.TemporaryDirectory(prefix="rtm-selftest-") as tmp:
+        for tag, body, want_rc, want_word in (
+            ("反例（某条需求没有任何测试用例 ⇒ 应红）", broken, 1, None),
+            ("正控（补齐四个测试用例 ⇒ 应绿）", good, 0, None),
+        ):
+            p = os.path.join(tmp, "m.csv")
+            with open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write(body)
+            r = subprocess.run([sys.executable, os.path.abspath(__file__),
+                                "--matrix", p, "--no-srs", "--no-registry"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
+            ok = (r.returncode == want_rc)
+            print("  %s：rc=%d（期望 %d）%s" % (tag, r.returncode, want_rc, "OK" if ok else "*不符"))
+            if not ok:
+                failures.append(tag)
+                for ln in ((r.stdout or "") + (r.stderr or "")).strip().split("\n")[-4:]:
+                    print("      " + ln[:150])
+            if tag.startswith("反例") and ok:
+                hit = "REQ-F-901" in (r.stdout or "")
+                print("      反例是否点名那条需求：%s" % ("是" if hit else "*否"))
+                if not hit:
+                    failures.append("反例未点名需求")
+    if failures:
+        print("  => 自证不通过：%s" % "；".join(failures))
+        print("  => 按本项目口径：**这条守卫是装饰，拒绝合入**。")
+        return 1
+    print("  => 自证通过：这条判据在反例下变红、在正控下变绿（**射程见函数文档：只考矩阵内部一致性的核心那一条**）。")
+    return 0
 
 
 if __name__ == "__main__":
