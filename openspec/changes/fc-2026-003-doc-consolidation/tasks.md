@@ -1,0 +1,55 @@
+# Tasks
+
+## 1. 规格正文净化（76 个改因块）
+
+- [ ] 1.1 六份主规格＋`fc-2026-002` 的 delta 里，`> **改的是哪一类问题**`／`> **为什么用 ADDED**`／`> **证据是哪条测试的哪个断言**` 三类块**全部剔出**
+      **验收**：守卫判据⑨ `python world-core/tools/spec_bridge.py` 的 ⑨ 转绿（offender 0）
+- [ ] 1.2 每一块被删的，先在对应 change 的 `design.md`／`audit.md` 找到同一事实（给 `path:line`）；**找不到的不许删，改成搬过去**
+      **验收**：回报里逐块给"删（在别处的 `path:line`）／搬（搬到哪个文件哪一节）"二选一
+- [ ] 1.3 Requirement 标题、Scenario、`- **证据**：`／`- **证据（待补）**：` 行**逐字不动**
+      **验收**：改前改后逐能力计数相等（channel-identity 2/4、envelope-validation 6/10、gate-enforcement 7/13、ledger-integrity 8/17、projections 5/7、read-model 5/8）
+- [ ] 1.4 `openspec validate --all --strict` 的 `INFO Requirement text is very long` **从 28 降到 0**（若仍有，逐条说明为什么）
+      **验收**：把两次数值抄回来
+
+## 2. 流程文档去修订记录（26 处）
+
+- [ ] 2.1 删掉全部「修订记录／变更记录／修订历史」节（含 10 册的「契约变更记录」——随第 3 组并册一并消失）
+      **验收**：守卫判据⑧ 转绿（offender 0）
+- [ ] 2.2 **夹带的当前有效信息搬进正文**（如"批准人／批准日期"搬到该文档 §一 的文档属性处），不连有效信息一起删
+      **验收**：回报里逐处写"删了什么／有无信息搬进正文、搬去哪一节"
+- [ ] 2.3 正文里残留的"本轮改后／原写…现改…"字样清零
+      **验收**：检索式与命中数抄回来（改前 3 处）
+
+## 3. 接口契约并册（11 册 ＋ 总则 ⇒ 1 册）
+
+- [ ] 3.1 把 `WC-IC-M01`–`M10` 的内容并进 `WC-IC-001`（**每模块一节**，节号沿用 `M01`–`M10`；总则 `IF-001`–`IF-010` 单列在前），删掉那 11 册
+      **验收**：`world-core/docs/S2-设计/` 的 `.md` 份数 16 → **5**，且 `WC-IC-001` 里 M01–M10 各有一节
+- [ ] 3.2 同步 `world-core/tools/module_graph.py` 判据③ 的"契约落点"口径（分册存在 ⇒ 在 `WC-IC-001` 里找得到该模块节）
+      **验收**：判据③ 改前/改后的 offender **清单一致**（今天的两条真红：M10 测试缺、`src/error.rs` 无模块号认领，**必须仍在**）
+- [ ] 3.3 判据①②**不动**；判据③ 不许改成"总能通过"
+      **验收**：`module_graph.py --self-test` 仍 rc=0；裸跑仍是同样的红项
+
+## 4. 探针归位（不新建文件）
+
+- [ ] 4.1 写未声明实体/字段的检查**改用已声明的**（如 `world://notice/probe` ＋ `muted`）；**不许**往出厂本体塞测试专用实体
+      **验收**：`bash check.sh`（VM）**rc=0**，八步全过
+- [ ] 4.2 **不新建任何文件**；能并进既有门禁脚本的就地做
+      **验收**：`git status --porcelain` 里**没有新增文件**（只允许既有文件被修改）
+- [ ] 4.3 **反例证明没把关掉**：写一条未声明实体，**必须仍被拒**（`ext.world.Ontology.UndeclaredEntity`，rc≠0）
+      **验收**：逐字输出与退出码抄回来
+- [ ] 4.4 `cargo test --locked`（VM）**rc=0**，逐套件计数与基线一致（lib 52／acceptance 17／atom_declared_only 6／atom_reversibility 5／cli 7／contract 25）
+      **验收**：原始输出尾部抄回来
+
+## 5. 文档集封口与机器项（**已完成，登记备查**）
+
+- [x] 5.1 立 `.agents/skills/worldcore-sdd/SKILL.md`（§二 文档集封闭、§三 不掺修订记录/不外引、§四 不做探针）——`1d10ef0`
+- [x] 5.2 守卫加判据⑧（流程文档无修订记录）与⑨（规格正文无改因块），各带反例——`ae57fb7`
+- [x] 5.3 `MAINTENANCE` 补规则 13–16
+
+## 6. 跨组验收（第 1–4 组全勾之后才做）
+
+- [ ] 6.1 守卫 `spec_bridge.py`：**八条转绿，只剩⑥**（⑥ 是归档件签字，属另一条线；本 change 不碰签字）
+- [ ] 6.2 `openspec validate --all --strict` rc=0；`--archived` rc=0
+- [ ] 6.3 `module_graph.py` 判据③ 的 offender 与改前一致（两条真红仍在，不许多也不许少）
+- [ ] 6.4 VM 上 `bash check.sh` rc=0 ＋ `cargo test --locked` rc=0
+- [ ] 6.5 本件走独立评审席评审；评审通过后按作者指示签字，再归档

@@ -1,0 +1,7 @@
+schema: opsx-swe-gb
+created: 2026-09-27
+# 本 change **有意不改任何规格**：它是纯文档收敛（流程文档去修订记录、规格正文剔改因块、接口契约并册、探针归位）。
+# 规格级行为（Requirement 的 SHALL/SHALL NOT 与 Scenario 判据）一个字不改 ⇒ 无 delta。
+# 依据：`openspec validate` 的报错原文「If this change intentionally modifies no specs
+# (pure refactor, tooling, docs), set "skip_specs: true" in the change's .openspec.yaml」。
+skip_specs: true

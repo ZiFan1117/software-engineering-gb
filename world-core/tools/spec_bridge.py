@@ -256,6 +256,9 @@ WAIVER_KEYS = (("让的是哪一条", r"让的是哪一条"),
                ("谁批的", r"谁批的|谁批"))
 
 
+WAIVER_LABEL_RE = re.compile(r"(^#{1,6}[^\n]*谁让)|(\*\*谁让\*\*)|(让的是哪一条)", re.M)
+
+
 def _strip_code_blocks(text):
     """去掉围栏代码块——**引用的原始输出不是声明**。
 
@@ -286,8 +289,12 @@ def j7_waiver_registered(repo):
         # **围栏代码块不参与**：引用的原始输出不是声明。
         # （2026-09-27 实测误报：fc-2026-002/tasks.md 粘了门禁原始输出，输出里含判据⑦ 的名字 ⇒ 被当成声明。）
         union = _strip_code_blocks("\n".join(read_text(f) for f in files))
-        if "谁让" not in union:
-            continue                                     # 没声明让路 ⇒ 不受本条约束
+        # **只在"真的在登记让路"时才检**：判据要的是**结构化的声明**，不是顺口提到的两个字。
+        # 2026-09-27 实测误报：`fc-2026-003/design.md:5` 写「…一套是『我曾经写错什么、谁让我这么改的』」
+        # ——那是行文里的顺口话，不是让路声明，却被裸子串匹配抓成"声明了让路却缺三要素"。
+        # ⇒ 触发条件改为：**标题里带「谁让」**、或 **`**谁让**` 加粗标签**、或 **出现三要素的第一个标签「让的是哪一条」**。
+        if not WAIVER_LABEL_RE.search(union):
+            continue                                     # 没有结构化声明 ⇒ 不受本条约束
         missing = [label for label, pat in WAIVER_KEYS if not re.search(pat, union)]
         if missing:
             where = "、".join(rel(repo, f) for f in files)
