@@ -1,0 +1,72 @@
+# WC-ST-001 系统测试
+
+> 这份文档管**"系统测试怎么跑、在哪跑、读数怎么取"**。它不写"某次跑出多少"，那属**现取**（见 §四）。
+
+## 一、测试面（本仓今天实有的）
+
+**测试二进制**（`world-core/tests/`，`cargo test --locked` 逐个跑）：
+
+| 文件 | 管什么 |
+|---|---|
+| `acceptance.rs` | 端到端验收用例（`t*`）：真实二进制的写入—折叠—读出链 |
+| `contract.rs` | 接口契约用例（`c*`）：按 `WC-IC-001` 的模块契约逐条钉 |
+| `cli.rs` | 命令行面（`cli*`）：子命令、错误码、`--help` 清单 |
+| `atom_reversibility.rs` | 可逆性与两处配置互校（`a*`） |
+| `atom_declared_only.rs` | 声明以外不许落账（`b*`） |
+| `delivery.rs` | 投递与应答（`to` 的语义、`request_id` 配对） |
+| `perf.rs` | 性能面（带检查点路径的目标） |
+
+**脚本面**（`world-core/tools/`，由 `check.sh` 或人工调用）：
+
+| 脚本 | 管什么 |
+|---|---|
+| `system_acceptance.sh` | 系统级验收（真实二进制端到端），带 `--self-test` |
+| `s1_sys_probe.sh`／`s1_sys_probe2.sh` | S1 需求验证面补建（`TC-0xx` 用例集），各带 `--self-test` |
+| `carrier_acceptance.sh` | 载体侧验收 |
+| `con01-no-bypass.sh` | 门禁不可绕过的对抗面 |
+| `ci_rehearsal.sh` | 出厂门禁的预演（与 CI 同口径） |
+
+**测试面的项数一律现数**（不写死）：
+```
+python -c "import re,pathlib;print(sum(1 for p in pathlib.Path('world-core/tests').glob('*.rs') for l in p.read_text(encoding='utf-8').splitlines() if re.match(r'\s*fn [a-z]+\d', l)))"
+```
+（口径：测试函数名以字母＋数字开头；**以命令输出为准**。）
+
+## 二、在哪跑（**构建与测试只在 VM**）
+
+主机**没有 Rust 工具链**。一切构建与测试在 VM `world`（Arch Linux）的 `/root/world/world-core`。
+推树前**必须镜像同步**——只推不删会让 VM 累积本机早已删掉的件，**读数就不是同一棵树**：
+
+```
+& 'D:\Code\sync-vm.ps1'          # 整树单向（本机 → VM），推完删远端多余件
+ssh world 'cd /root/world/world-core && bash check.sh'
+ssh world 'cd /root/world/world-core && cargo test --locked'
+```
+
+## 三、怎么跑（出厂门禁就是测试清单）
+
+`world-core/check.sh` 是**唯一入口**，它的十步就是本项目的测试清单（步骤名由脚本自己打印，**不在此复述步数**）：
+
+```
+bash check.sh          # rc=0 才算全过；任一步 rc≠0，它立刻 exit 1 且不吞失败
+```
+
+## 四、读数怎么取（**四要素，不许手抄**）
+
+每条读数必须带：**时点／命令／原始输出／提交号**。取数**一律现跑**：
+- 本机：`D:\Code\final_verify.ps1`（主机四闸 ＋ VM 全闸，一次收齐）
+- 读数**不许写进文档**——同一个数在一轮之内就会变（实测：判据条数 9→11、`validate` 项数 10→11）。
+  **写死的读数必然过期，而过期的读数就是假话**（本项目为此被独立评审席判过三次）。
+
+## 五、什么算失败
+
+- **任一步 rc≠0 即失败**：`check.sh` 的 `run_tail` 遇 rc≠0 立刻 `exit 1`，**不吞失败**；
+- **红要如实报红**：本仓允许**如实红**——例如机核层（`tools/module_graph.py`）今天仍红在三条**在册真缺陷**上。
+  **如实红不是缺陷，把红写成绿才是**。判"这条红算不算过"的口径见 `WC-AT-001` §三。
+- **每条判据都要能红**：判定器一律带 `--self-test`（每条判据配反例；**反例不变红即判该判定器是装饰**）。
+
+## 六、这份文档不覆盖的
+
+- **不断言"今天多少项通过"**——那是现取读数，见 §四；
+- **不规定用例怎么写**——那在 `WC-UT-001`（单元测试）与编码规范 `WC-GSOP-001`；
+- **不重复规格**——"世界必须怎样"在 `openspec/specs/`；这份只讲"这个项目怎么跑测试"。
