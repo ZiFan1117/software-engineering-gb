@@ -10,8 +10,8 @@
       **★ 一处坐标写准（2026-09-28）**：本条字面要的是"该 change 的 `design.md`／`audit.md`"，而**本批实际引到的是归档件的 `tasks.md`**——即 `changes/archive/2026-09-28-cover-unimplemented-capabilities/tasks.md` 的 **§8**（`:206`–`:214`：`8.1` 闸读风险等级／`8.2` 两处互校／`8.3` 摩擦落点，各带断言与变异证明）。评审席判**可接受**（事实在、坐标可解析），**故把"（该件 `tasks.md` §8）"写在这里**，免得下一位读者按字面去 `design.md` 里找而找不到。
       **验收**：回报里逐块给"删（在别处的 `path:line`）／搬（搬到哪个文件哪一节）"二选一
 - [x] 1.3 Requirement 标题、Scenario、`- **证据**：`／`- **证据（待补）**：` 行**逐字不动**
-      **★ 已满足（2026-09-28 验证）**：逐能力计数可复算：`_specmap/count_13.py`（本笔跑过）⇒ **合计 49 Requirement／87 Scenario／98 证据行**；本批 `1.4` 的每一次压缩后**该册计数均与改前相等**（逐笔记在 `1.4` 的登记里）⇒ **已满足**。
-      **验收**：改前改后逐能力计数相等（channel-identity 2/4、envelope-validation 6/10、gate-enforcement 7/13、ledger-integrity 8/17、projections 5/7、read-model 5/8）
+      **★ 已满足（2026-09-28 验证）**：逐能力计数可复算 —— **仓内工具** `world-core/tools/spec_length_audit.py`（**旧路径 `D:\Code\_specmap\count_13.py` 在仓外、只作历史**，见 skill §九「闸在版本控制之外等于没有闸」）⇒ **合计 49 Requirement／87 Scenario／98 证据行**（**现取**）；本批 `1.4` 的每一次压缩后**该册计数均与改前相等**（逐笔记在 `1.4` 的登记里）⇒ **已满足**。
+      **验收**：改前改后逐能力计数相等 —— ⚠ **两个基线要分清**：括注那组数（`channel-identity` 2/4、`envelope-validation` **6/10**、`gate-enforcement` **7/13**、`ledger-integrity` **8/17**、`projections` **5/7**、`read-model` **5/8**）是**立件时**的基线；而**本件的验收基线以 `openspec/changes/fc-2026-003-doc-consolidation/spec-counts-before.json` 快照为准**（工具现取：`envelope-validation` **9/18**、`gate-enforcement` **9/17**、`ledger-integrity` **10/19**、`projections` **6/8**、`read-model` **6/13**）—— 两者**不是一回事**，拿括注那组数去比对会**误判 `1.3` 不符**。**数一律现取**（`python world-core/tools/spec_length_audit.py`）
 - [x] 1.4 `openspec validate --all --strict` 的 `INFO Requirement text is very long` **从 28 降到 0**（若仍有，逐条说明为什么）
       **★ 本节数值以哪一段为准（2026-09-28 立）**：**以"定案"那一段为准**——它的数值全部由**仓内工具**现取
       （`python world-core/tools/spec_length_audit.py`）。**前面各批登记里凡出现"手工量 N 条"的，那把尺子不可复算，已作废**；
