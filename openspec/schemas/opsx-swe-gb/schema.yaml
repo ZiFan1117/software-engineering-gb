@@ -1,18 +1,17 @@
 name: opsx-swe-gb
 version: 1
-description: "OpenSpec × 国标化流程融合档 — 一次改动即一份变更请求：proposal(CR) → specs(REQ 编号桥) → design(R5 影响分析与 ≥2 方案) → tasks → review(R4/R5 签字) → archive"
+description: "项目级 OpenSpec 工作流：产物链以 OpenSpec 为准（proposal → specs ∥ design → tasks → review）；流程侧要件（影响分析、≥2 方案、评审签字、需求号追溯）作件内栏位与附表，不另立册子、不设双份登记。判据：OpenSpec 有的跟 OpenSpec；OpenSpec 没有的跟流程；两边都有的——形态随 OpenSpec、内容随流程。"
 artifacts:
   - id: proposal
     generates: proposal.md
     description: "变更请求（CR/FC）：为什么改、改什么、不改的后果、档位与敏感路径判定"
     template: proposal.md
     instruction: |
-      本件＝项目流程里那张**变更请求（CR）**，不是另写一份。字段集取自
-      `templates/07-配置与发布类/03-变更请求.md`，但**同一批文件双读**：流程侧只留一行指针。
+      本件＝本次改动的**变更请求**，**就是这一份**：不另写一张申请单，也不在别处留指针。
+      字段集参照流程侧变更申请单的要素（为什么改／改什么／档位／影响面），要素落在本件里。
 
-      **首行必须是 CR 号**，形如 `CR: WC-CR-007`（框架变更写 `FC: WC-FC-2026-003`）。
-      这个号要三处一致：change 目录名 `cr-007-<slug>`、本件首行、`.scope-declaration.json`
-      的 `change_request`。号由人给（流程侧台账登记），agent 不自己编号。
+      **首行写变更号**，形如 `CR: WC-CR-007`（框架变更写 `FC: WC-FC-2026-003`）。
+      这个号要与 change 目录名一致（`cr-007-<slug>`）。**号由人给，agent 不自己编号。**
 
       必填节：
       - **Why**：为什么改。必须写清**不改的后果**——这是判"一件事还是两件事"的唯一判据
@@ -37,15 +36,15 @@ artifacts:
     description: "需求增量：### Requirement: REQ-xxx 标题，每条带可复现的验收场景与证据行"
     template: spec.md
     instruction: |
-      这是**需求增量**，对应流程侧的 SRS 增量与 RTM 行。它是 SRS 的**机读子集**，
-      不是替代品：**内容不复制，靠编号对齐**。
+      这是**需求增量**。本仓的规格树是需求内容的**机读权威载体**；流程侧的 SRS 与 RTM
+      是同一批需求的**文档形态与追溯面**——两边**靠编号对齐，不复制内容**。
 
       **编号是主键。** 每条 `### Requirement:` 的标题必须**以 REQ 号开头**：
 
           ### Requirement: REQ-F-012 单笔上限校验
 
       号从流程侧取（SRS / RTM 已在用的号），**永不复用、废弃留行、写全左补零**
-      （`REQ-F-012` 不写 `REQ-F-12`）。没有号的需求先回流程侧登记，不要在这里自造。
+      （`REQ-F-012` 不写 `REQ-F-12`）。**取不到号时登记为「无号·待增补」，不许自造、不许拿相近号硬凑。**
 
       **每条 Requirement 至少一个 Scenario**，且每个 Scenario 必须用**恰好四个 `#`**。
       每条 Scenario 末尾必须有证据行：
@@ -73,7 +72,8 @@ artifacts:
     description: "影响分析 + 回归范围 + ≥2 方案（含不改案）+ 排除清单"
     template: design.md
     instruction: |
-      本件同时充当流程侧的 **R5 影响分析**与**技术方案对比**。
+      本件是本次 change 的设计件。其中「影响分析」与「方案对比」两节的**填法**按流程侧 R5
+      的要求（那两条是流程的经验，内容随流程），**载体就是本件**——不另写一份影响分析。
 
       必填节：
 
@@ -132,9 +132,9 @@ artifacts:
     description: "R4/R5 评审记录与签字。R5 前置（方向批准）；R4 后置（实施完成后、归档前）"
     template: review.md
     instruction: |
-      本件是**流程侧独有的那道闸**：OpenSpec 本身没有角色概念，它允许 agent 自己
-      propose → apply → archive。项目流程的责任铁律①是「**执行者不能是唯一批准者**」，
-      本件就是那道闸。
+      本件是**评审与签字那道闸**。OpenSpec 本身没有角色概念（它允许 agent 自己
+      propose → apply → archive）；评审与签字是**流程侧的经验**（R0–R8、执行者不能是唯一批准者）。
+      按分工判据它归流程，而**载体落在本 change 上**——不另立册子、不设双份登记。
 
       **两个档位的时机不同，这是本工作流的硬约定：**
 

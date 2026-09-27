@@ -1,64 +1,84 @@
-# opsx-swe-gb · OpenSpec × 国标化流程 融合工作流
+# opsx-swe-gb · 项目级 OpenSpec 工作流
 
-**这是什么**：一个 OpenSpec 工作流（schema），把 [OpenSpec](https://github.com/Fission-AI/OpenSpec)
-的机器可校验产物链，与 `06-swe-gb` 那套国标化流程（S0–S7 / R0–R8 / 三类基线 / 变更八步）
-融成**一条**链。落在 `openspec/schemas/opsx-swe-gb/`，项目级 schema 优先级最高，
-`openspec new change <name> --schema opsx-swe-gb` 即可用。
+**这是什么**：一个 OpenSpec 工作流（schema）。产物链**以 OpenSpec 为准**：`proposal → specs ∥ design → tasks → review`；
+软件开发流程（国标／国际标准那套）里的**好经验**——影响分析、≥2 方案、评审与签字、需求号追溯——作为**件内栏位与附表**存在。
+**不另立流程册、不设"同一批文件两处登记"，也不写"一行指针"。**
 
-**主本**：`D:\Code\10-openspec-swe-gb\schemas\opsx-swe-gb\`（改主本，再同步到这里）。
+落在 `openspec/schemas/opsx-swe-gb/`，项目级 schema 优先级最高，`openspec new change <name> --schema opsx-swe-gb` 即可用。
+
+**主本**：`D:\Code\10-openspec-swe-gb\schemas\`（**改主本，再同步到这里**）。
+**主本必须同时含本 README 与 `opsx-swe-gb/` 下六个文件**——缺任何一件即为断链；两处逐文件 sha256 应一致。
 
 ---
 
-## 一、融合的判据：为什么是"接上"而不是"合并"
+## 一、判据：谁管什么（三条）
 
-两套东西的单位不同，这是融合的支点：
+1. **OpenSpec 有的 → 跟 OpenSpec。**
+2. **OpenSpec 没有的 → 跟流程。**
+3. **两边都有的 → 形态随 OpenSpec、内容随流程。**
 
-| | OpenSpec | 06-swe-gb |
+### 1.1 OpenSpec 有的（用它）
+
+| 事项 | 载体 |
+|---|---|
+| 一次改动的产物链 | `proposal → specs ∥ design → tasks → review` |
+| 「应当是什么行为」——**需求内容的机读权威载体** | `specs/<能力>/spec.md`（`### Requirement` ＋ `#### Scenario`） |
+| delta 语义 | `## ADDED／MODIFIED／REMOVED／RENAMED Requirements` |
+| 形态门禁 | `openspec validate`；`validate --archived`（tasks 全勾） |
+| 规格基线 | `openspec/specs/`（归档时 delta 合并入册） |
+| **承诺 ↔ 测试的绑定** | 每条 Scenario 末尾的 `- **证据**：<path>::<fn>` |
+| 改动状态与进度 | `openspec status`／`list`／`show`／`instructions` |
+
+### 1.2 OpenSpec 没有的（跟流程）
+
+| 事项 | 流程侧出处 |
+|---|---|
+| **阶段与阶段交付物 S0–S7**：可行性研究／开发计划（含裁剪说明）／质量保证计划／配置管理计划／风险清单／SRS／接口需求／**RTM**／HLD／模块号登记表／接口契约／LLD／单元测试记录／**覆盖率报告**／集成与系统测试报告／缺陷清单／验收报告／用户手册／版本说明／**基线标签** | `06-swe-gb/docs/01-流程与阶段/阶段流程与交付物.md` |
+| **评审 R0–R8**：立项／需求／框架／骨架／逐模块／框架变更／测试准出／验收／发布——**谁主持、谁必参、准入准出、三种结论形式** | `06-swe-gb/docs/02-评审与门禁/评审门禁与检查单.md` |
+| 覆盖率门槛、缺陷分级与准出、回归策略 | 同上 ＋ `附件四-测试与缺陷.md` |
+| 全阶段贯穿要求（**AI 不代签**／文档与代码不漂移／承诺可实测／评审意见辩证处置）与硬条款 **H-01…H-26** | `阶段流程与交付物.md` §硬条款速查 |
+| 配置管理与版本化、三类基线（需求／框架／产品） | `04-配置与版本/配置管理与版本化.md` |
+
+**这些的载体不落在本 schema 里**。但它们中间**与一次改动直接相关的那几栏**——批准人、执行者/批准者分离声明、准出判据、环境指纹——**写进 `review.md`**：`review.md` 就是 change 的第五件产物，**不需要第二本册子**。
+
+### 1.3 两边都有、深度不同的（最容易出错的一档）
+
+**OpenSpec 管形态，流程管内容。**
+
+| 事项 | OpenSpec 管的（形态） | 流程管的（内容） |
 |---|---|---|
-| 单位 | **一次改动**（change） | **一个项目 / 一个阶段** |
-| 管 | 这次改动动什么、delta 怎么合、任务几步、归档到哪 | 何时可开始、何时算做完、谁签字、留什么证据、越没越界 |
-| 校验器 | `openspec validate`（判**形态**） | `trace_matrix.py` / `scope_check.py` / `ci_self_check.py`（判**语义与责任**） |
-| 不管 | 角色、签字、基线、追溯、覆盖率、改动范围 | 目录怎么摆、标题怎么写、delta 怎么合进主规格 |
+| **规格合不合格** | 结构齐、每个 Scenario 恰好 4 个 `#` | **技术内容是否被评审并给出裁定**（H-24：「格式齐备」与「内容已裁定」**分列两条准出，只有前者不算过**） |
+| **承诺与实现是否一致** | 证据指向的测试**存在** | **该测试断言的真是那句话**（H-21） |
+| **判据可判定性** | 有 WHEN / THEN | 操作定义 ＋ 比对对象 ＋ 期望值/阈值 ＋ **一个反例**（H-03） |
+| **验证面独立性** | 无 | **不得用被测实现自身的解析器**；每条判定配真的会失败的反例（H-16） |
 
-`06-swe-gb` 的 R4/R5 **本来就是逐次触发的**（附件三第 96–97 行：R4「每个模块完成时」、
-R5「每次框架变更申请时」），且它自己声明 R0–R8 编号体系属**【本仓库】工程约定、
-不是国标分类**（附件三第 676、690 行）。⇒ **R4/R5 天然是 change 粒度的，接得上。**
-
-**融点只有一个**：一个 change 目录 = 一份变更请求（CR）。同一批文件，两个校验器各读一半，
-**不写两遍**。台账只留一行指针。
+⇒ **OpenSpec 的绿只证明"形态对"；"内容对不对"由评审与守卫脚本承担。** 这一条是这套工作流最要紧的分工，不许含糊。
 
 ---
 
-## 二、产物：同址双读
+## 二、产物：一份产物，两侧各读它需要的那半
 
 ```
-openspec/changes/cr-00x-<slug>/
+openspec/changes/<change>/
 ├── .openspec.yaml        ← CLI 生成，不手改
-├── proposal.md   ← CR §2 基本信息 + §3.3 变更理由（含「不改的后果」）+ 档位与敏感路径判定
-├── specs/<cap>/spec.md   ← 需求增量：### Requirement: REQ-F-012 …，每条带 - **证据**：<测试实名>
-├── design.md     ← R5 影响分析 + 回归范围 R-A…R-D + ≥2 方案（含不改案）+ **排除清单**
+├── proposal.md   ← 变更请求：为什么改（含「不改的后果」）、改什么、档位与敏感路径
+├── specs/<cap>/spec.md   ← 需求增量：### Requirement: REQ-…，每条带 - **证据**：<测试实名>
+├── design.md     ← 影响分析 ＋ 回归范围 R-A…R-E ＋ ≥2 方案（含不改案）＋ 排除清单
 ├── tasks.md      ← 实施步骤，每条自带完成判据
-└── review.md     ← 【流程独有】R4/R5 评审记录与签字
+└── review.md     ← 评审记录与签字（R5 前置 / R4 后置）
 ```
 
-`review.md` 不影响 `openspec validate`（它只认那四个内置产物名与 delta 语法）；
-反过来 OpenSpec 也不会替你生成审批栏。
+`review.md` 不影响 `openspec validate`（它只认四个内置产物名与 delta 语法）；OpenSpec 也不会替你生成审批栏。
 
 ---
 
 ## 三、硬约定：两个评审档位的时机不同
 
-这是本 schema 与普通 OpenSpec 最关键的一处设计，**有依据，不是拍脑袋**：
-
-- **R5（框架变更评审）＝ 前置闸。** 准入是「变更申请单 + 影响分析已完成」，
-  而这两样就是 `proposal.md`（含 FC-1…FC-6 触发条件与现象证据）与
-  `design.md`（含 ≥2 方案对比、含不改案）。**未获 R5 批准不得进入实施。**
-- **R4（模块评审）＝ 后置闸。** 准入是「模块代码已提交（含单元测试），附提交号」
-  （附件三第 185 行）——**代码没写完就没什么可审的**。所以在 apply 之后、归档之前填。
+- **R5（框架变更评审）＝ 前置闸。** 准入是「变更申请单 ＋ 影响分析已完成」——就是 `proposal.md` 与 `design.md`。**未获 R5 批准不得进入实施。**
+- **R4（模块评审）＝ 后置闸。** 准入是「代码已提交（含单元测试）、附提交号」——**代码没写完就没什么可审的**。在 apply 之后、**归档之前**填、签字。
 
 因此 `review` 的 `requires` 是 `tasks`，`apply.requires` 只是 `tasks`。
-**归档门禁**由两处共同承担：`openspec validate --archived`（tasks 必须全勾）
-＋ 流程侧的 `spec_bridge.py`（归档目录必须有 `review.md`）。
+**归档门禁**由两处共同承担：`openspec validate --archived`（tasks 必须全勾）＋ **`spec_bridge.py`**（归档目录必须有 `review.md`）。
 
 ---
 
@@ -80,59 +100,12 @@ archive                  ✓ 归档为 2026-09-27-cr-001-selftest
 validate --archived      ✓ 1 passed, 0 failed
 ```
 
-`openspec schema validate opsx-swe-gb` → **✓ Schema 'opsx-swe-gb' is valid**；
-`openspec schemas` 把它列为 `(project)`，链路 `proposal → specs → design → tasks → review`。
-
 ---
 
-## 五、还没造的：`spec_bridge.py`
+## 五、同步规则（受控面）
 
-fusion 规矩里那把**归档门禁**目前**不存在**（`06-swe-gb` 也没有）。它要校验四座桥：
+主本 `D:\Code\10-openspec-swe-gb\schemas\` ↔ 本仓 `openspec/schemas/`。
+**改主本，再同步过来**；两处**逐文件 sha256 一致**。
 
-| 桥 | 写法 | 判什么 |
-|---|---|---|
-| 需求 | `### Requirement: REQ-F-012 需求名` | specs ↔ SRS ↔ RTM 三方编号一致 |
-| 追溯 | RTM 第 14 列（备注）：`openspec:<capability>#<Requirement 名>` | 同上 |
-| 变更 | CR 号三处一致：目录名 `cr-00x-<slug>` / `proposal.md` 首行 / `.scope-declaration.json` 的 `change_request` | 同上 |
-| 证据 | `#### Scenario:` 末尾 `- **证据**：<路径>::<测试名>` | **测试实名必须存在** |
-
-外加两条归档门禁：归档目录必须有 `review.md`（含批准人与日期）；
-`git diff --diff-filter=MD -- openspec/changes/archive/` 非空即 rc=1（**归档只增不改**）。
-
----
-
-## 六、为什么这把门禁必须"自己被测"
-
-`06-swe-gb` 自己的 R5 评审记录给出了最贵的教训，逐字：
-
-> 门禁的失败模式不是"报错太多"，而是"**该报错时不报错**"。（附件五第 418 行）
-
-它实测出的自检盲区（评审记录第 115–117 行，三项阻断级）：给 CI 作业加 `if: false`
-可停用任意门禁而自检报告 0 问题；掏空作业步骤也不被发现（只校验作业名存在）；
-`continue-on-error` 的正则漏报 4 种合法写法。作者自陈"**我不能用'反向测试通过'
-来论证门禁可靠**"。
-
-⇒ 写 `spec_bridge.py` 时**必须同时写它的反例测试**：每一座桥都要有一个"改坏了就变红"的
-用例。**六道桥，六道反例**，缺一不算完成。
-
----
-
-## 七、使用
-
-```powershell
-# 建 change（融合档）
-openspec new change cr-007-add-dark-mode --schema opsx-swe-gb
-
-# 逐件取模板与规矩
-openspec instructions proposal --change cr-007-add-dark-mode --json
-openspec status   --change cr-007-add-dark-mode
-openspec status   --change cr-007-add-dark-mode --json   # 看 artifacts[].requires
-
-# 形态校验（机器判）
-openspec validate cr-007-add-dark-mode --strict
-
-# 归档后
-openspec validate --archived
-```
-
-CR 号由**人**给（流程侧台账登记），agent 不自己编号。
+受控面＝本 README ＋ `opsx-swe-gb/` 下六个文件（`schema.yaml` ＋ 五个模板）。
+**主本缺任何一件即为断链**——查法：对两处逐文件取哈希对账，缺件与不一致都要报出来。
