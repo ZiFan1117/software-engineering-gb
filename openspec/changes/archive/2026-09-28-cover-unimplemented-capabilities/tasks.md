@@ -372,7 +372,16 @@
       已按本仓口径改成**不写死**：判据条数与逐条结论**一律以 `spec_bridge.py --json` 的 `passed`/`failed` 为准**。
       **现取读数（2026-09-28）**：`—— 通过 12 / 失败 0 ——`（rc=0；含**新加的判据⑫**，见下）；`--self-test` ⇒ rc=0（**每条判据各配一个反例，反例不变红即判该条是装饰**——条数由打印行现算）。
       **判据② 的落点**：它的**扫描面含 delta**（`openspec/changes/**/specs/**/spec.md`）⇒ 本件各 delta 里的证据行**在归档合并前就被同一把尺子量**（不是等归档那一刻才红）；实测把某条证据行的 token 改坏 ⇒ 判据② 当场红（`通过 10 / 失败 1`），改回即复原。
-- [ ] 10.3 本件的 delta 合并入主规格并归档（**在此之前，本件必须一直不归档**）
+- [x] 10.3 本件的 delta 合并入主规格并归档（**在此之前，本件必须一直不归档**）
+      **★ 已结账（2026-09-28，独立评审席第三席终判「通过 · 可进 10.3」后执行）**：
+      **① 合并**：`openspec archive cover-unimplemented-capabilities --yes` ⇒ 8 条能力全部并入主规格，逐字 `Totals: + 15, ~ 0, - 0, → 0` ＋ `Specs updated successfully.`（其中 3 条**新建**：`delivery-and-resources`／`ontology-extensibility`／`write-side-adaptation`）。
+      **② 归档**：逐字 `Change 'cover-unimplemented-capabilities' archived as '2026-09-28-cover-unimplemented-capabilities'`。
+      **③ 归档带出来的三处**（**门禁当场抓的，逐条处置**）：
+      · **判据④／⑪ 红**（新并入的 Requirement 未进编号桥；`BRIDGE.md` 与生成器不一致）⇒ **重生成** `specmap.json` 与 `BRIDGE.md`（`rows=48 unmapped=30`）⇒ 两条转绿；
+      · **判据② 红**（并入主规格的证据行里**三处仍指着已归档的旧路径** `openspec/changes/cover-unimplemented-capabilities/…`）⇒ 改成归档后的真路径（`…/archive/2026-09-28-cover-unimplemented-capabilities/…`）⇒ 转绿；
+      · **判据⑤ 红**——它的规则逐字是「**必须存在一个未归档、且 tasks 有未勾项的 `cover-*`**」，理由逐字「未实现的能力失去落点，等于把『未定』当『已定』」⇒ 归档后**必须有后继**：已建 **`cover-remaining-capabilities`**（**在册型**，`skip_specs: true`），把**查实的 11 条"仍未实现"**逐条收进去（每条带现取证据）⇒ 转绿。
+      **④ 现取读数**：`spec_bridge.py` **12/0**｜`openspec validate --all --strict` **13 passed / 0 failed**。
+      **⑤ 一条自己的操作事故（如实记）**：第一次归档被我在 PowerShell 里用 `| Select-Object -First 20` 截断输出 ⇒ **管道关闭把 `openspec` 进程中途杀掉**，留下陈旧锁 `.openspec-archive.lock`、主规格处于**半合并**状态；处置＝回退两处改动 ＋ 删锁 ＋ **不再截断**（输出写文件）后重跑 ⇒ 一次成功。**教训：对原生命令用 `-First` 会杀进程**——这与"变异没打上 ≠ 断言没牙"同族，都是**工具用法造的假象**。
       **★ 归档时同批要做的一件事（2026-09-28 第三席【可-3】登记）**：`openspec/BOOK/冲突总账.md` 的「### 四、当前读数」一节**仍停在旧 sha**（逐字「`cover-*`：**21 已勾 / 13 未勾**」），本批四路能力线与 `10.x`／`11.x` 的收口**尚未入账**——它按 sha 标了时点，**不是假话**，但 `WC-RN-001` 把「这一轮改了什么、谁判的」的权威**指给了这份台账** ⇒ **归档时必须与它同批收口**（补一节新读数，旧节保留不追改）。
 
 - [x] 10.4 **本改动造成的接口文档漂移（只登记，未代改——等文档口）**：CLI 用法面已变

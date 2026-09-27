@@ -1,0 +1,5 @@
+schema: opsx-swe-gb
+created: 2026-09-28
+# 本 change 是**在册型**：把「仍未实现」的剩余项收进一处、逐条给处置（做／不做并说清代价／待人裁）。
+# 它自己**不产出 spec delta** ⇒ 按 openspec 的规矩用 skip_specs 声明（见 validate 的提示逐字）。
+skip_specs: true

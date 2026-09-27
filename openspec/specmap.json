@@ -71,6 +71,47 @@
    ]
   },
   {
+   "cap": "delivery-and-resources",
+   "file": "openspec\\specs\\delivery-and-resources\\spec.md",
+   "purpose": "规定\"话怎么送到、以及送到时的资源边界\"：一条记录要能指定收件人、请求要能与应答配对，通道要有一组可核的资源上限而不是无限受理。这一层今天在 OpenSpec 里没有任何落点，本 delta 把它建档——**在断言补上之前，不得声称已成立。**",
+   "reqs": [
+    {
+     "title": "REQ-F-023 投递、应答与收件人",
+     "line": 8,
+     "text": [
+      "事件 SHALL 支持指定收件人：带 `to` 时只送该收件人，不带 `to` 时按广播处理；`act` 的应答 SHALL 能通过 `request_id` 追回它的请求。",
+      "（今天：通道身份与一行应答已实现并实测，但 **`to` 的投递与请求/应答配对字段未实现**。）"
+     ],
+     "scenarios": [
+      {
+       "title": "带收件人的事件只出现在该收件人的出口上",
+       "line": 13,
+       "when": "写入一条带 `to` 的事件，再分别用两个收件人的读法取账本",
+       "then": "该事件只出现在 `to` 指定的那一份读法里，另一份里没有它；不带 `to` 的事件两份都在",
+       "ev": []
+      }
+     ]
+    },
+    {
+     "title": "REQ-F-026 通道资源边界",
+     "line": 19,
+     "text": [
+      "通道 SHALL 有四个可核的上限：**并发连接数、单条消息字节数、每秒消息数、空闲超时**；超限的请求 SHALL 被拒，且拒绝理由可读。",
+      "（今天：四个边界一个都没有；四个数值仍为【候选】，须人工确认后用例才可实现。）"
+     ],
+     "scenarios": [
+      {
+       "title": "超限请求被拒",
+       "line": 24,
+       "when": "逐项造出超过四个上限的请求",
+       "then": "每一项都被拒，错误里能读出**是哪一个上限**、当前值是多少",
+       "ev": []
+      }
+     ]
+    }
+   ]
+  },
+  {
    "cap": "envelope-validation",
    "file": "openspec\\specs\\envelope-validation\\spec.md",
    "purpose": "规定\"一件事写下来只有一种形式\"这一层对外可核的行为：信封的必填字段被逐字段强制、 三类话之外一律被拒、法律（本体与策略）损坏时拒绝启动而不是带病运行。 这一能力服务\"只固定意思的形式\"这条边界——它校验形状，不校验含义。",
@@ -230,6 +271,99 @@
        "when": "以 `policy` 版本号不为 1 的策略打开世界",
        "then": "拒绝启动，错误串为散文，**不含** `ext.world.` 码",
        "ev": []
+      }
+     ]
+    },
+    {
+     "title": "REQ-F-027 家族演进与向前兼容",
+     "line": 131,
+     "text": [
+      "事件一旦追加**不可改**，故演进 SHALL 是**加法**：`world` 声明词表版本，**只加 `flags`、永不改这个数的含义**；",
+      "新家族／新字段的引入 SHALL NOT 让旧事件读不懂。家族演进的形态 SHALL 逐层写死为下面三条：",
+      "1. **新家族怎么加**：SHALL 只**新增** `families.<名>` 与同名 `concepts.<名>`；SHALL NOT 删改既有家族的必填格、",
+      "SHALL NOT 改信封字段（书 §2.7 逐字：「核心之外由命名空间扩展，各方在自己的空间里定义自己的概念；",
+      "核心之内不取交集，也不做删减」）。既有家族与信封的必填格**一格未变**，是\"纯加法\"的判据；",
+      "2. **旧读法怎么读新账本**：账本只用旧家族的格 ⇒ SHALL 照读；账本若出现读法**没有语义**的家族 ⇒ SHALL **拒**，",
+      "并**点名**那个家族（写入侧 `ext.world.Ontology.UnknownKind`、折叠侧 `ext.world.ReadModel.UnknownKind`），",
+      "SHALL NOT 静默跳过——**不认识的语义拒绝**（与本 change `REQ-F-029` 对偶）；",
+      "3. **新读法怎么读旧账本**：同一本旧账本在新旧两套法律与读法下，折叠结果 SHALL **逐字节相同**",
+      "（书 §4.1 逐字：「一条记录落进来，折出来的状态跟着变；谁想改世界，只能往账本里加一条」）。",
+      "已知家族里新增一格时，两半 SHALL 分开判，SHALL NOT 合成一句\"加法演进\"：",
+      "- 加**可选**格 ⇒ 旧账本 SHALL 照读、折叠结果 SHALL 逐字节不变（不认识的**附加信息**忽略）；",
+      "- 加**必填**格 ⇒ 旧账本行 SHALL 读不过去，且**点名**缺的那一格（把某一格加成必填是**破坏性**的）。",
+      "**边界（SHALL NOT 被读成全称成立）**：读法认得哪些家族，今天是**编译进读模型**的三家族；",
+      "只往本体里加家族而不动读法时，读模型 SHALL 拒（上面第 2 条即此）。把家族表也变成数据是另一件事，本条不含。"
+     ],
+     "scenarios": [
+      {
+       "title": "新家族按加法加，新读法照读旧账本",
+       "line": 153,
+       "when": "取一份只新增家族与同名概念的新本体，与出厂本体分别读**同一本旧账本**",
+       "then": "词表身份**改变**（\"换本体\"确实发生）、既有三家族的必填格一格未变、旧账本每一行仍合法，",
+       "ev": [
+        "world-core/tests/family_readmodel.rs::h01_a_new_family_is_added_by_addition_and_the_new_reader_reads_the_old_ledger"
+       ]
+      },
+      {
+       "title": "读法没有语义的家族被拒且点名",
+       "line": 160,
+       "when": "账本里出现一条**新家族**的行",
+       "then": "写入侧与折叠侧两处都**拒**、各自**点名**那个家族；把那一行去掉后，新旧两套读法**都照读**",
+       "ev": [
+        "world-core/tests/family_readmodel.rs::h02_a_reader_refuses_a_ledger_that_uses_a_family_it_does_not_know"
+       ]
+      },
+      {
+       "title": "加可选格无害、加必填格破坏性",
+       "line": 166,
+       "when": "给**已知家族**加一格可选、再把它加成必填，两次都读同一本旧账本",
+       "then": "前者照读且折叠结果逐字节不变；后者读不过去并点名那一格（写入侧与折叠侧各报一次）",
+       "ev": [
+        "world-core/tests/family_readmodel.rs::h03_a_new_optional_cell_is_ignored_while_a_new_required_cell_is_refused"
+       ]
+      },
+      {
+       "title": "两个方向各有一条会红的断言",
+       "line": 172,
+       "when": "分别造出\"不认识的家族\"与\"不认识的旗标\"两条事件",
+       "then": "前者被**拒**且不落笔；后者被**接受**、落笔，且不影响后续折叠",
+       "ev": [
+        "world-core/tests/ontology_ext.rs::e02_a_landed_ledger_line_with_unknown_flags_folds_byte_identically"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "REQ-F-029 未知旗标必须忽略",
+     "line": 179,
+     "text": [
+      "系统 SHALL 忽略任何不认识的旗标，并按它认得的那些继续处理；SHALL NOT 因为出现未知旗标而拒收。",
+      "（依据逐字：出厂本体 `world-core/ontology.json:20` —— `\"flags\": \"array  # 能力旗标；未知旗标必须忽略\"`。）",
+      "本条与「未知**家族** SHALL 被拒」**对偶**，两条 SHALL NOT 互相冒充：分界线是",
+      "**不认识的语义拒绝，不认识的附加信息忽略**。「这条事件带着我不认得的旗标」SHALL NOT 被读成",
+      "「这个家族我不认识」；「这个家族我不认识」SHALL NOT 被读成「有旗标不认识」。",
+      "**第三情形**另立条文，SHALL NOT 被并入本条、也 SHALL NOT 被并入家族那一条：",
+      "扩展项与**核心字段重名** ⇒ SHALL 被拒（见本 change 的 `REQ-F-030`）——",
+      "它不属于「未知」那一类，而属于「与核心冲突」那一类。"
+     ],
+     "scenarios": [
+      {
+       "title": "未知旗标不影响受理",
+       "line": 191,
+       "when": "提交一条带未知旗标的事件",
+       "then": "该事件被接受、落笔，读回的 `flags` 保留原值；同一账本的折叠结果与不带该旗标时**相同**",
+       "ev": [
+        "world-core/tests/ontology_ext.rs::e02_a_landed_ledger_line_with_unknown_flags_folds_byte_identically"
+       ]
+      },
+      {
+       "title": "未知旗标与未知家族不许互相冒充",
+       "line": 197,
+       "when": "取同一条合法事件，分别只把它的 `flags` 换成未知旗标、只把它的 `kind` 换成未知家族",
+       "then": "前者被接受、落笔、折叠结果逐字节不变；后者被拒且**不落笔**——写入侧（`UnknownKind`）与折叠侧（`ReadModel.UnknownKind`）**两处都拒**，且各自点名那个家族",
+       "ev": [
+        "world-core/tests/ontology_ext.rs::e03_unknown_family_is_refused_on_both_sides_of_the_dual"
+       ]
       }
      ]
     }
@@ -434,7 +568,7 @@
     },
     {
      "title": "通告的闸，以及门禁不可绕过的部分实现边界",
-     "line": 190,
+     "line": 189,
      "text": [
       "通告 SHALL 过闸，两条纪律各自可单独判真假：",
       "① 带保留前缀（`gate.`）的通告类型 SHALL 只许内核自己写，外部提交一律拒；",
@@ -449,7 +583,7 @@
      "scenarios": [
       {
        "title": "保留前缀通告只许内核自己写",
-       "line": 204,
+       "line": 203,
        "when": "一个外部主体提交 `type` 以 `gate.` 开头的通告",
        "then": "被拒，错误串含 `ext.world.Gate.NoticeNotAllowed`，且伪造通告不落笔",
        "ev": [
@@ -458,7 +592,7 @@
       },
       {
        "title": "不在册主体不得写普通通告，在册主体必须能写",
-       "line": 210,
+       "line": 209,
        "when": "一个不在白名单的主体提交普通通告；对照组由在册主体提交同样形状的通告",
        "then": "前者被拒（`ext.world.Gate.NoticeRejected`），后者通过",
        "ev": [
@@ -467,11 +601,50 @@
       },
       {
        "title": "门禁不可绕过的未做部分被如实声明",
-       "line": 216,
+       "line": 215,
        "when": "查阅本能力的覆盖声明",
        "then": "祖先链遍历、通道层与 Landlock 自缚三项标为**未做**",
        "ev": [
         "world-core/docs/S1-需求/WC-SRS-001-v0.1.md"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "〔无号·待流程侧增补〕通告的闸",
+     "line": 222,
+     "text": [
+      "**通告 SHALL 与变更、动作一样过门禁**：主体只能发它被允许发的通告；不该由它发的通告 SHALL 被拒，拒绝 SHALL 留下可核的流水。",
+      "（两条纪律已在实现里落地：① 带保留前缀（`gate.`）的通告类型只许内核自己写；② 非保留前缀的通告，其 `actor` 必须在主体白名单内——执行者是 `world-core/src/lib.rs::adjudicate_notice`。）",
+      "**仍在册的缺口**：非保留前缀的通告**不检查 `writes` 授权表**、只检查主体白名单（通告按主体收窄授权属门禁强度变更，须人裁）。"
+     ],
+     "scenarios": [
+      {
+       "title": "越权通告被拒且留痕",
+       "line": 228,
+       "when": "一个未被允许的主体提交一条本不该由它发的通告",
+       "then": "提交被拒、不落笔，且账本里留下一条说明**拒绝了什么**的流水",
+       "ev": [
+        "world-core/tests/contract.rs::c23_notice_from_unlisted_actor_is_refused"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "〔无号·待流程侧增补〕可逆性判定与出厂配置互校",
+     "line": 240,
+     "text": [
+      "闸 SHALL 读得到动作的风险等级，并按**动作的不可逆等级**决定是否加摩擦；载体层的撤销点与世界状态的可逆性 SHALL **各自成立且互不冒充**，两处出厂配置冲突时 SHALL 拒绝启动。",
+      "（书第五章 5.5 判红的三件事今天已逐条落地：闸读得到风险等级（`world-core/src/gate.rs:73` 逐字 `pub risk: Option<CarrierRisk>,`，等级由 `world-core/src/gate.rs:445` 逐字 `cap.risk = carrier.lookup(name).map(|m| m.risk);` 接进能力表）；两处出厂配置互校、不一致即拒启（`world-core/src/gate.rs::cross_check_reversibility`，其调用在 `world-core/src/gate.rs:442`）；摩擦挂在**动作的不可逆等级**上、不挂在执行者身份上（`world-core/src/gate.rs:578` 逐字 `.filter(|c| !c.reversible)`）。）"
+     ],
+     "scenarios": [
+      {
+       "title": "同一个主体对不可逆动作必加摩擦",
+       "line": 245,
+       "when": "白名单内的主体对一件声明为不可逆的动作提交请求",
+       "then": "**加摩擦**（在账本上留下可核痕迹：事件带 `gate.friction:<等级>` 旗标）；对可逆动作则免检但留痕",
+       "ev": [
+        "world-core/tests/atom_reversibility.rs::a04_same_actor_reversible_is_free_and_irreversible_always_carries_friction"
        ]
       }
      ]
@@ -721,7 +894,7 @@
     },
     {
      "title": "承诺与证据的绑定强度",
-     "line": 194,
+     "line": 193,
      "text": [
       "本规格的每一条 Scenario 末尾的证据行 SHALL 指向**真实存在**的测试函数。",
       "系统 SHALL 明确声明的边界：**证据行只到\"测试名存在\"这一级**，",
@@ -731,11 +904,120 @@
      "scenarios": [
       {
        "title": "证据行的存在性可机核、内容相符性不可机核",
-       "line": 202,
+       "line": 201,
        "when": "核对某条 Scenario 的证据行所指向的测试函数是否存在",
        "then": "可机械判定；而当该测试函数的断言与 Scenario 说的不是同一件事时，",
        "ev": [
         "world-core/tools/spec_bridge.py"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "〔无号·待流程侧增补〕这本账的能力上限（三句，逐句判）",
+     "line": 212,
+     "text": [
+      "这一层 SHALL 按三句上限**逐句**对外声明它管到什么为止：**能消灭\"查无此申请\"**；**消灭不了\"查无此后果\"**；**消灭不了\"查无此人可担此责\"**。三句 SHALL 各自可判（各有一个能被检验的标的），且 SHALL NOT 被合并成一句笼统的\"可追责\"。",
+      "（书 §5.1 逐字：「把『没有记录』变成『有记录』，**能消灭『查无此申请』，消灭不了『查无此后果』，也消灭不了『查无此人可担此责』**。这三句话是这一层的天花板，逐句判。」）"
+     ],
+     "scenarios": [
+      {
+       "title": "三句各自可判，且不许互相冒充",
+       "line": 217,
+       "when": "逐句核这三条上限的标的：① 唯一写入路径 ＋ 只追加账本能否答出\"谁在何时改了哪个字段、前值是什么、因为哪一条\"；② **世界外面**产生的效果能否被世界里再写一条记录撤回；③ 出事之后能否指出一个**可担此责的人**",
+       "then": "①的标的**存在且可核**；②的标的**今天不存在**（没有第二本账、没有对账表）；③的标的**今天不存在**（没有归责与损失机制）；三句**各判各的**，任何一句为绿 SHALL NOT 被用来支持另一句",
+       "ev": [
+        "world-core/src/lib.rs",
+        "compile_fail"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "〔无号·待流程侧增补〕一个说法要回答的七个问题（同一份记录上的七个位置）",
+     "line": 238,
+     "text": [
+      "写下一件事 SHALL 能回答七个问题：**① 谁做的；② 对什么做的；③ 从什么变成什么；④ 因为什么才发生；⑤ 排在第几位；⑥ 谁允许的；⑦ 什么单位。**",
+      "（书 §2.9 逐字：「一件事被写下来，要能回答七个问题：谁做的、对什么做的、从什么变成什么、因为什么才发生、排在第几位、谁允许的、什么单位。」）",
+      "三条口径 SHALL 同时成立（**逐条都是判据，不是修辞**）：",
+      "1. **判据是读的人的**：一条记录写得全不全，判据是\"**别人能不能不问当事人就读出来**\"——\"写的人自己是否清楚\"**不作数**（书 §2.9 逐字：「答案是给读的人用的，不是给写的人用的……问题出在他不在场的时候」）；",
+      "2. **七个位置在**同一份记录上**，不是七份材料**：它们 SHALL 一次答在同一处，SHALL NOT 分散在不同件里让读者自己去凑（书 §2.9 逐字：「七个问题是同一份记录上的七个位置，不是七份材料……分散在三家的文档里，等于没有答」）；",
+      "3. **一处缺格即认缺**：SHALL NOT 用\"其余六格都在\"来含混——缺格要**如实标出来**（书 §2.9 逐字：「一处缺格，读者就顺理成章地回去找当事人，这一层的作用当场减半」）。"
+     ],
+     "scenarios": [
+      {
+       "title": "逐格核七个位置（哪几格有位置、哪几格没有）",
+       "line": 248,
+       "when": "对着一条真实记录逐格核这七个位置",
+       "then": "每格**要么**给出\"位置在哪、由什么钉住\"**要么**如实写\"今天没有位置\"，SHALL NOT 把缺格写成有格",
+       "ev": [
+        "world-core/tests/acceptance.rs",
+        "t1",
+        "world-core/tests/trace_notice.rs",
+        "world-core/tests/cli.rs",
+        "openspec/changes/cover-unimplemented-capabilities/tasks.md"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "cap": "ontology-extensibility",
+   "file": "openspec\\specs\\ontology-extensibility\\spec.md",
+   "purpose": "规定\"本体怎么长大而不把核心改坏\"：出厂本体是极小核心，扩展只能经命名空间加入，核心字段的含义永不因扩展而变；信封里的 `trace` 作为因果字段保留并可在入口写入。这一层今天只有草稿、没有实现，本 delta 把它建档。",
+   "reqs": [
+    {
+     "title": "REQ-F-030 本体：极小核心 ＋ 命名空间扩展",
+     "line": 8,
+     "text": [
+      "本体 SHALL 采用**极小核心 ＋ 命名空间扩展**的结构：出厂本体只定义三家族信封与最小概念集；扩展项 SHALL 落在命名空间内，**SHALL NOT 与核心字段重名**；换一份**只加扩展**的本体，同一账本的折叠结果 SHALL 不变。",
+      "（核心字段 = `envelope.required` ∪ `envelope.optional`；重名在**装载期**即拒启并点名撞上的那一项——",
+      "重名是\"法律自相矛盾\"，与 `load` 的其余错误同一处置。）",
+      "**★ 补齐书 §2.7 那半句（2026-09-28，`fc-2026-001/audit.md:144` 的\"书里有、规格无\"第 7 处）**：往上长的方式**只有加法**——",
+      "书 §2.7 逐字：「核心之外由命名空间扩展，各方在自己的空间里定义自己的概念；**核心之内不取交集，也不做删减**。」",
+      "⇒ 本条 SHALL 按此**双向**声明：① 核心之外 SHALL 只经命名空间**加**（已在上段）；",
+      "② **核心之内 SHALL NOT 取交集、SHALL NOT 做删减**——即**任何扩展都不得改写、收缩或重定义核心字段的含义**。",
+      "（这一句此前**只有正向那一半**落进规格：正向＝\"扩展走命名空间\"，反向＝\"核心不许被改\"**没有明文**；",
+      "它的可核形态就是上段的\"重名即拒 ＋ 只加扩展则折叠逐字节不变\"两条 Scenario——**含义被改，折叠必变**。）"
+     ],
+     "scenarios": [
+      {
+       "title": "扩展与核心字段重名必须被拒",
+       "line": 21,
+       "when": "造一份\"扩展项与核心字段重名\"（例如扩展里再叫 `body`）的本体",
+       "then": "加载**被拒**（错误码 `ext.world.Ontology.CoreCollision`）并指出重名的那一项；",
+       "ev": [
+        "world-core/tests/ontology_ext.rs::x01_an_extension_item_colliding_with_a_core_field_is_refused_at_load"
+       ]
+      },
+      {
+       "title": "换一份只加扩展的本体，同一账本的折叠结果不变",
+       "line": 28,
+       "when": "用同一份账本，分别以出厂本体与\"只加扩展\"的本体读（过法律 + 折叠）",
+       "then": "两次折叠结果**逐字节相同**，且词表身份**必须已变**（否则\"换本体\"没发生，相等是同义反复）；",
+       "ev": [
+        "world-core/tests/ontology_ext.rs::x02_a_pure_extension_keeps_the_fold_byte_identical"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "REQ-F-031 `trace`（信封因果字段）",
+     "line": 35,
+     "text": [
+      "信封的 `trace` SHALL 保留为需求：一条事件 SHALL 能声明\"它由哪一条事件引起\"，且该字段 SHALL 能从**写入入口**给出。",
+      "（**2026-09-28 起端到端可执行验证面已在**：库侧 `World::commit_requested` 一直有 `trace`；命令行这一级由",
+      "`append … [--trace <id>] [--flag <名>]...` 补上——原文\"`World::commit` 与 CLI `append` 都没有 `trace` 参数\"**已过期**。）"
+     ],
+     "scenarios": [
+      {
+       "title": "带 trace 的事件可写可读",
+       "line": 41,
+       "when": "从写入入口提交一条带 `trace` 的事件，再读回",
+       "then": "`trace` 原样落账且可读回；`trace` 指向一条不存在的事件时，行为有明文规定（接受或拒绝，二者择一并写死）",
+       "ev": [
+        "world-core/tests/trace_notice.rs::f61_append_with_trace_lands_and_reads_back_byte_for_byte"
        ]
       }
      ]
@@ -860,7 +1142,7 @@
     },
     {
      "title": "视觉投影与读模型逐项相等",
-     "line": 107,
+     "line": 106,
      "text": [
       "视觉投影 SHALL 由读模型派生；把视觉投影解析出的 `(主体, 路径, 值)` 三元组集合与读模型逐项比对，",
       "两者 SHALL **完全相等**（视觉投影只能改变画法，不得增删世界状态里的事实）。"
@@ -868,11 +1150,36 @@
      "scenarios": [
       {
        "title": "视觉投影与读模型逐项相等",
-       "line": 112,
+       "line": 111,
        "when": "把视觉投影解析为 `(主体, 路径, 值)` 三元组，与读模型 `entries()` 比对",
        "then": "两个集合完全相等",
        "ev": [
         "tests/acceptance.rs::t15_visual_projection_is_human_readable_yet_auditable"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "〔无号·待流程侧增补〕读法是叶子：几份读法之间不互相调用、不持有状态",
+     "line": 119,
+     "text": [
+      "几份读法之间 SHALL NOT 互相调用——没有一份要问另一份\"你那里是什么\"，也没有一份可以把自己的输出当作另一份的输入；读法 SHALL NOT 持有自己那一份状态（显示偏好不算状态）。",
+      "（书 §4.4 逐字：「不互相调用的意思是，没有一份要问另一份『你那里是什么』，也没有一份可以把自己的输出当作另一份的输入。它们都是账本的读法。**读法是叶子，只负责往外给。**」／「**读法不持有状态。** 读法可以有自己的显示偏好，比如排序、折叠、配色，这些偏好不影响它摆出来的内容；读法一旦开始记自己那一份状态，它就有了自己的说法，而这一层只允许一份说法。」）"
+     ],
+     "scenarios": [
+      {
+       "title": "拔掉一份读法，另一份照常工作",
+       "line": 124,
+       "when": "让其中一份读法**不可用**（或让它落后若干个事件）",
+       "then": "另一份读法**不受影响**（不因对方缺席而失败、也不去问对方要数据）；两份读法各自的产出**只依赖账本**",
+       "ev": [
+        "world-core/tests/projection_leaf.rs::p01_language_alone_is_complete_and_the_other_reading_never_runs",
+        "world-core/tests/projection_leaf.rs::p02_visual_alone_is_complete_and_the_other_reading_never_runs",
+        "world-core/tests/projection_leaf.rs::p03_same_ledger_same_bytes_twice_and_no_state_kept_anywhere",
+        "world-core/tests/projection_leaf.rs::p04_ledger_grows_so_does_each_reading",
+        "last_seq",
+        "world-core/tests/projection_leaf.rs::p05_a_lagging_reading_neither_breaks_nor_bleeds_into_the_other",
+        "world-core/tests/projection_leaf.rs::p06_the_two_exits_do_not_carry_each_others_shapes"
        ]
       }
      ]
@@ -1008,7 +1315,7 @@
     },
     {
      "title": "带检查点路径的性能目标不在本基线的承诺范围内",
-     "line": 120,
+     "line": 119,
      "text": [
       "系统 SHALL 明确声明**范围外**事项，SHALL NOT 被读成已成立：",
       "带检查点路径的性能目标（`REQ-N-008`：走检查点续算 ≤ 全量重算的 1/2，样本 ≥ 20 次取 P95）",
@@ -1018,11 +1325,168 @@
      "scenarios": [
       {
        "title": "性能目标不在本基线的承诺范围内",
-       "line": 127,
+       "line": 126,
        "when": "查阅本能力的覆盖声明",
        "then": "写明 `REQ-N-008` 未实现、无断言，且 `world-core/tests/perf.rs` 三条用例默认不跑",
        "ev": [
         "world-core/docs/S1-需求/WC-SRS-001-v0.1.md"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "〔无号·待流程侧增补〕声明以外的字段不许落账",
+     "line": 133,
+     "text": [
+      "写入侧 SHALL 按出厂本体 `ontology.json` 的 `concepts` 校验实体与字段：**未声明的实体**与**未声明的字段** SHALL 被拒；读模型侧 SHALL 对缺格报错，SHALL NOT 静默接受。",
+      "（书第五章 5.3 实测的那条命令今天非零退出且账本 0 行：执行者是 `world-core/src/ontology.rs::check_concepts`。）",
+      "**读模型侧的缺格**（`REQ-F-032` 判据②「缺格即报错」，书第五章 5.6 表 5.2 行逐字",
+      "「每个已声明的字段至少有一份读法可读，缺格就报错」）SHALL 逐格可判：",
+      "- **\"已声明\"可机械枚举**：`envelope.required`／`envelope.optional`／三家族各自的 `required`／`concepts`，",
+      "逐项从本体原文现取（条数由该文件现算，本处不复述）；",
+      "- **缺格即报错**：一行账本少了**已声明的必填格** ⇒ 读法 SHALL 拒，错误里 SHALL 读出**哪一层**的**哪一格**",
+      "（`ext.world.ReadModel.MissingCell`），以及该层已声明的必填格清单；补回那一格后结论 SHALL 与基线**逐字节相同**；",
+      "- **可选格不是缺格**：`to`／`trace`／`params`／`payload` 没写是这份法律允许的形态，SHALL NOT 报缺格；",
+      "- **空清单不是\"检查通过\"**：读法拿不到\"已声明格\"清单时 SHALL 拒（`ext.world.ReadModel.NoDeclaredCells`）——",
+      "\"一个格都没查\"与\"每个格都查过了\"在读数上一样、在结论上相反；",
+      "- **缺格与\"未知家族\" SHALL NOT 互相冒充**：不认识的家族报 `ext.world.ReadModel.UnknownKind` 并点名那个家族",
+      "（与本 change `REQ-F-029` 对偶），它的错误里 SHALL NOT 出现\"缺格\"的说法。",
+      "**边界（SHALL NOT 被读成全称成立）**：读模型**不渲染**信封的 `id`／`at`／`actor`／`world`／`flags`——",
+      "它们今天**被读**（缺了即拒，就是上面那条判据），但**不进入状态**（`state --json` 里读不到它们）；",
+      "读法认得哪些家族，今天是**编译进读模型**的三家族（`REQ-F-027` 的边界同此）。",
+      "系统 SHALL 如实声明本条的两处边界，SHALL NOT 被读成全称成立：",
+      "- **裸主体不受约束**：`world://<名字>`（没有实体／实例那一段）今天**照样能落账**——留下它不是口径而是代价",
+      "（既有出厂用例以这种形态写槽位，一律拒绝会把它们打红）。⇒ 书 §5.3 的\"世界的边界由声明定\"",
+      "在**实体引用**这一半成立，在**裸主体**那一半**仍未成立**；",
+      "- **本段只管 `change`**：三家族里只有 `change` 改状态，`act` / `notice` 的信纸由家族必填项管；",
+      "`notice.subject` 的语义是\"这条通告关于谁\"，不是\"改了哪一格\"，拿字段表去查它是查错了对象。"
+     ],
+     "scenarios": [
+      {
+       "title": "已声明的格可机械枚举，且与本体原文逐字一致",
+       "line": 163,
+       "when": "直读出厂本体的信封与三家族声明，与读法侧的清单逐项比对",
+       "then": "信封必填／可选、三家族必填、`concepts` 的实体与字段逐项相同，且本体身份（内容寻址）与出厂值一致",
+       "ev": [
+        "world-core/tests/family_readmodel.rs::h07_the_declared_inventory_is_mechanically_enumerable"
+       ]
+      },
+      {
+       "title": "缺格即报错，且点名缺的那一格",
+       "line": 169,
+       "when": "把账本某一行**已声明必填**的那一格删掉（信封的 `actor`，或家族信纸的 `request_id`）",
+       "then": "折叠被拒，错误码是 `ext.world.ReadModel.MissingCell`，错误里读出**哪一层**、**哪一格**、该层该有哪些格；",
+       "ev": [
+        "world-core/tests/family_readmodel.rs::h04_a_missing_declared_cell_is_refused_with_that_cell_named"
+       ]
+      },
+      {
+       "title": "空清单不许被读成宽松",
+       "line": 176,
+       "when": "读法收到一份空的\"已声明格\"清单",
+       "then": "拒绝折叠并给出 `ext.world.ReadModel.NoDeclaredCells`，SHALL NOT 默默放行",
+       "ev": [
+        "world-core/tests/family_readmodel.rs::h06_an_empty_declared_cell_list_is_not_read_as_lenient"
+       ]
+      },
+      {
+       "title": "命令这一级也拒（缺格即报错的可执行形态）",
+       "line": 182,
+       "when": "用一本删掉必填字段 `actor` 的账本跑 `state --json`",
+       "then": "`rc=2`，错误里读出 `ext.world.ReadModel.MissingCell` 并**点名** `actor`；把那一格补回去后 `rc=0`",
+       "ev": [
+        "world-core/tests/family_readmodel.rs::h05_the_cli_read_path_refuses_a_missing_declared_cell_end_to_end"
+       ]
+      },
+      {
+       "title": "未声明的实体与字段都被拒",
+       "line": 189,
+       "when": "分别写入一个未声明的实体、一个未声明的字段",
+       "then": "两次都被拒、都不落笔，且错误里能读出**是哪个实体 / 哪个字段**没有声明",
+       "ev": [
+        "world-core/tests/atom_declared_only.rs::b01_undeclared_entity_is_refused_and_nothing_lands"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "cap": "write-side-adaptation",
+   "file": "openspec\\specs\\write-side-adaptation\\spec.md",
+   "purpose": "规定\"世界外面的事怎么变成一条消息\"这一层对外可核的行为：**写侧只写、不裁决**，前值必须带上，翻不出来就报错，且这只手**以被管者身份运行、对账本与规则都没有写权限**。这一层原来在 OpenSpec 里**零落点**（书 §4.5 整节没有对应规格），本 delta 把它建档；覆盖面见下表。 **本 delta 覆盖书 §4.5 的哪三条、不覆盖哪一条**（不覆盖的也写在这里，免得被读成\"整节已落\"）： | 书 §4.5 的那一段 | 本 delta | |---|---| | `:585` 只写不裁决（准不准问 4.2 那道闸） | **覆盖**（第一条 Requirement；`act` 那一半的既有落点见 `WC-IRS-001` §3.12 的 `IF-011-R01`／`R08`） | | `:595`／`:597` 前值必须带上；翻不出来就报错、不许猜 | **覆盖**（第二条 Requirement；这一格此前**零落点**） | | `:601` 以被管者身份运行，对账本与规则都没有写权限 | **覆盖**（第三条 Requirement；静态墙的既有落点在 `world-core/src/guard.rs`，跨 uid 实测在 `world-core/tools/con01-no-bypass.sh`） | | `:599` 大对象不进主干道，主干道上只留一个内容指纹 | **不覆盖**：**货运道与内容指纹**今天**零落点**（既没有那条并行通道，也没有\"以内容引用当字段值\"的实现与断言）。⚠️ 同句的前半「主干道上的每一条记录都短」**另有落点**（`policy.json` 的 `channel_limits.max_line_bytes`，见 `world-core/src/channel.rs` 的 `Limits::from_policy`）——那是通道的单行上限，不是货运道，两者不得互相冒充 |",
+   "reqs": [
+    {
+     "title": "〔无号·待流程侧增补〕写侧只写，不裁决",
+     "line": 17,
+     "text": [
+      "写侧 SHALL 只负责把世界外面发生的事翻成一条消息；**准不准做 SHALL 一律交给门禁判定**，写侧 SHALL NOT 自行裁决。",
+      "（书 §4.5 逐字：「它们与世界要的形式之间隔着一只手，这只手在写侧，它的纪律只有一条：只写，不裁决。准不准做，一律问 4.2 那道闸。」）",
+      "写侧的\"不裁决\"在实现里是**结构**，不是措辞，三处可逐字核：",
+      "- `world-core/src/carrier/run.rs`：`act` 那一半的顺序不可交换（先问内核 → 内核说不行就一次都不动 → 才执行 → 结果带因果回写）；",
+      "- `world-core/src/carrier/providers.rs`：执行序列**只能拒绝，永远不能放行**（放行只发生在\"问过门禁之后\"）；",
+      "- `world-core/src/carrier/writeside.rs`：`change` 那一半的提交**原样**交给内核，内核说拒就照原话转述（`Submitted::Refused`），写侧不重判。"
+     ],
+     "scenarios": [
+      {
+       "title": "写侧不放过、也不拦下任何一条",
+       "line": 28,
+       "when": "向写侧提交一件按出厂策略**不该放行**的事",
+       "then": "写侧**原样提交**、由**门禁**拒绝并留下流水；写侧自己**不做**放行或拦截的判定",
+       "ev": [
+        "world-core/tests/write_side.rs::w01_the_write_side_submits_verbatim_and_never_adjudicates",
+        "world-core/tests/write_side.rs::w02_a_gate_refusal_leaves_a_trail_and_nothing_lands"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "〔无号·待流程侧增补〕前值必须带上；翻不出来就报错、不许猜",
+     "line": 40,
+     "text": [
+      "写侧 SHALL 把\"外面的一处变化\"翻成\"**某个对象的某个字段从旧值变成新值**\"，**前值 SHALL 随记录带上**；写侧 SHALL NOT 在翻不出来时猜一个近似的字段名填上去，**翻不出来 SHALL 报错并拒绝写入**。",
+      "（书 §4.5 逐字：「写侧要做的是把\"某个文件的一行变了\"翻成\"某个对象的某个字段从旧值变成新值\"，前值必须带上。少了前值，撤销与复盘各缺一半材料。」／「翻的时候还有一条要守：写侧不许替世界补意思。翻不出来就报错，不许猜一个近似的字段名填上去。猜出来的字段名会进账本，进去以后就成了\"事实\"，而它从来没被任何人说过。」）",
+      "两条口径各有可核的落点（`world-core/src/carrier/translate.rs`）：",
+      "- **前值**：外部变化里的前值是 `Option<Value>`；`None`（外部系统给不出旧值）⇒ 报错 `ext.world.Carrier.NoPreviousValue`。**没有兜底分支**——不拿 `null`、也不拿新值顶上。⚠️ 显式的 `null` 前值是**合法**的前值（「没有前值」与「前值是空」是两件事）。",
+      "- **名字**：只认**逐字相等**的 (主体, 字段)，由声明回答（`Declared` 窄接口）；不在声明里 ⇒ 报错 `ext.world.Carrier.UnmappableField`。近似名（`mute` 之于 `muted`）**同样拒绝**。",
+      "⚠️ **本条今天证明到哪一步（如实声明，不许被读成全称成立）**：",
+      "- **库层已落成、有断言**：`world-core/src/carrier/translate.rs` 与 `world-core/src/carrier/writeside.rs`；",
+      "- **装配接线待补**：声明面由 `impl Declared for Ontology`（一行）提供，落点是 M04 的装配点 `world-core/src/lib.rs`，而 `world-core/src/lib.rs` 与 `world-core/src/main.rs` **不在本工区的文件面内** ⇒ 今天**没有 CLI 子命令**从命令行走到这条路上；断言走的是库接口。",
+      "待补件与缺什么：`src/lib.rs` 里加一段 `impl crate::carrier::translate::Declared for Ontology`（`Ontology::entity_of` ＋ `Ontology::declared_fields` 两处已有公开方法，**不需要新语义**）。"
+     ],
+     "scenarios": [
+      {
+       "title": "翻不出来的输入被拒，且账本没有多出一条",
+       "line": 56,
+       "when": "给写侧一件**无法映射**到已声明字段的外部变化",
+       "then": "写侧**报错并拒绝**；读回账本，**条数不变**；错误信息里能读出**是哪一处**翻不出来",
+       "ev": [
+        "world-core/tests/write_side.rs::w04_a_change_without_a_previous_value_is_refused_and_the_ledger_does_not_grow",
+        "world-core/tests/write_side.rs::w05_an_undeclared_field_is_refused_and_never_guessed",
+        "world-core/tests/write_side.rs::w06_a_similar_field_name_never_reaches_the_kernel"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "〔无号·待流程侧增补〕写侧以被管者身份运行，且对账本与规则没有写权限",
+     "line": 70,
+     "text": [
+      "写侧 SHALL 以**被管者身份**运行在自己的进程里，**SHALL NOT** 对账本与出厂规则有任何写权限；它要写世界，SHALL 经通道提交请求，走**与任何其他主体完全相同**的那条路（校验、过闸、落笔）。",
+      "（书 §4.5 逐字：「写侧这只手跑在自己的进程里，以被管者身份运行，对账本与规则都没有写权限。它要写世界，只能经通道提交请求，走的是和别的任何主体完全相同的那条路：校验、过闸、落笔。这一点是\"唯一入口\"能不能成立的前提。手如果自己有写权限，世界就有了第二个权威，两处都能决定\"这件事允不允许\"，两处的结论迟早不同。」）",
+      "本条的两半各有归属，SHALL NOT 互相冒充：",
+      "- **\"对这些路径写不写得到\"（文件系统上的事实）**：`world-core/src/carrier/boundary.rs::assert_managed_cannot_write` —— 四条判据：不是符号链接、属主不是被管者、文件对 group/other 不可写、**所在目录**对 group/other 不可写且其属主不是被管者。它与 `world-core/src/guard.rs` 的静态墙**同一纪律、方向相反**（guard 的 `assert_owned_by` 要求属主**是**核心 uid——那一条要部署方显式传 `--owner-uid` 才运行；本处要求属主**不是**被管者），且刻意**不复用** `guard`：`M05 → M10` 已有一条真实 import 边，反向再连即**成环**（`WC-ATOM-001` §二 A-4）。",
+      "- **\"本进程现在到底是谁\"**：由部署保证（`world-core/src/channel.rs` 的 `bind` 一类的\"权限即身份\"、`runuser`／systemd `User=`），并由**跨 uid 实测**核；本模块不靠自称来证明身份。",
+      "⚠️ **本条今天证明到哪一步（如实声明）**：静态墙（`world-core/src/guard.rs`）与跨 uid 实拒**早已存在**（`world-core/tools/con01-no-bypass.sh`：以 `agent` 身份改配置／替换配置／直写账本三组全被拒，且断言 uid 自证与拒绝原因）；**新补的是写侧自己的那一半**——\"对这个被管者 uid，账本与规则写不写得到\"的可判函数 ＋ 会红的断言，以及**以被管者身份跑载体自己**的那条系统级实测（C-09）。"
+     ],
+     "scenarios": [
+      {
+       "title": "写侧手里的权限不足以绕过闸",
+       "line": 82,
+       "when": "让写侧进程**直接**尝试写账本或改出厂规则",
+       "then": "两次尝试**都被拒**（权限不足），写侧唯一能走通的路是**经通道提交**",
+       "ev": [
+        "world-core/tools/carrier_acceptance.sh"
        ]
       }
      ]
@@ -2521,6 +2985,18 @@
    "file": "openspec\\specs\\channel-identity\\spec.md"
   },
   {
+   "cap": "delivery-and-resources",
+   "req": "REQ-F-023 投递、应答与收件人",
+   "line": 8,
+   "file": "openspec\\specs\\delivery-and-resources\\spec.md"
+  },
+  {
+   "cap": "delivery-and-resources",
+   "req": "REQ-F-026 通道资源边界",
+   "line": 19,
+   "file": "openspec\\specs\\delivery-and-resources\\spec.md"
+  },
+  {
    "cap": "envelope-validation",
    "req": "事件身份在进程内唯一",
    "line": 80,
@@ -2539,6 +3015,18 @@
    "file": "openspec\\specs\\envelope-validation\\spec.md"
   },
   {
+   "cap": "envelope-validation",
+   "req": "REQ-F-027 家族演进与向前兼容",
+   "line": 131,
+   "file": "openspec\\specs\\envelope-validation\\spec.md"
+  },
+  {
+   "cap": "envelope-validation",
+   "req": "REQ-F-029 未知旗标必须忽略",
+   "line": 179,
+   "file": "openspec\\specs\\envelope-validation\\spec.md"
+  },
+  {
    "cap": "gate-enforcement",
    "req": "运行中的世界不重读策略",
    "line": 126,
@@ -2553,7 +3041,19 @@
   {
    "cap": "gate-enforcement",
    "req": "通告的闸，以及门禁不可绕过的部分实现边界",
-   "line": 190,
+   "line": 189,
+   "file": "openspec\\specs\\gate-enforcement\\spec.md"
+  },
+  {
+   "cap": "gate-enforcement",
+   "req": "〔无号·待流程侧增补〕通告的闸",
+   "line": 222,
+   "file": "openspec\\specs\\gate-enforcement\\spec.md"
+  },
+  {
+   "cap": "gate-enforcement",
+   "req": "〔无号·待流程侧增补〕可逆性判定与出厂配置互校",
+   "line": 240,
    "file": "openspec\\specs\\gate-enforcement\\spec.md"
   },
   {
@@ -2577,8 +3077,32 @@
   {
    "cap": "ledger-integrity",
    "req": "承诺与证据的绑定强度",
-   "line": 194,
+   "line": 193,
    "file": "openspec\\specs\\ledger-integrity\\spec.md"
+  },
+  {
+   "cap": "ledger-integrity",
+   "req": "〔无号·待流程侧增补〕这本账的能力上限（三句，逐句判）",
+   "line": 212,
+   "file": "openspec\\specs\\ledger-integrity\\spec.md"
+  },
+  {
+   "cap": "ledger-integrity",
+   "req": "〔无号·待流程侧增补〕一个说法要回答的七个问题（同一份记录上的七个位置）",
+   "line": 238,
+   "file": "openspec\\specs\\ledger-integrity\\spec.md"
+  },
+  {
+   "cap": "ontology-extensibility",
+   "req": "REQ-F-030 本体：极小核心 ＋ 命名空间扩展",
+   "line": 8,
+   "file": "openspec\\specs\\ontology-extensibility\\spec.md"
+  },
+  {
+   "cap": "ontology-extensibility",
+   "req": "REQ-F-031 `trace`（信封因果字段）",
+   "line": 35,
+   "file": "openspec\\specs\\ontology-extensibility\\spec.md"
   },
   {
    "cap": "projections",
@@ -2589,7 +3113,13 @@
   {
    "cap": "projections",
    "req": "视觉投影与读模型逐项相等",
-   "line": 107,
+   "line": 106,
+   "file": "openspec\\specs\\projections\\spec.md"
+  },
+  {
+   "cap": "projections",
+   "req": "〔无号·待流程侧增补〕读法是叶子：几份读法之间不互相调用、不持有状态",
+   "line": 119,
    "file": "openspec\\specs\\projections\\spec.md"
   },
   {
@@ -2601,8 +3131,32 @@
   {
    "cap": "read-model",
    "req": "带检查点路径的性能目标不在本基线的承诺范围内",
-   "line": 120,
+   "line": 119,
    "file": "openspec\\specs\\read-model\\spec.md"
+  },
+  {
+   "cap": "read-model",
+   "req": "〔无号·待流程侧增补〕声明以外的字段不许落账",
+   "line": 133,
+   "file": "openspec\\specs\\read-model\\spec.md"
+  },
+  {
+   "cap": "write-side-adaptation",
+   "req": "〔无号·待流程侧增补〕写侧只写，不裁决",
+   "line": 17,
+   "file": "openspec\\specs\\write-side-adaptation\\spec.md"
+  },
+  {
+   "cap": "write-side-adaptation",
+   "req": "〔无号·待流程侧增补〕前值必须带上；翻不出来就报错、不许猜",
+   "line": 40,
+   "file": "openspec\\specs\\write-side-adaptation\\spec.md"
+  },
+  {
+   "cap": "write-side-adaptation",
+   "req": "〔无号·待流程侧增补〕写侧以被管者身份运行，且对账本与规则没有写权限",
+   "line": 70,
+   "file": "openspec\\specs\\write-side-adaptation\\spec.md"
   }
  ],
  "gaps_uncovered_srs": [
@@ -2685,10 +3239,10 @@
   }
  ],
  "counts": {
-  "caps": 6,
-  "reqs": 33,
-  "scns": 61,
-  "evs": 59,
+  "caps": 9,
+  "reqs": 48,
+  "scns": 85,
+  "evs": 95,
   "srs": 41,
   "judges": 17,
   "booksecs": 46
