@@ -269,7 +269,7 @@ SHALL NOT 修改或删除已经写下的事件。
 > ① **今天没有任何自动化断言**：`MixedChain` 在仓库内只出现在
 >    `world-core/tests/contract.rs:845`（注释）与 `:879`（`c17` 函数级）；
 >    启动路径的拒绝由 `world-core/src/lib.rs:105` 逐字 `ledger.load_chain()?;` 触发，
->    系统级证据只有手工留档（`world-core/docs/理论/专家评审/复跑-九项保证-2026-09-27-VM.md:130-140`）。
+>    系统级证据只有手工留档（`world-core/docs/理论/专家评审/复跑-九项保证-2026-09-27-VM.md:130-140`）。 〔该件已按作者指示退场；解析根＝`git show bf2eae7:<原路径>`〕
 > ② 实现侧：`world-core/src/ledger.rs:506` 逐字 `self.chained = true;`（只在有链时置位），
 >    而 `world-core/src/ledger.rs:518-519` 逐字 `pub fn is_chained(&self) -> bool { self.chained }`
 >    ⇒ 该状态位**只用于显示**，未参与 `append` 的写入决策。
