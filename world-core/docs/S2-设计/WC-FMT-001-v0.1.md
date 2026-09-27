@@ -319,7 +319,7 @@
 | `seq` | integer（账本中的位置） | `Ontology.MissingField`；读侧 `Ledger.MissingSeq` | 由**账本**分配；落笔时必须等于 `next_seq`，否则 `Ledger.SeqMismatch` 拒写（`src/ledger.rs` L295–304） | `1` |
 | `at` | integer（Unix 秒） | `Ontology.MissingField` | `unix_secs()`（失败取 0，`src/event.rs` L73–78）；**顺序由 `seq` 决定，`at` 只作辅助**；**不进读模型、不进状态指纹**（`src/readmodel.rs` L211–227） | `1790414728` |
 | `actor` | string（世界内身份） | `Ontology.MissingField` | 形如 `world://user`、`world://core`、`world://agent/1`；**不是 pid/uid**（`07/2-依据/14` §2.2）；门禁按它裁决（`src/lib.rs` L133–192） | `"world://user"` |
-| `flags` | array（能力旗标） | `Ontology.MissingField` | 当前实现**可写非空旗标**（2026-09-28 起）：调用方经 `--flag <名>`（CLI `append`）或 `World::commit_envelope` 的信封 `flags` 传入，落笔前由 `event::with_flag` 追加；**不给 ⇒ 仍是空数组**（出厂初值不变）。**未知旗标必须忽略、永不因它改版本号**这条口径不变（`ontology.json:20`）。**`src/` 内已有读点**：`event::read_flags`（`src/event.rs`）／`Ontology::read_flags`（`src/ontology.rs`）——原文「`src/` 内**没有任何代码读 `flags`**」**已过期**；⚠ 本体**顶层**的 `flags` 那格**仍无人读**（本轮刻意如此，见 `WC-ONT-001` §八.4）。 | | `[]`（出厂初值） 
+| `flags` | array（能力旗标） | `Ontology.MissingField` | 当前实现**可写非空旗标**（2026-09-28 起）：调用方经 `--flag <名>`（CLI `append`）或 `World::commit_envelope` 的信封 `flags` 传入，落笔前由 `event::with_flag` 追加；**不给 ⇒ 仍是空数组**（**示例列即出厂初值**）。**未知旗标必须忽略、永不因它改版本号**这条口径不变（`ontology.json:20`）。**`src/` 内已有读点**：`event::read_flags`（`src/event.rs`）／`Ontology::read_flags`（`src/ontology.rs`）——原文「`src/` 内**没有任何代码读 `flags`**」**已过期**；⚠ 本体**顶层**的 `flags` 那格**仍无人读**（本轮刻意如此，见 `WC-ONT-001` §八.4）。 | `[]` |
 | `body` | object（家族信纸） | `Ontology.MissingField` | 必须是**对象**（数组/字符串/数字都拒，`src/ontology.rs` L185–191），再按家族查必填（§四） | `{"subject":…}` |
 
 #### 3.2 可选字段
