@@ -391,7 +391,8 @@ data = {
         "booksecs": sum(len(c["secs"]) for c in chapters),
     },
 }
-with io.open(OUT, "w", encoding="utf-8") as f:
+# ★ 2026-09-28 修：文本模式在 Windows 上会把 `\n` 写成 `\r\n`——本仓要求 LF。
+with io.open(OUT, "w", encoding="utf-8", newline="\n") as f:
     json.dump(data, f, ensure_ascii=False, indent=1)
 print(json.dumps(data["counts"], ensure_ascii=False))
 print("缺REQ号的Requirement =", len(gaps_missing_req), [g["req"] for g in gaps_missing_req])
