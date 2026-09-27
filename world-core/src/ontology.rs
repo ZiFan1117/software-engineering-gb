@@ -6,7 +6,7 @@
 //! 方式是「运行时装 + 用内容寻址钉住版本」。
 
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
 use std::path::Path;
@@ -15,9 +15,33 @@ use std::path::Path;
 #[derive(Debug, PartialEq)]
 pub enum Violation {
     NotAnObject,
-    MissingField { at: String, field: String },
-    BadVersion { expected: u64, got: u64 },
-    UnknownKind { kind: String },
+    MissingField {
+        at: String,
+        field: String,
+    },
+    BadVersion {
+        expected: u64,
+        got: u64,
+    },
+    UnknownKind {
+        kind: String,
+    },
+    /// **实体没声明过**（`concepts` 里没有它）——声明以外的东西不许落账。
+    ///
+    /// `known` = 本体里**已声明**的实体名（有序、逗号分隔）：报错要让人当场知道
+    /// "哪些是能写的"，否则这条错误只说了"不行"，没说"怎么办"。
+    UndeclaredEntity {
+        entity: String,
+        subject: String,
+        known: String,
+    },
+    /// **字段没声明过**（实体声明了，但这个字段不在它的字段表里）。
+    UndeclaredField {
+        entity: String,
+        field: String,
+        subject: String,
+        known: String,
+    },
 }
 
 impl fmt::Display for Violation {
@@ -39,6 +63,29 @@ impl fmt::Display for Violation {
             Violation::UnknownKind { kind } => {
                 write!(f, "ext.world.Ontology.UnknownKind: 未知家族 `{kind}`")
             }
+            Violation::UndeclaredEntity {
+                entity,
+                subject,
+                known,
+            } => write!(
+                f,
+                "ext.world.Ontology.UndeclaredEntity: 实体 `{entity}` 未在出厂本体里声明\
+                 （ontology.json 的 concepts 段）——**声明以外的东西不许落账**。\n\
+                 \x20 本次写入的 subject 是 `{subject}`；已声明的实体：{known}。\n\
+                 \x20 处置：改用已声明的实体，或先在出厂本体里声明它（改本体＝改法律，走评审）"
+            ),
+            Violation::UndeclaredField {
+                entity,
+                field,
+                subject,
+                known,
+            } => write!(
+                f,
+                "ext.world.Ontology.UndeclaredField: 字段 `{field}` 未在实体 `{entity}` 下声明\
+                 （ontology.json 的 concepts.`{entity}`.fields）——**声明以外的字段不许落账**。\n\
+                 \x20 本次写入的 subject 是 `{subject}`；实体 `{entity}` 已声明的字段：{known}。\n\
+                 \x20 处置：改用已声明的字段，或先在出厂本体里声明它（改本体＝改法律，走评审）"
+            ),
         }
     }
 }
@@ -59,6 +106,12 @@ pub struct Ontology {
     required: Vec<String>,
     optional: Vec<String>,
     families: BTreeMap<String, Family>,
+    /// **实体与字段的声明**（`concepts` 段）：世界里有哪些实体、各有哪些字段。
+    ///
+    /// 这一段的用途（书第五章 §5.3 逐字）：「它管两件事：什么算世界里存在的东西，
+    /// 什么算一次说得通的改变。」⇒ 落笔前必须查它（[`Ontology::check_concepts`]）。
+    /// 在本次改动之前，这一段在 `src/` 里**零读取**（声明写在文件里，落笔时没有人读它）。
+    concepts: BTreeMap<String, BTreeSet<String>>,
     /// 词表的**内容地址**（见 [`Ontology::vocab_hash`]），加载时算好。
     vocab_hash: String,
 }
@@ -113,11 +166,41 @@ impl Ontology {
             return Err("ext.world.Ontology.NoFamilies: 家族列表为空".to_string());
         }
 
+        // `concepts`：世界里有哪些实体、各有哪些字段（**落笔时要查的那一段**）。
+        //
+        // 口径（三条，都可判真假）：
+        // 1. 下划线开头的键不是实体（`_comment` 是说明文字）；
+        // 2. 实体的字段表是它 `fields` 对象的**键**；值（`"bool"` / `"enum(a,b)"`）
+        //    是**自由文本**的说明，不是机器 schema ⇒ 本模块不解释它，只当字段名用。
+        //    理由：现在去解释它，等于替法律发明一套类型系统，而这套系统的规则
+        //    在出厂本体里**没有写**；
+        // 3. 缺 `concepts` 段 ⇒ 实体表为空 ⇒ **任何带实体段的写入都会被拒**
+        //    （默认拒绝：没声明过的世界不该接受任何实体）。这不是"什么都不允许"的
+        //    安全默认，而是"法律没写全"——它会当场表现为写入被拒。
+        let mut concepts: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        if let Some(cs) = v.get("concepts").and_then(Value::as_object) {
+            for (entity, def) in cs {
+                if entity.starts_with('_') {
+                    continue;
+                }
+                let mut fields = BTreeSet::new();
+                if let Some(fs_obj) = def.get("fields").and_then(Value::as_object) {
+                    for name in fs_obj.keys() {
+                        if !name.starts_with('_') {
+                            fields.insert(name.clone());
+                        }
+                    }
+                }
+                concepts.insert(entity.clone(), fields);
+            }
+        }
+
         Ok(Ontology {
             world,
             required,
             optional,
             families,
+            concepts,
             vocab_hash: vocab_hash_of(&v),
         })
     }
@@ -153,7 +236,95 @@ impl Ontology {
         self.families.keys().map(String::as_str).collect()
     }
 
-    /// 校验一条事件是否合法：信封必填 → 版本 → 家族存在 → 信纸必填。
+    /// 已声明的实体名（有序）。
+    pub fn known_entities(&self) -> Vec<&str> {
+        self.concepts.keys().map(String::as_str).collect()
+    }
+
+    /// 某实体已声明的字段集（`None` = 该实体**没声明过**）。
+    pub fn declared_fields(&self, entity: &str) -> Option<&BTreeSet<String>> {
+        self.concepts.get(entity)
+    }
+
+    /// 从 `subject` 取出**实体类型**：`world://<实体>/<实例…>` ⇒ `Some("<实体>")`。
+    ///
+    /// 裸主体（`world://<名字>`，没有实例段）⇒ `None`：它**不是**某个实体的实例引用。
+    /// ⚠️ 这条口径留了一个**已登记的缺口**（见 [`Ontology::check_concepts`] 的文档）。
+    pub fn entity_of(subject: &str) -> Option<&str> {
+        let rest = subject.strip_prefix("world://")?;
+        let (entity, id) = rest.split_once('/')?;
+        if entity.is_empty() || id.is_empty() {
+            None
+        } else {
+            Some(entity)
+        }
+    }
+
+    /// **声明以外的东西不许落账**（书第五章 §5.3）：按 `concepts` 校验实体与字段。
+    ///
+    /// ## 查什么
+    ///
+    /// | 情形 | 结论 |
+    /// |---|---|
+    /// | `world://<未声明的实体>/<实例>` | **拒**，错误点名那个实体（`UndeclaredEntity`） |
+    /// | `world://<已声明的实体>/<实例>` + 未声明的 `path` | **拒**，错误点名那个字段（`UndeclaredField`） |
+    /// | `world://<已声明的实体>/<实例>` + 已声明的 `path` | 放行 |
+    ///
+    /// ## 只查 `change`
+    ///
+    /// 三家族里只有 `change` 改状态（读模型里就是 `objects[subject][path] = after`）——
+    /// 所以"什么是世界里的东西"只在它这里判。`act` / `notice` 的信纸由家族必填项管；
+    /// 且 `notice.subject` 的语义是"这条通告关于谁"，不是"改了哪一格"，拿字段表去查它
+    /// 是查错了对象。
+    ///
+    /// ## 一处**已登记的缺口**（不假装已闭合）
+    ///
+    /// **裸主体**（`world://<名字>`，没有实例段）**不受**本段约束——`world://s` 这类槽位
+    /// 今天照样能落账。留下它的原因不是口径，而是**代价**：既有出厂用例
+    /// （`tests/cli.rs:100/230`、`tests/contract.rs:257` 等多处、`tests/acceptance.rs:296`）
+    /// 都以这种形态写槽位，一律拒绝会把它们打红，而那些用例不许改。
+    /// ⇒ 书 §5.3 要的"世界的边界由声明定"在**实体引用**这一半成立，
+    /// 在**裸主体**那一半**仍未成立**（已在 `tests/atom_declared_only.rs` 里立成登记项）。
+    ///
+    /// ⚠️ 另一半（`world://check/probe`、`world://sys/a` 这类**带实例段**的未声明实体）
+    /// 已经被拒。代价是出厂门禁脚本 `world-core/check.sh` 第 89 行与 `tools/` 下的探针
+    /// 会非零退出：它们写的是"未声明的实体"，而本段正是要拦这个。
+    /// 那些文件不属本次改动范围，已在交付说明里逐条列出（含建议的最小改法）。
+    pub fn check_concepts(&self, kind: &str, body: &Value) -> Result<(), Violation> {
+        if kind != "change" {
+            return Ok(());
+        }
+        // 必填项缺失由家族必填检查负责报（这里不抢它的错误码）。
+        let Some(subject) = body.get("subject").and_then(Value::as_str) else {
+            return Ok(());
+        };
+        let Some(entity) = Self::entity_of(subject) else {
+            return Ok(()); // 裸主体：见上文「已登记的缺口」
+        };
+        let known = || self.known_entities().join(", ");
+        let Some(fields) = self.concepts.get(entity) else {
+            return Err(Violation::UndeclaredEntity {
+                entity: entity.to_string(),
+                subject: subject.to_string(),
+                known: known(),
+            });
+        };
+        let Some(path) = body.get("path").and_then(Value::as_str) else {
+            return Ok(());
+        };
+        if !fields.contains(path) {
+            let declared = fields.iter().cloned().collect::<Vec<_>>().join(", ");
+            return Err(Violation::UndeclaredField {
+                entity: entity.to_string(),
+                field: path.to_string(),
+                subject: subject.to_string(),
+                known: declared,
+            });
+        }
+        Ok(())
+    }
+
+    /// 校验一条事件是否合法：信封必填 → 版本 → 家族存在 → 信纸必填 → **声明以内**。
     pub fn validate(&self, ev: &Value) -> Result<(), Violation> {
         let obj = ev.as_object().ok_or(Violation::NotAnObject)?;
 
@@ -197,6 +368,11 @@ impl Ontology {
                 });
             }
         }
+
+        // **最后一道**：声明以外的东西不许落账（书 §5.3）。
+        // 放在形状检查之后：形状不对时先报形状（那是更基本的问题），
+        // 形状对了再问"这个名字世界里有没有"——两道错的报错顺序不该靠偶然。
+        self.check_concepts(kind, obj.get("body").unwrap_or(&Value::Null))?;
 
         Ok(())
     }

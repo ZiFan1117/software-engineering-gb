@@ -16,7 +16,38 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub const WORLD_VERSION: u64 = 1;
 
 /// 已定义的能力旗标。未知旗标**必须忽略**（本体纪律）。
+///
+/// ⚠️ 这个常量同时是**新事件的 `flags` 初值**（见 [`new_event`]）：往这里加一项，
+/// **每一条事件**都会带上它。故它只装"出厂即带"的旗标（今天为空）。
+/// 由某次裁决**临时**加上去的旗标（例如闸的摩擦标记）另用 [`with_flag`]，
+/// 名字常量另立（[`FLAG_FRICTION`]）。
 pub const FLAGS: [&str; 0] = [];
+
+/// **摩擦旗标**（闸加在不可逆动作上的可核流水）。
+///
+/// 依据：书第五章 §5.5 逐字「摩擦本该挂在动作的不可逆等级上：可逆处放手，不可逆处加摩擦」。
+/// 加摩擦这件事必须**在账本上留下可核的痕迹**，否则"加过摩擦"只是一句注释。
+/// 形式：`gate.friction:<等级>`（等级取自载体执行清单的 `risk`；无清单 ⇒ `gate.friction:unlisted`）。
+///
+/// 为什么落在信封的 `flags` 上：信封的 `flags` 就是"随事件走的旗标"，
+/// 且本体纪律要求**未知旗标必须忽略** ⇒ 旧读法读到它不会坏，新读法能从它核出摩擦发生过。
+pub const FLAG_FRICTION: &str = "gate.friction";
+
+/// 给一条已造好的事件补一个**能力旗标**（去重；`flags` 不是数组时**原样放过**，不静默修补）。
+pub fn with_flag(ev: &mut Value, flag: &str) {
+    let Some(obj) = ev.as_object_mut() else {
+        return;
+    };
+    let entry = obj
+        .entry("flags".to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    let Some(arr) = entry.as_array_mut() else {
+        return;
+    };
+    if !arr.iter().any(|v| v.as_str() == Some(flag)) {
+        arr.push(Value::String(flag.to_string()));
+    }
+}
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 

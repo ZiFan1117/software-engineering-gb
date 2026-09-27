@@ -208,6 +208,20 @@ fn cmd_check(
                 w.policy().capabilities().count(),
                 w.policy().allowed_subjects()
             );
+            // 两处出厂配置的互校状态（书 §5.5）：**拒启**这一半发生在 Policy::load 里，
+            // 能走到这里就说明两处一致；但"一致"与"没东西可比"必须分开说——
+            // 后者是缺口（闸读不到那些能力的风险等级），不得读成"已互校"。
+            match w.policy().carrier_dir() {
+                Some(d) => println!(
+                    "  互校 : ✅ 载体清单（{}）与世界侧可逆性一致（清单 {} 项）",
+                    d.display(),
+                    w.policy().carrier_manifest().names().len()
+                ),
+                None => println!(
+                    "  互校 : ⚠️ 策略同级没有 `cap.d/` ⇒ **无从互校**（未校验要说出来）：\
+                     那些能力的风险等级读不到，闸只知道可逆性布尔值"
+                ),
+            }
             println!(
                 "  账本 : {}  条数={}  next_seq={}",
                 l.display(),
@@ -252,12 +266,30 @@ fn cmd_policy(p: &Path) -> ExitCode {
                 // v1 的不可逆口径 = `DEBT-07`：**只允许 `irreversible_actors` 白名单主体**执行。
                 // v1 **没有审批通道**（无批准命令、无批准事件）⇒ 不得再打印"需批准"，
                 // 那会承诺一个不存在的出口（`WC-R4-DISP-001` §三 E-5 / `WC-CR-006` B-9）。
+                //
+                // 2026-09-28 改（书 §5.5 第三条：**闸读不到风险等级**）：等级现在读得到，
+                // 且打印出来——它是摩擦轻重的依据，不该只活在载体侧。
+                let level = pol.level_name(cap);
                 let grade = if cap.reversible {
-                    "可逆  → 免检但留痕"
+                    format!("可逆  → 免检但留痕（risk={level}）")
                 } else {
-                    "不可逆 → 加摩擦：只允许 irreversible_actors 白名单主体执行"
+                    format!(
+                        "不可逆 → **加摩擦**（risk={level}）：白名单主体放行并留下摩擦旗标；\
+                         白名单外一律加摩擦到拒绝执行"
+                    )
                 };
                 println!("    {name:<18} {grade}");
+            }
+            match pol.carrier_dir() {
+                Some(d) => println!(
+                    "  互校 : ✅ 载体清单（{}）与世界侧的可逆性一致（{} 项已比对）",
+                    d.display(),
+                    pol.carrier_manifest().names().len()
+                ),
+                None => println!(
+                    "  互校 : ⚠️ 策略同级没有 `cap.d/`（载体侧什么都没声明）⇒ 这些能力的\
+                     **风险等级读不到**（risk=未声明），不得当成低危"
+                ),
             }
             ExitCode::SUCCESS
         }

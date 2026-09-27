@@ -207,36 +207,63 @@ impl World {
             return Err(e.to_string());
         }
         let act_body = ev.get("body").cloned().unwrap_or(Value::Null);
-        self.adjudicate(kind, actor, &act_body)?;
+        let friction = self.adjudicate(kind, actor, &act_body)?;
+
+        // **摩擦落账**（书 §5.5：摩擦挂在动作的不可逆等级上）。
+        //
+        // 加摩擦不能只是裁决内存里的一个字段——它必须留下**可核的痕迹**，
+        // 否则"加过摩擦"在账本里查不到，审计就无从谈起。落点选信封的 `flags`：
+        // 本体纪律要求"未知旗标必须忽略" ⇒ 旧读法读到它不会坏，新读法能核出它。
+        //
+        // ⚠️ 加旗标发生在法律校验**之后**，所以加完必须**再过一遍法律**——
+        // "法律在前、落笔在后"不许因为"我在法律之后又改了事件"而破。
+        if let Some(f) = &friction {
+            event::with_flag(&mut ev, &f.flag());
+            if let Err(e) = self.ontology.validate(&ev) {
+                return Err(e.to_string());
+            }
+        }
 
         self.ledger.append(ev)
     }
 
     /// 门禁裁决（`act` 与 `change` **都必须过闸**），拒绝时**留痕并返回点名错误码**。
     ///
+    /// 返回 `Ok(Some(摩擦))` = 这次动作**不可逆**：放行，但摩擦必须随事件落账
+    /// （由 [`World::commit_verbatim`] 落到 `flags` 上）。
+    ///
     /// 抽成独立函数是因为两条拒绝路径必须说同样的话、留同样的痕——
     /// 复制两份迟早漂移成两种口径。
-    fn adjudicate(&mut self, kind: &str, actor: &str, body: &Value) -> Result<(), String> {
+    fn adjudicate(
+        &mut self,
+        kind: &str,
+        actor: &str,
+        body: &Value,
+    ) -> Result<Option<gate::Friction>, String> {
         match kind {
-            "act" => match self.policy.decide(actor, body) {
-                Decision::Allow => Ok(()),
-                Decision::Reject(reason) => Err(self.gate_refusal(
-                    "ext.world.Gate.Rejected",
-                    "gate.rejected",
-                    "门禁拒绝",
-                    actor,
-                    body,
-                    &reason,
-                )),
-                Decision::AwaitApproval(reason) => Err(self.gate_refusal(
-                    "ext.world.Gate.AwaitingApproval",
-                    "gate.awaiting-approval",
-                    "门禁加摩擦",
-                    actor,
-                    body,
-                    &reason,
-                )),
-            },
+            "act" => {
+                let verdict = self.policy.verdict(actor, body);
+                match verdict.decision {
+                    // 准了：把摩擦交回给落笔那一步（不可逆 ⇒ `Some`，可逆 ⇒ `None`）。
+                    Decision::Allow => Ok(verdict.friction),
+                    Decision::Reject(reason) => Err(self.gate_refusal(
+                        "ext.world.Gate.Rejected",
+                        "gate.rejected",
+                        "门禁拒绝",
+                        actor,
+                        body,
+                        &reason,
+                    )),
+                    Decision::AwaitApproval(reason) => Err(self.gate_refusal(
+                        "ext.world.Gate.AwaitingApproval",
+                        "gate.awaiting-approval",
+                        "门禁加摩擦",
+                        actor,
+                        body,
+                        &reason,
+                    )),
+                }
+            }
             "change" => {
                 let subject = body
                     .get("subject")
@@ -246,7 +273,7 @@ impl World {
                 // `authorize_write` 现只返回 Allow/Reject（不可逆分级只作用于 `act`）；
                 // 万一将来它返回"加摩擦"，按**默认拒绝**处理，而不是默默放行。
                 match self.policy.authorize_write(actor, &subject) {
-                    Decision::Allow => Ok(()),
+                    Decision::Allow => Ok(None),
                     Decision::Reject(reason) | Decision::AwaitApproval(reason) => Err(self
                         .gate_refusal(
                             "ext.world.Gate.WriteRejected",
@@ -258,8 +285,11 @@ impl World {
                         )),
                 }
             }
-            "notice" => self.adjudicate_notice(actor, body),
-            _ => Ok(()),
+            "notice" => {
+                self.adjudicate_notice(actor, body)?;
+                Ok(None)
+            }
+            _ => Ok(None),
         }
     }
 
