@@ -136,6 +136,26 @@
       **已改**：3.1 更正为「五组数」并留痕（`2026-09-27 由 7.13 更正`）。
       **验收**：已在本轮改写时改正
 
+      **★ 备料（2026-09-28，执行者量；**只备料、不代裁**——`proposal.md` 逐字「属"谁让"的裁定，**agent 不代选**」）**
+      **一、实况（现取，逐条带命令）**
+      · `world-core/tools/scope_check.py` 读的是 `.scope-declaration.json` 的 `allowed`（**不含** `openspec/**`）＋ `ALWAYS_ALLOWED`／`SENSITIVE_PATHS` 常量；
+      · CI 的"改动范围门禁"步骤以 **`working-directory: world-core`** 运行（`.github/workflows/world-core-gate.yml`）⇒ **仓库根的 `openspec/**` 不在它的判定面内**；
+      · `git grep -n "openspec" -- world-core/tools/scope_check.py` ⇒ **0 命中**（与本条的登记一致）。
+      **二、一处精确化（本条原话可以更准）**
+      原写「决定每个 change 产物形态的那一面**无门禁**」——**实测应分成两半**：
+      **形态**那一半**有**门禁：`spec_bridge.py` 的多条判据扫描面**含** `openspec/specs/**` 与 delta（⑧ 流程文档无修订记录／⑨ 规格正文无改因块／⑩ ADDED 标题不撞车／⑯ 书的四件撤回说法不许写回…），
+      且 `openspec validate --all --strict` 是 CI 的一个 job ⇒ **"规格正文长什么样"是被管的** ✓；
+      **改动范围／归属**那一半**没有**：没有任何判据回答"**这一次改动该不该动 `openspec/schemas/**`**"（那正是 `.scope-declaration.json` 想回答的问题，而它的 `allowed` 不含 `openspec/**`）。
+      **三、可选处置与代价（只列，不推荐）**
+      | 选项 | 要做什么 | 代价／风险 |
+      |---|---|---|
+      | (a) **并入判据③（改动范围）** | 把 `openspec/**` 加进 `.scope-declaration.json` 的 `allowed`，或让 `scope_check.py` 另读一份面向规格层的声明 | 声明从此要**两处维护**；且 `allowed` 的口径是"本子项目允许改的路径"，把 `openspec/**` 塞进去会**放大** world-core 的管辖面（与 `scope_note` 逐字"真实 PR 必须把本清单缩小"的精神相反） |
+      | (b) **单列一条判据** | 在 `spec_bridge.py` 加一条"这次改动碰了 `openspec/schemas/**`，须有声明／让路登记"的判据 | 需要新的对象（谁声明、放哪）；且判据本身要**会红**才算数（本仓口径） |
+      | (c) **明确"不在门禁内"＋写明对账口径** | 在 `openspec/schemas/README.md` 写明"本层不受改动范围门禁管；对账口径是 X（例如：以 `git log -- openspec/schemas` 为准）" | 最省事；但**"没有闸"这件事本身要被写明**（否则读者以为有管） |
+      **四、共性问题（三条路都要一起定）**：**主本在仓库外且无版本控制**（本条与 `7.6`／`7.12` 记的是同一事实）⇒
+      **"仓内这份为准、主本怎么对账"**必须一并裁定（仓内已有先例可援：`openspec/MAINTENANCE.md` 对 `_specmap` 的那句"**仓内这份为准，仓外那份只作历史**"）。
+
+
       **★ 已办（2026-09-28，逐处核过 → 五处改、一处本已对齐）**：
       | # | 处 | 改前 | 改后 |
       |---|---|---|---|
