@@ -130,22 +130,17 @@ impl State {
     fn apply_change(&mut self, seq: u64, ev: &Value) -> Result<(), String> {
         let body = match ev.get("body") {
             Some(Value::Object(m)) => m,
-            Some(_) => return Err(bad_cell_msg(seq, "body")),
+            Some(_) => return Err(bad_cell_msg(seq, "body", "对象")),
             None => return Err(missing_cell_msg(seq, "envelope", "body")),
         };
         let subject = match body.get("subject") {
             Some(Value::String(s)) => s.as_str(),
-            Some(_) => return Err(bad_cell_msg(seq, "body.subject")),
+            Some(_) => return Err(bad_cell_msg(seq, "body.subject", "字符串")),
             None => return Err(missing_cell_msg(seq, "body[change]", "subject")),
         };
         let path = match body.get("path") {
             Some(Value::String(s)) => s.as_str(),
-            Some(_) => {
-                return Err(format!(
-                    "ext.world.ReadModel.BadCell: change 事件 seq={seq} 的 body.path **不是字符串**\
-                     ——它不是缺格，是形状不对"
-                ))
-            }
+            Some(_) => return Err(bad_cell_msg(seq, "body.path", "字符串")),
             None => return Err(missing_cell_msg(seq, "body[change]", "path")),
         };
         if !body.contains_key("after") {
@@ -462,9 +457,9 @@ fn missing_cell_msg(seq: u64, at: &str, field: &str) -> String {
 /// 为什么抽成函数而不是内联 `format!`：那两处的文案里有**跨行的字符串续行**，其缩进属于字符串内容、
 /// 会参与 rustfmt 的行长计算 ⇒ 内联时 **rustfmt 的结论会来回翻**（2026-09-28 实测：先要块形式、
 /// 改成块形式后又要回非块形式，`cargo fmt --all -- --check` 永远差 1 处）。抽出来结构就定了。
-fn bad_cell_msg(seq: u64, what: &str) -> String {
+fn bad_cell_msg(seq: u64, what: &str, want: &str) -> String {
     format!(
-        "ext.world.ReadModel.BadCell: change 事件 seq={seq} 的 {what} 形状不对\
+        "ext.world.ReadModel.BadCell: change 事件 seq={seq} 的 {what} **不是{want}**\
          ——它不是缺格，是形状不对（读模型不猜、也不修补）"
     )
 }
