@@ -74,7 +74,7 @@
 | **提供者** | `M02` 账本 —— `src/ledger.rs`：`Ledger::open(&Path)` `:166`、`next_seq()` `:254`、`last_seq()` `:259`、`read_from(u64)` `:399`、`read_all()` `:418`、`load_chain()` `:372`；`append` 为 `pub(crate)`，**外部不可见** |
 | **输入** | 账本路径；`append` 一条已由 `event::new_event` 构造、且 `seq == next_seq` 的事件 `Value` |
 | **输出** | `open` ⇒ `Ledger`；`next_seq`/`last_seq` ⇒ `u64`；`read_from`/`read_all` ⇒ `Vec<Value>`；`append` ⇒ 落笔后的 `Value` |
-| **异常/错误码** | `Ledger.*` 共 **19** 码（域清单 `src/error.rs:21`）：`CreateFail`/`OpenFail`/`Locked`/`LockFail`/`ReadFail`/`TruncateFail`/`Corrupt`/`MissingSeq`/`SeqGap`/`SeqMismatch`/`EncodeFail`/`StatFail`/`WriteFail`/`SyncFail`/`Poisoned`/`NoChain`/`MixedChain`/`MissingChain`/`ChainMismatch`（逐条发出点见附录 A §3.1） |
+| **异常/错误码** | `Ledger.*`（**2026-09-28 订正：原文写"共 19 码（域清单 `src/error.rs:21`）"——该处**已过期**：`src/error.rs` 现在只有 87 行、职责是**解析**`ext.world.<域>.<原因>`（`code_of`／`has_code`），**不再持有域清单**；且源码面实测 **22** 种。**码数现取、不写死**：`git grep -oE "ext\.world\.<域>\.[A-Za-z]+" -- world-core/src \| sort -u \| wc -l`）：`CreateFail`/`OpenFail`/`Locked`/`LockFail`/`ReadFail`/`TruncateFail`/`Corrupt`/`MissingSeq`/`SeqGap`/`SeqMismatch`/`EncodeFail`/`StatFail`/`WriteFail`/`SyncFail`/`Poisoned`/`NoChain`/`MixedChain`/`MissingChain`/`ChainMismatch`（逐条发出点见附录 A §3.1） |
 | **不变量** | ① 只追加；② 文件必须以 `\n` 结尾，写入失败即回滚到写入前长度；③ 写入 + `fsync` 成功才推进 `next_seq`；④ 「写失败且回滚失败」或 `fsync` 失败 ⇒ 标记 `Poisoned` 并拒绝一切后续写入；⑤ 启动即执行单写者锁（`*.lock`，第二个写者被拒） |
 | **判据** | `IF-001-R01`–`R09`（9 条，`WC-IRS-001` §3.2.2） |
 
@@ -85,7 +85,7 @@
 | **提供者** | `M05` 门禁 —— `src/gate.rs`（`Policy::load` `:103`、`decide` `:269`、`authorize_write` `:222`、`subject_allowed` `:264`）+ `src/guard.rs`（静态墙三断言，§2 表）+ `policy.json`（能力表数据） |
 | **输入** | `load`：策略路径；`decide`：`actor` + `act` 信纸 `body`（读 `capability`/`verb`）；`authorize_write`：`actor` + `change` 的 `subject` |
 | **输出** | `Policy`；裁决枚举 `Decision::Allow` / `Decision::Reject(reason)` / `Decision::AwaitApproval(reason)`（`src/gate.rs:52`） |
-| **异常/错误码** | 上抛 **`Gate.*` 3 码**：`Gate.Rejected`、`Gate.AwaitingApproval`、`Gate.WriteRejected`（落笔形态与上抛形态见附录 A §3.3）；加载期 `Policy.*` 与静态墙 `Guard.*` **均为中文散文、无码**（附录 A §3.2：`ext.world.Guard.`/`.Policy.` 全仓命中 **0**） |
+| **异常/错误码** | 上抛 **`Gate.*`（**2026-09-28 订正：原文写"3 码"，源码面实测 **7** 种**——本轮新增 `FlagNotAllowed`（保留前缀旗标由调用方给出即拒）；`NoticeNotAllowed`／`NoticeRejected` 是既有码，本轮补上它们的**断言面**（`tests/trace_notice.rs::f71`／`f72`）。**码数现取、不写死**：`git grep -oE "ext\.world\.<域>\.[A-Za-z]+" -- world-core/src \| sort -u \| wc -l`）**：`Gate.Rejected`、`Gate.AwaitingApproval`、`Gate.WriteRejected`（落笔形态与上抛形态见附录 A §3.3）；加载期 `Policy.*` 与静态墙 `Guard.*` **均为中文散文、无码**（附录 A §3.2：`ext.world.Guard.`/`.Policy.` 全仓命中 **0**） |
 | **不变量** | ① 未声明的能力不放行（默认拒绝）；② `writes` 未列出的主体不得写任何主体；③ 可逆动作免检但留痕，不可逆动作只允许 `irreversible_actors` 白名单主体执行，白名单外一律 `AwaitApproval`；④ 策略启动时一次读入、运行中不重读（改盘上策略须重启才生效）；⑤ **不依赖 L4**（`src/gate.rs` 对 `project`/`visual`/`language` 零命中） |
 | **判据** | `IF-002-R01`–`R10`（10 条，`WC-IRS-001` §3.3.2） |
 
@@ -118,7 +118,7 @@
 | **提供者** | `M01` —— `src/ontology.rs`：`Ontology::load(&Path)` `:71`、`world()` `:125`、`vocab_hash()` `:144`、`optional()` `:148`、`known_kinds()` `:152`、`validate(&Value)` `:157`；自由函数 `vocab_hash_of(&Value)` `:240` |
 | **输入** | `load`：本体 JSON 路径；`validate`：一条待校验事件 |
 | **输出** | `Ontology`；`vocab_hash` ⇒ `&str`（内容寻址，形如 `fnv1a64:<16 位小写十六进制>`）；`validate` ⇒ `()`；`world` ⇒ `u64`；`known_kinds` ⇒ `Vec<&str>` |
-| **异常/错误码** | `Ontology.*` 共 **10** 码（附录 A §3.1）：`ReadFail`/`BadJson`/`NoVersion`/`NoEnvelope`/`NoFamilies`/`BadField`/`NotAnObject`/`MissingField`/`BadVersion`/`UnknownKind`；`load` 还会上抛 `Guard.*`（**无码**，`src/ontology.rs:81` 调用静态墙） |
+| **异常/错误码** | `Ontology.*`（**2026-09-28 订正：原文写"共 10 码"，源码面实测 **13** 种**——本轮新增 `CoreCollision`（扩展项与核心字段重名 ⇒ 装载期拒启并点名，`tests/ontology_ext.rs::x01`）。**码数现取、不写死**：`git grep -oE "ext\.world\.<域>\.[A-Za-z]+" -- world-core/src \| sort -u \| wc -l`）（附录 A §3.1）：`ReadFail`/`BadJson`/`NoVersion`/`NoEnvelope`/`NoFamilies`/`BadField`/`NotAnObject`/`MissingField`/`BadVersion`/`UnknownKind`；`load` 还会上抛 `Guard.*`（**无码**，`src/ontology.rs:81` 调用静态墙） |
 | **不变量** | ① `validate` 用**类型化** `Violation` 报错（`src/ontology.rs:16`），**不猜**：未知家族拒绝而非忽略；② `vocab_hash` 是**内容地址**（加载时算好）；③ 静态墙在 `load` 内先读成功、再查权限（顺序见 `src/ontology.rs:79-81`） |
 | **判据** | `IF-005-R01`–`R05`（5 条，`WC-IRS-001` §3.6） |
 
@@ -129,7 +129,7 @@
 | **提供者** | `M09` —— `src/channel.rs`：`ChannelConfig::load(&Path)` `:73`、`listeners()` `:118`、`listener_for()` `:123`、`parse_request(&str)` `:138`、`bind(&Listener)` `:168`、`serve_once(...)` `:193` |
 | **输入** | `channel.json`（`{"channel":1,"listeners":[{socket,actor,uid}]}`）；一行 JSON 请求 `{"kind":…,"body":…[,"actor":…]}`（`kind` 必填） |
 | **输出** | 一行 JSON 应答：成功 `{"ok":true,"event":{…}}`（`event` = `World::commit` 返回的**同一个** `Value`）；失败 `{"ok":false,"error":"<同一条错误字符串>"}` |
-| **异常/错误码** | `Channel.*` 共 **13** 码（附录 A §3.1）：`ReadFail`/`BadJson`/`NoVersion`/`BadVersion`/`NoListeners`/`BadListener`/`BadRequest`/`BindFail`/`ChmodFail`/`ChownFail`/`AcceptFail`/`EmptyRequest`/`Impersonation`；另可上抛 `World::commit` 的 `Ontology.*`/`Gate.*`/`Ledger.*` |
+| **异常/错误码** | `Channel.*`（**2026-09-28 订正：原文写"共 13 码"，源码面实测 **23** 种**——**本轮未新增**，是多轮实现后计数未跟。**码数现取、不写死**：`git grep -oE "ext\.world\.<域>\.[A-Za-z]+" -- world-core/src \| sort -u \| wc -l`）（附录 A §3.1）：`ReadFail`/`BadJson`/`NoVersion`/`BadVersion`/`NoListeners`/`BadListener`/`BadRequest`/`BindFail`/`ChmodFail`/`ChownFail`/`AcceptFail`/`EmptyRequest`/`Impersonation`；另可上抛 `World::commit` 的 `Ontology.*`/`Gate.*`/`Ledger.*` |
 | **不变量** | ① 身份来自**内核**（`bind()` 后 `chmod 0600` + `chown` 给目标 uid，并拒绝在 group/other 可写目录建套接字，`src/channel.rs:168-185`、目录断言 `:172`），**不来自请求自称**；② 落笔必须经 `World::commit`，通道**无第二条写路径**；③ `listeners` 为空即拒载（`NoListeners`）；④ **v1 一次一连接**：`serve_once` 处理完一个连接即返回，长驻与并发未实现（`src/channel.rs:48-49`）；⑤ 一条请求最多产生一条事件：被拦时写一条 `notice`，原事件**不写** |
 | **判据** | `IF-006-R01`–`R06`（6 条，`WC-IRS-001` §3.7）；资源边界（超时/限流/单行上限）**未定**——需求侧登记为未决，不得编造阈值 |
 
@@ -162,7 +162,7 @@
 | **提供者** | `M03` —— `src/readmodel.rs`：`State::new()` `:47`、`fold(&[Value])` `:202`、`apply(&Value)` `:87`、`from_json(&Value)` `:170`、`to_json()` `:211`、`digest()` `:234`、`entries()` `:78`、`get()` `:72` |
 | **输入** | `fold`：按 `seq` 升序的事件切片；`apply`：单条事件；`from_json`：`to_json()` 的**规范形式** |
 | **输出** | `State`；`to_json` ⇒ 键有序的规范 JSON；`digest` ⇒ `fnv1a64:<16 位十六进制>`；`entries` ⇒ `(主体, 路径, 值)` 升序遍历 |
-| **异常/错误码** | `ReadModel.*` 共 **5** 码：`MissingSeq`（`src/readmodel.rs:89`）、`SeqGap`（`:95`）、`BeforeMismatch`（`:147`）、`UnknownKind`（`:112`）、`BadState`（`:174/180/183`） |
+| **异常/错误码** | `ReadModel.*`（**2026-09-28 订正：原文写"共 5 码"，源码面实测 **8** 种**——**本轮未新增**。**码数现取、不写死**：`git grep -oE "ext\.world\.<域>\.[A-Za-z]+" -- world-core/src \| sort -u \| wc -l`）：`MissingSeq`（`src/readmodel.rs:89`）、`SeqGap`（`:95`）、`BeforeMismatch`（`:147`）、`UnknownKind`（`:112`）、`BadState`（`:174/180/183`） |
 | **不变量** | ① 状态字段**私有**（`src/readmodel.rs:35-44`），构造路径只有 `fold`/`apply`/`from_json` 三条且全在本模块内；② 折叠**报错而不猜**：序号不连续、旧值不符、未知家族一律拒绝；③ 规范形式键有序 ⇒ 同样账本渲染同样字节；④ 指纹为 **FNV-1a（非加密）**，**不得**用于安全判断（`src/readmodel.rs:231-233`）；⑤ 折叠不写盘、不改账本 |
 | **判据** | `IF-009-R01`–`R08`（8 条，`WC-IRS-001` §3.10.2） |
 
@@ -173,7 +173,7 @@
 | **提供者** | `M08` —— `src/checkpoint.rs`：`Checkpoint::capture(&State)` `:50`、`base_seq()` `:59`、`digest()` `:64`、`write(&Path)` `:69`、`load(&Path)` `:86`、`verify(&[Value])` `:122`、`resume_unverified(&[Value])` `:152`；模块函数 `read_model_with_checkpoint(events, Option<&Checkpoint>)` `:167` |
 | **输入** | `capture`：一个 `State`；`write`/`load`：快照路径；`verify`/`resume_unverified`：账本事件切片 |
 | **输出** | `Checkpoint`（内含 `base_seq`/`digest`/`state`）；落盘纯文本 JSON `{"checkpoint":1,"base_seq":…,"digest":…,"state":{…}}`；`resume_unverified` ⇒ `State`；`verify` ⇒ `()` |
-| **异常/错误码** | `Checkpoint.*` 共 **11** 码（附录 A §3.1）：`EncodeFail`/`WriteFail`/`ReadFail`/`BadJson`/`NoFormat`/`BadFormat`/`MissingBaseSeq`/`MissingDigest`/`MissingState`/`Stale`/`DigestMismatch`；`capture` **无失败形态**（不返回 `Result`，`src/checkpoint.rs:50`）；`write` 还上抛**无码**的静态墙散文（`src/checkpoint.rs:81`） |
+| **异常/错误码** | `Checkpoint.*`（**2026-09-28 订正：原文写"共 11 码"，源码面实测 **12** 种**——**本轮未新增**。**码数现取、不写死**：`git grep -oE "ext\.world\.<域>\.[A-Za-z]+" -- world-core/src \| sort -u \| wc -l`）（附录 A §3.1）：`EncodeFail`/`WriteFail`/`ReadFail`/`BadJson`/`NoFormat`/`BadFormat`/`MissingBaseSeq`/`MissingDigest`/`MissingState`/`Stale`/`DigestMismatch`；`capture` **无失败形态**（不返回 `Result`，`src/checkpoint.rs:50`）；`write` 还上抛**无码**的静态墙散文（`src/checkpoint.rs:81`） |
 | **不变量** | ① 快照永远是**缓存**：`verify` 失败即拒用，宁可全量重算；② 删掉快照**不得有任何后果**（`read_model_with_checkpoint(None)` ≡ 全量折叠，两者结果必须逐字节相同）；③ **未核验路径的名字里带 `unverified` 是刻意的**，调用方须自知跳过了核验；④ `base_seq` 不得声称比账本更靠前；⑤ 快照格式版本 `FORMAT = 1`（`src/checkpoint.rs:47`），只加字段、不改旧字段含义；⑥ **不写账本**，不是第二写入口 |
 | **判据** | `IF-010-R01`–`R09`（9 条，`WC-IRS-001` §3.11.2） |
 
@@ -464,7 +464,8 @@
 | 提供者 | `M10` |
 | 输入 | **执行清单**（`cap.d/*.json`：能力名／执行器／动词表／风险／撤销策略／确认策略／沙箱参数）+ **一次调用**（能力名、动词、请求号、参数）；**不接受未在清单中列明的能力或动词** |
 | 输出 | 结构化结果（`result` 三态 ＋ 退出码 ＋ 明细 ＋ 可选的**载体撤销内容引用**）；**输出为纯文本或结构化值，不含二进制序列化** |
-| 异常与错误码 | 失败必 **fail loud**：`ext.world.` 前缀 ＋ 明确的"拒绝"与"失败"之分——**拒绝 = 一次都没动**，失败 = 试过了没成 |
+| 异常与错误码 | 失败必 **fail loud**：`ext.world.` 前缀 ＋ 明确的"拒绝"与"失败"之分——**拒绝 = 一次都没动**，失败 = 试过了没成。
+**（2026-09-28 补）码面清点**：`Carrier.*` 在 `src/carrier/**` 里实测 **34** 种（含边界族 `Boundary*` 7 种）；**原文只有上面那行散文、没有任何码面清点** ⇒ 本行补上落点与计数口径。**码数现取、不写死**：`git grep -oE "ext\.world\.<域>\.[A-Za-z]+" -- world-core/src \| sort -u \| wc -l` |
 | 不变量 | ① **只执行、不裁决**：本模块**永远不能放行**（可以拒绝，不可以放行）；② **对账本零写权限**：它写世界的唯一通道是经 `M09` 向 `M04` 提交请求（**协议面**的线协议——**不是 `import` 边**，故登记表 `M10` 行依赖列写「无」；实现面为真：`src/carrier/kernel.rs` 的 `UnixStream::connect` 对面正是 `src/main.rs` 的 `channel::serve_once`）；③ 连不上内核 ⇒ **拒绝执行**（不做本地降级、不排队）；④ 需要撤销点而做不成 ⇒ **拒绝动手**；⑤ 结果必须带**因果**（`trace` 指向意图事件的 `id`），且与意图**同请求号** |
 | 判据（可机械核对） | 见 `WC-IRS-001-v0.1` 中 `IF-011` 的「验收判据」与「应当失败的反例」两列；系统级实测见 `tools/carrier_acceptance.sh`（22 项断言，含 4 条"应当失败"的反例） |
 
