@@ -85,7 +85,7 @@
 - **WHEN** 让两份投影在**内容**上不一致（例如一方少渲一半主体）、而头部四项相同
 - **THEN** `project check` **仍然报绿** —— 本断言证明的是**边界**而不是实现缺陷；
       它把该命令的覆盖限定为"同一份输入下的身份一致性核对"
-- **证据**：需补断言（列进 tasks）——实现侧为 `world-core/src/project/mod.rs:124-145`；
+- **证据（待补）**：**本条尚无断言**（列进 tasks）——实现侧为 `world-core/src/project/mod.rs:124-145`；
       文档出处为 `world-core/docs/理论/语义世界-理论书-第一版-合订.md:736`。
 
 #### Scenario: 该命令的三个不等分支在命令路径上不可达（边界固定）
@@ -93,7 +93,7 @@
 - **WHEN** 检查 `world-core/src/main.rs` 的 `project check` 分支如何构造两份投影
 - **THEN** 两份投影取自**同一个 `state` 与同一个 `vocab`** ⇒ 命令路径上不可能出现"世界版本不同／
       词表不同／状态不同"三种不同源
-- **证据**：需补断言（列进 tasks）——实现侧为 `world-core/src/main.rs:408-410`
+- **证据（待补）**：**本条尚无断言**（列进 tasks）——实现侧为 `world-core/src/main.rs:408-410`
       逐字 `let a = language::render(&state, world, vocab);`／`let b = visual::render(&state, world, vocab);`。
 
 ### Requirement: 视觉投影与读模型逐项相等

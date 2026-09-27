@@ -175,7 +175,7 @@ SHALL NOT 修改或删除已经写下的事件。
 
 - **WHEN** 对一份无链（v1）账本做一次合法 `append`，再重新打开该账本
 - **THEN** 打开成功，`last_seq` 为 2，且账本未变成"部分有链、部分没有"
-- **证据**：需补断言（列进 tasks）——本条是 `K-3` 的**修复判据**，
+- **证据（待补）**：**本条尚无断言**（列进 tasks）——本条是 `K-3` 的**修复判据**，
       实现侧今天为 `world-core/src/ledger.rs:506`（`chained` 只读不用）与
       `world-core/src/lib.rs:105`（`load_chain()?;` 丢弃返回值）。
       **⚠ 且修复本身不属本 change**：本 change 只交规格文本，`world-core/` 一行不改
@@ -202,5 +202,8 @@ SHALL NOT 修改或删除已经写下的事件。
 - **WHEN** 核对某条 Scenario 的证据行所指向的测试函数是否存在
 - **THEN** 可机械判定；而当该测试函数的断言与 Scenario 说的不是同一件事时，
       **机械门禁不会变红**（这是本边界的定义）
-- **证据**：需补断言（列进 tasks）——`world-core/tools/doc_integrity.py` 的受控清单里
-      `openspec` 零命中；本 change 在 `tasks.md` 登记补建 `spec_bridge.py` 的该项检查。
+- **证据**：`world-core/tools/spec_bridge.py`
+      —— 判据②（`world-core/tools/spec_bridge.py::j2_evidence`）全称判定证据行指向的函数名是否真实存在，
+      其反例在 `world-core/tools/spec_bridge.py --self-test` 的反例②（把证据指向 `::no_such_fn` ⇒ 必红）；
+      而它**不读断言文本**，故"相符性"无机械判据。另一半边界由
+      `world-core/tools/doc_integrity.py` 的受控清单里 `openspec` 零命中承担。

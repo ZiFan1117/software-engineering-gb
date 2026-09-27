@@ -118,7 +118,7 @@ SHALL NOT 要求调用方去匹配中文散文措辞。
 
 - **WHEN** 以符号链接作为法律路径、或以对 group/other 可写的文件作为法律路径打开世界
 - **THEN** 拒绝启动，但错误串**不含** `ext.world.` 码——本断言证明的是**边界**而不是实现缺陷
-- **证据**：需补断言（列进 tasks）——实现侧为 `world-core/src/guard.rs::assert_not_other_writable`（:43）
+- **证据（待补）**：**本条尚无断言**（列进 tasks）——实现侧为 `world-core/src/guard.rs::assert_not_other_writable`（:43）
       与同文件的符号链接断言；文档出处为 `world-core/docs/S2-设计/WC-IC-001-v0.1.md:350-352`，
       三行末列逐字都写「⚠ **无码**」。
 
@@ -126,4 +126,4 @@ SHALL NOT 要求调用方去匹配中文散文措辞。
 
 - **WHEN** 以 `policy` 版本号不为 1 的策略打开世界
 - **THEN** 拒绝启动，错误串为散文，**不含** `ext.world.` 码
-- **证据**：需补断言（列进 tasks）——实现侧为 `world-core/src/gate.rs`:113-117。
+- **证据（待补）**：**本条尚无断言**（列进 tasks）——实现侧为 `world-core/src/gate.rs`:113-117。

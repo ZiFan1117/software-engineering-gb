@@ -102,15 +102,19 @@ SHALL NOT 被表述为"v1 CLI 从不读快照"。
 - **WHEN** 查阅 CLI 的用法串与分发分支
 - **THEN** 其中列出 `checkpoint write` / `checkpoint verify` / `checkpoint resume` 三条子命令，
       且 `checkpoint` 分支在 CLI 分发表里有对应项
-- **证据**：需补断言（列进 tasks）——实现侧为 `world-core/src/main.rs`:28-30 与 `world-core/src/main.rs`:153；
+- **证据（待补）**：**本条尚无断言**（列进 tasks）——实现侧为 `world-core/src/main.rs`:28-30 与 `world-core/src/main.rs`:153；
       三份仍写相反陈述的受控文档为 `world-core/docs/S4-实现/WC-UT-001-v0.1.md:54`、
       `world-core/docs/S1-需求/WC-SRS-001-v0.1.md:921`、`world-core/docs/S1-需求/WC-RTM-001.csv` 第 22 行。
 
 #### Scenario: 证据链的机械门禁不覆盖 openspec
 
 - **WHEN** 改动 `openspec/specs/` 下某条 Scenario 的证据行所指的测试名
-- **THEN** 现有的受控文档一致性脚本**不会变红**（`openspec` 在其受控清单里零命中）
-- **证据**：需补断言（列进 tasks）——`world-core/tools/doc_integrity.py` 全文检索 openspec 零命中。
+- **THEN** 受控文档一致性脚本**不会变红**（`openspec` 在其受控清单里零命中）；
+      该改名的**可核判据由另一件承担**——见下两行的证据行
+- **证据**：`world-core/tools/spec_bridge.py`
+      —— 判据②（`world-core/tools/spec_bridge.py::j2_evidence`）全称判定证据行指向的函数名是否真实存在，
+      其反例在 `world-core/tools/spec_bridge.py --self-test` 的反例②（证据指向 `::no_such_fn` ⇒ 必红）；
+      另一半边界由 `world-core/tools/doc_integrity.py` 的受控清单里 `openspec` 零命中承担。
 
 
 ### Requirement: 带检查点路径的性能目标不在本基线的承诺范围内

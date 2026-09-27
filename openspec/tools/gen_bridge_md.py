@@ -17,9 +17,35 @@ srs = {s["id"]: s for s in d["srs"]}
 flag = {"green": "已实现", "half": "部分", "red": "未实现"}
 
 rows = []
+
+# ── 标题**一律现取规格树**（2026-09-27 修）────────────────────────────────
+# 为什么：此前标题取自 `specmap.json` 的快照，而它的抽取器 `build_specmap.py` **在仓外、且不在版本控制里**
+# ⇒ **改规格里的标题，BRIDGE 却还是旧标题**（实测：判据④ 报「闸读得到风险等级…不在编号桥映射表里」，
+#   而 `specmap.json` 里仍留着旧标题——**只重跑生成器修不好它**）。
+# 规矩：**标题的权威是规格树**（`openspec/specs/<能力>/spec.md` 的 `### Requirement:`）；
+#       `specmap.json` 只负责"**哪个号**"的映射，不再负责"**标题怎么写**"。
+# 对不齐时（数量不符）**退回快照并打印告警**——宁可吵，也不静默用错标题。
+def _spec_titles(repo, cap):
+    p = Path(repo) / "openspec" / "specs" / cap / "spec.md"
+    if not p.is_file():
+        return []
+    return [ln[len("### Requirement:"):].strip()
+            for ln in p.read_text(encoding="utf-8", errors="replace").split("\n")
+            if ln.startswith("### Requirement:")]
+
+
+_REPO = Path(__file__).resolve().parent.parent.parent
+_MISMATCH = []
 for c in d["caps"]:
-    for r in c["reqs"]:
-        rows.append((c["cap"], r["title"], d["req_map"].get(r["title"], [])))
+    _live = _spec_titles(_REPO, c["cap"])
+    if len(_live) != len(c["reqs"]):
+        _MISMATCH.append("%s：规格树 %d 条 vs 快照 %d 条" % (c["cap"], len(_live), len(c["reqs"])))
+        _live = [r["title"] for r in c["reqs"]]          # 退回快照
+    for _i, r in enumerate(c["reqs"]):
+        rows.append((c["cap"], _live[_i], d["req_map"].get(r["title"], [])))
+
+if _MISMATCH:
+    print("⚠ 标题数与快照不符（已退回快照标题，请核）：" + "；".join(_MISMATCH))
 
 claim = defaultdict(list)
 for cap, req, ids in rows:

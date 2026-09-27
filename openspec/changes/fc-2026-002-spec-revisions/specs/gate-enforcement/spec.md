@@ -32,23 +32,36 @@
 
 对声明为不可逆（`reversible: false`）的能力，系统 SHALL 执行以下口径，且该口径 SHALL 被如实声明：
 
-- 主体**在** `irreversible_actors` 白名单内 ⇒ **放行，且不追加摩擦、不产生 `gate.*` 通告**；
-- 主体**不在** `irreversible_actors` 白名单内 ⇒ `AwaitApproval`（加摩擦），
-  拒因 SHALL 明说 v1 **没有审批通道**、不要等批准。
+- 可逆动作 ⇒ 免检（`Allow`），不带摩擦旗标，但 `act` SHALL 落账（免检 ≠ 不记）；
+- 不可逆、主体**在** `irreversible_actors` 内 ⇒ 放行，**且事件 SHALL 带摩擦旗标**
+  （`gate.friction:<等级>`，等级取自载体清单 `risk`，无清单取 `unlisted`），旗标随事件落账；
+- 不可逆、主体**不在**该白名单内 ⇒ `AwaitApproval`（加摩擦到拒绝执行）：SHALL 落一条
+  `gate.awaiting-approval` 通告，理由 SHALL 明说 v1 **没有审批通道**、不要等批准，并写出风险等级。
 
-摩擦的落点是**执行者的身份**，不是动作的不可逆等级。系统 SHALL NOT 被表述为
-"对不可逆动作本身加摩擦"——出厂配置下这句话不成立：
-按 `world-core/policy.json:32`，不可逆白名单只含 `world://user` 一个成员，
-而该成员同时被 `world-core/policy.json:28` 授权写任意主体
-⇒ **唯一能做不可逆动作的主体，恰是唯一完全免检的主体**。
+摩擦的落点是**动作的不可逆等级**，不是执行者身份：`friction` 只看能力是否可逆，**与请求者是谁无关**；
+身份只在下一步决定后果（放行并留旗标／拒绝执行）。⇒ 出厂配置下
+"唯一能做不可逆动作的主体恰是完全免检的主体"**不成立**：`world-core/policy.json:32` 的白名单只含
+`world://user`，而它执行不可逆动作时**必留**摩擦旗标。本口径 SHALL NOT 被读成"不可逆动作有审批环节"：
+v1 没有批准命令、没有批准事件、没有消费路径。
 
 #### Scenario: 不可逆能力触发摩擦
 
 - **WHEN** 一个**不在** `irreversible_actors` 内的主体提交一个不可逆能力
 - **THEN** 门禁加摩擦路径被触发，落一条 `gate.awaiting-approval` 通告，理由明说 v1 无审批通道
 - **证据**：`tests/acceptance.rs::t10_gate_adds_friction_for_irreversible_capability`
-      —— **⚠ 原文"提交一个不可逆能力"未限定主体**，会读出"任何主体都被加摩擦"；
-      实测口径是**只有白名单外主体**才加摩擦（`world-core/src/gate.rs:287-293`）。
+      与 `tests/atom_reversibility.rs::a05_non_whitelisted_actor_gets_friction_and_the_level_shows_in_the_flow`
+      —— **⚠** 原证据行的原话"提交一个不可逆能力"未限定主体，会读出"任何主体都被加摩擦"；
+      今天的口径是**白名单内放行且必加摩擦旗标、白名单外加摩擦到拒绝执行**——
+      前者由 `tests/atom_reversibility.rs::a04_same_actor_reversible_is_free_and_irreversible_always_carries_friction`
+      断言（同一主体 `world://user`，可逆不带旗标、不可逆带 `gate.friction:high` 且随事件落账）。
+
+#### Scenario: 同一个主体对不可逆动作必加摩擦
+
+- **WHEN** **同一个在册主体**（`world://user`，出厂不可逆白名单里唯一那一个）分别提交一件可逆动作与一件不可逆动作
+- **THEN** 可逆动作免检且事件不带摩擦旗标（但照样落账）；不可逆动作放行且事件带 `gate.friction:high`，
+      该旗标随事件落进账本
+- **证据**：`tests/atom_reversibility.rs::a04_same_actor_reversible_is_free_and_irreversible_always_carries_friction`
+      —— 变异：把 `world-core/src/gate.rs:572-584` 的 `Policy::verdict` 改成按主体身份判摩擦 ⇒ 本条变红。
 
 #### Scenario: 拒绝流水必须说清它拒绝了什么
 
@@ -64,7 +77,11 @@
       而 `world-core/tests/contract.rs:1152-1175` 的 `c23_gate_notice_says_what_it_refused`
       走的是**不可逆加摩擦**路径（`:1157` 逐字 `// 触发一条真实的内核裁决流水：agent 请求不可逆动作 ⇒ 加摩擦`，
       `:1167` 逐字 `.find(|ev| ev["body"]["type"] == json!("gate.awaiting-approval"))`）。
-      ⇒ "保留前缀被拒路径也要带 `refused` 指纹"这一条今天**没有断言** ⇒ 需补断言（列进 tasks）。
+      ⇒ "保留前缀被拒路径也要带 `refused` 指纹"这一条今天**没有断言**（列进 tasks）。
+- **证据（待补）**：**本条尚无断言**（列进 tasks）——`refused` 指纹的落点是
+      `world-core/src/lib.rs::gate_refusal`（`:436` 逐字 `let refused = Self::refused_digest(actor, act_body);`，
+      `:449` 逐字 `"refused": refused,`）；
+      今天的两条 `c23` 用例一条只查错误码与理由、一条走的是不可逆加摩擦路径，都不查该指纹。
 
 ### Requirement: 门禁配置在被管者不可写的域
 
@@ -108,28 +125,58 @@
 
 ## ADDED Requirements
 
-### Requirement: 闸读不到风险等级，且载体可逆与世界可逆无互校
+### Requirement: 闸读得到风险等级，且载体可逆与世界可逆互校（不一致即拒启）
 
-门禁 SHALL 只按 `reversible` 布尔值与 `irreversible_actors` 白名单裁决；
-风险等级（`risk`）SHALL NOT 参与"准不准做"的判定，只由载体侧执行清单解析器读取。
+闸 SHALL **读得到**风险等级（`risk`）：取自载体执行清单（与策略同目录的 `cap.d/*.json`），
+并 SHALL 用在**摩擦的轻重与拒绝流水**上（`gate.friction:low`/`:medium`/`:high`；无清单 ⇒ `:unlisted`）。
+`risk` SHALL NOT 单独决定"准不准做"：准不准仍由 `reversible` 与 `irreversible_actors` 裁决。
+⇒ 此边界 SHALL NOT 被读成"风险等级不参与门禁"。
 
-载体可逆与世界可逆 SHALL 被分开判定，SHALL NOT 互相冒充：
-载体撤销撤的是文件系统上的字节（工程兜底），世界可逆说的是世界状态退不退得回来；
-两者之间**在 v1 没有任何一致性检查**，此边界 SHALL 被如实声明，
-不得被读成"两处已互校"，也不得被读成"留了撤销点的能力在世界里也可逆"。
+两处出厂配置 SHALL **互校**：载体侧可逆性由 `risk: high` **或** `confirm: required` 导出，
+世界侧由 `capabilities.<能力>.reversible` 给出。两处各说各话时 SHALL 拒绝启动、点名该能力、
+写出两处各写了什么，且 SHALL NOT 落笔建账本；互校 SHALL 在装载策略时自动发生（不新增命令行参数）。
 
-#### Scenario: 风险等级不参与门禁裁决
+以下边界 SHALL 被如实声明：
 
-- **WHEN** 同一能力在载体执行清单里标 `risk: high`、在门禁策略里标 `reversible: true`
-- **THEN** 门禁按 `reversible: true` 放行，`risk` 不改变结论
-- **证据**：需补断言（列进 tasks）——实现侧为 `world-core/src/gate.rs:44-48`（结构里没有 `risk` 字段）。
+- **没有 `cap.d` 目录不是错误**：载体侧什么都没声明，就没有"两处"可比，互校跳过；该能力的 `risk`
+  读为**未声明**（`None`），SHALL NOT 被当成 `low`。代价如实写出：**这些能力的风险等级，闸读不到**；
+- 互校只对**两处都声明了**的能力生效；
+- **`undo` 不参与互校**：它撤的是文件系统上的字节（只作工程兜底），与世界状态退不退得回来是两个轴，
+  谁也不能推出谁（`world-core/src/carrier/mod.rs:32`）；拿它互校会把正常形态误判成冲突。
+⇒ 本边界 SHALL NOT 被读成"留了撤销点的能力在世界里也可逆"。
+
+#### Scenario: 两处配置互校冲突 ⇒ 拒绝启动且不落笔
+
+- **WHEN** 同一能力在世界侧声明 `reversible: false`、在载体执行清单里声明 `risk: low`、`confirm: never`
+      （⇒ 载体侧判**可逆**）
+- **THEN** 拒绝启动，拒绝理由含 `ext.world.Gate.ReversibilityMismatch` 并点名该能力、
+      写出两处各写了什么，且**账本文件根本不被创建**（一个字节都没落）
+- **证据**：`world-core/tests/atom_reversibility.rs::a01_conflicting_reversibility_refuses_to_start`
+      —— 变异：把 `world-core/src/gate.rs::cross_check_reversibility` 的 `return Err(…)` 删掉
+      （或让它恒 `Ok`）⇒ 本条变红（冲突配置竟能启动）。
+
+#### Scenario: 两处一致即正常启动，且闸读得到等级
+
+- **WHEN** 两处对同一能力同向声明（可逆 ↔ `risk: low`/`confirm: never`；不可逆 ↔ `risk: high`/`confirm: required`），
+      其中一项世界侧可逆、载体侧却留了撤销点（`undo: before-each`）
+- **THEN** 世界正常启动；闸读到的等级与该能力清单里写的 `risk` 一致；**留撤销点不使启动被拒**
+- **证据**：`world-core/tests/atom_reversibility.rs::a02_consistent_reversibility_starts_normally`
+      与 `world-core/tests/atom_reversibility.rs::a03_gate_reads_the_risk_level_of_the_factory_config`
+      —— 反"恒红"对照：没有这两条，`a01` 可能因为"什么都拒"而通过。
+      变异：把载体侧可逆性改用 `undo` 导出 ⇒ 出厂 `ledger.compact`（`undo: before-each` ＋ `reversible: false`）
+      被误判冲突 ⇒ 两条一起变红。
 
 #### Scenario: 载体可逆不等于世界可逆
 
 - **WHEN** 一项能力在载体侧留了撤销点（`undo: before-each`），而世界侧标 `reversible: false`
-- **THEN** 门禁按"世界不可逆"处置，载体撤销点**不**被当作世界可逆的依据
-- **证据**：需补断言（列进 tasks）——实现侧为 `world-core/src/carrier/mod.rs:28-34` 的对照表，其 `:32` 逐字
-      `| **载体撤销**（本模块） | 文件系统的字节 | **不是世界状态**；只作工程兜底，**不得**用于满足"坏了能回滚" |`。
+- **THEN** 门禁按"世界不可逆"处置（该动作必带摩擦：白名单内放行并留旗标、白名单外加摩擦到拒绝执行），
+      载体撤销点**不**被当作世界可逆的依据，**也不**被当作两处冲突的理由
+- **证据**：`world-core/tests/atom_reversibility.rs::a02_consistent_reversibility_starts_normally`
+      （第三项 `job.start`：世界侧可逆 ＋ 载体侧留撤销点 ⇒ 照样启动）
+      与 `world-core/tests/atom_reversibility.rs::a04_same_actor_reversible_is_free_and_irreversible_always_carries_friction`
+      （不可逆动作必带摩擦旗标）
+      —— 变异：把 `world-core/src/gate.rs::cross_check_reversibility` 的载体侧判据换成读 `undo`
+      ⇒ `a02` 变红。
 
 ### Requirement: 通告的闸，以及门禁不可绕过的部分实现边界
 

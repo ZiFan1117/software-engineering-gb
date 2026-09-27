@@ -188,7 +188,7 @@ SHALL NOT 修改或删除已经写下的事件。
 - **WHEN** 在修复落地之前，对一份无链账本做一次合法 `append` 后再打开
 - **THEN** 打开失败并报 `MixedChain` —— 本断言证明的是**边界的真实形状**，不是实现缺陷；
       它把"v1 兼容"限定为"**只读兼容**"，SHALL NOT 被读成"可平滑升级"
-- **证据**：需补断言（列进 tasks）——缺陷出处为 `world-core/docs/S0-立项/WC-SCMP-001-v0.1.md`:2537（K-3）与 :2541（后果链）。
+- **证据（待补）**：**本条尚无断言**（列进 tasks）——缺陷出处为 `world-core/docs/S0-立项/WC-SCMP-001-v0.1.md`:2537（K-3）与 :2541（后果链）。
 
 
 ### Requirement: 承诺与证据的绑定强度
@@ -204,5 +204,8 @@ SHALL NOT 修改或删除已经写下的事件。
 - **WHEN** 核对某条 Scenario 的证据行所指向的测试函数是否存在
 - **THEN** 可机械判定；而当该测试函数的断言与 Scenario 说的不是同一件事时，
       **机械门禁不会变红**（这是本边界的定义）
-- **证据**：需补断言（列进 tasks）——`world-core/tools/doc_integrity.py` 的受控清单里
-      `openspec` 零命中；本 change 在 `tasks.md` 登记补建 `spec_bridge.py` 的该项检查。
+- **证据**：`world-core/tools/spec_bridge.py`
+      —— 判据②（`world-core/tools/spec_bridge.py::j2_evidence`）全称判定证据行指向的函数名是否真实存在，
+      其反例在 `world-core/tools/spec_bridge.py --self-test` 的反例②（把证据指向 `::no_such_fn` ⇒ 必红）；
+      而它**不读断言文本**，故"相符性"无机械判据。另一半边界由
+      `world-core/tools/doc_integrity.py` 的受控清单里 `openspec` 零命中承担。
