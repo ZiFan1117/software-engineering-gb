@@ -42,7 +42,7 @@
       恢复 ⇒ `RESTORE_H08_RC=0`、1 passed、**`SRC_RESTORED=YES`**。全量 `cargo test --locked` ⇒ **rc=0**（16 target，FAILED=0）；
       `bash check.sh` ⇒ **rc=0**（42 ✅ / 0 ❌）。
     - **四处状态已按实改**：SRS 的 `TC-077` 用例行（`待实现（未落笔）` ⇒ 已实现 ＋ 载体 ＋ 变异证明 ＋ 载体偏差）｜
-      SRS 的"两个编号在库内零命中"那句（**`TC-077` 已不成立、`TC-078` 仍零命中**）｜SRS 的 `T-35` 行｜RTM 的 `REQ-F-032` 行
+      SRS 的"两个编号在库内零命中"那句（**`TC-077` 已不成立、`TC-078` 仍零命中**——⚠ **2026-09-28 补注：这一格写的是当时的实况；`TC-078` 其后已落地**，见本件 `2.2`（已勾）与载体 `world-core/tests/contract.rs::c35_the_ledger_alone_reproduces_the_same_state_elsewhere` ⇒ **今天的实况以 `2.2` 为准**）｜SRS 的 `T-35` 行｜RTM 的 `REQ-F-032` 行
       （**并写明：本行整体仍是"部分实现"**——另一半"读模型渲染信封的 `id`／`at`／`actor`／`world`／`flags`"**仍未落**，见 `1.1`）。
     - **⚠ 判定与签署留待评审席回件之后**（本仓口径：**不代判、不代签**）。
 
