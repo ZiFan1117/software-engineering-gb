@@ -541,6 +541,10 @@ fn json_type_name(v: &Value) -> &'static str {
 ///
 /// 认得的类型词：`integer`／`string`／`array`／`object`／`bool`／`number`／`enum(a, b, …)`。
 /// **不认得的词一律放行**（`_ => true`）——本体没声明的类型口径，本判据不替它发明。
+///
+/// **没有 `enum(...)` 分支**：枚举值那一面**另有其主**——值不在枚举里时由家族查找报 `UnknownKind`
+/// 并**点名那个值**（那是既有契约，探针在核它）⇒ 本判据的调用方已 `continue` 跳过 enum 声明，
+/// 故这里不留分支（**留了就是死代码**，评审席点名过）。
 fn type_ok(decl: &str, v: &Value) -> bool {
     match declared_type_word(decl) {
         "integer" => v.is_i64() || v.is_u64(),
@@ -549,13 +553,6 @@ fn type_ok(decl: &str, v: &Value) -> bool {
         "array" => v.is_array(),
         "object" => v.is_object(),
         "bool" => v.is_boolean(),
-        w if w.starts_with("enum(") => {
-            let inner = w.trim_start_matches("enum(").trim_end_matches(')');
-            match v.as_str() {
-                Some(s) => inner.split(',').any(|x| x.trim() == s),
-                None => false,
-            }
-        }
         _ => true,
     }
 }

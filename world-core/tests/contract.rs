@@ -1563,19 +1563,6 @@ fn c24_known_codeless_outlets_carry_no_ext_world_prefix() {
 ///
 /// 手工造的理由：今天**没有任何生产路径**能写出无链账本（`append` 无条件加链），
 /// 而 v1 兼容路径要的正是这种历史账本。
-/// 把一批**手写**事件写成一行的 JSONL（无链、v1 形态）。
-///
-/// 为什么就地写而不复用 `write_v1_ledger`：那个助手只会造**合规**事件（走 `event::new_event`），
-/// 而 `c33` 要的正是**形状不合规**的事件——本体的类型判据就是冲它来的。
-fn write_raw_jsonl(path: &Path, events: &[Value]) {
-    let mut text = String::new();
-    for ev in events {
-        text.push_str(&serde_json::to_string(ev).unwrap());
-        text.push('\n');
-    }
-    fs::write(path, text).unwrap();
-}
-
 fn write_v1_ledger(path: &Path, n: u64) {
     let mut text = String::new();
     for seq in 1..=n {
@@ -1586,6 +1573,19 @@ fn write_v1_ledger(path: &Path, n: u64) {
             event::notice_body("probe.v1", "world://s", json!({ "seq": seq })),
         );
         text.push_str(&serde_json::to_string(&ev).unwrap());
+        text.push('\n');
+    }
+    fs::write(path, text).unwrap();
+}
+
+/// 把一批**手写**事件写成一行的 JSONL（无链、v1 形态）。
+///
+/// 为什么就地写而不复用 `write_v1_ledger`：那个助手只会造**合规**事件（走 `event::new_event`），
+/// 而 `c34` 要的正是**形状不合规**的事件——本体的类型判据就是冲它来的。
+fn write_raw_jsonl(path: &Path, events: &[Value]) {
+    let mut text = String::new();
+    for ev in events {
+        text.push_str(&serde_json::to_string(ev).unwrap());
         text.push('\n');
     }
     fs::write(path, text).unwrap();
@@ -1891,7 +1891,7 @@ fn c33_stale_lock_with_a_reused_live_pid_is_never_reclaimed() {
     );
 }
 
-// ── c33 ── **信封字段的类型**：本体声明了类型，读路径也必须判（`TC-047 ⑧` 的修法）──────
+// ── c34 ── **信封字段的类型**：本体声明了类型，读路径也必须判（`TC-047 ⑧` 的修法）──────
 //
 // 为什么单列一条：`c15` 判的是"可编程判定的错误都带码"，`c24` 判的是"已知无码出口"，
 // 两条都**只管写入路径**。而账本里**已有的**事件由折叠层直接读——实测（2026-09-28，VM）
@@ -1901,8 +1901,8 @@ fn c33_stale_lock_with_a_reused_live_pid_is_never_reclaimed() {
 // **反例（必须红）**：上面那两处真实违规形状 ⇒ 打开即拒，码为 `ext.world.Ontology.BadFieldType`，且**点名那一格**。
 // **正控（不得红）**：同一条账本，把两格改回声明类型 ⇒ 打开成功。
 #[test]
-fn c33_envelope_field_types_are_checked_on_the_read_path() {
-    let d = tmpdir("c33-types");
+fn c34_envelope_field_types_are_checked_on_the_read_path() {
+    let d = tmpdir("c34-types");
     let on = ontology(); // 出厂本体（`world` 声明 integer、`actor` 声明 string）
     let base = serde_json::json!({
         "world": 1,
