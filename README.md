@@ -69,14 +69,17 @@
 | # | 命令 | 管什么 | 今天的读数（rc） |
 |---|---|---|---|
 | 1 | `openspec validate --all --strict` | **形态**：结构、每个 `Scenario` 恰好 4 个 `#`、delta 语法 | `Totals: 9 passed, 0 failed (9 items)` → **rc=0** |
-| 2 | `python world-core/tools/spec_bridge.py` | **规格层守卫七条判据**（见下） | `通过 6 / 失败 1` → **rc=1**（判据⑥ 红） |
-| 3 | `python world-core/tools/spec_bridge.py --self-test` | 守卫**自证会红**：七条判据逐条造反例 | 逐条"已红 OK" → **rc=0** |
+| 2 | `python world-core/tools/spec_bridge.py` | **规格层守卫**（判据条数以 `--json` 的 `passed`/`failed` 为准；见下） | `通过 6 / 失败 1` → **rc=1**（判据⑥ 红） |
+| 3 | `python world-core/tools/spec_bridge.py --self-test` | 守卫**自证会红**：每条判据至少一个反例（**条数以该命令输出为准**） | 逐条"已红 OK" → **rc=0** |
 | 4 | `bash world-core/check.sh` | **出厂门禁 8 步**：① 构建 → ② 骨架冒烟（必须打印 `READY`）→ ③ 三条专属验收（＋③b 契约测试）→ ④ 投影同源 → ⑤ 纯文本审计 → ⑥ 系统级验收 → ⑦ S1 验证面补建 → **⑧ 规格层守卫** | 需 `cargo` ＋ `bash`（Linux／VM 侧），本机 Windows 未实跑 |
 
 > **第 4 条的第 ⑧ 步就是第 2 条**：`world-core/check.sh:160-169` 调 `spec_bridge.py`。
 > 也就是说这条守卫**同时**在"一条命令跑通"和 CI 里执行，不是只写在文档里。
 
-### 3.1 七条判据（`world-core/tools/spec_bridge.py`）
+### 3.1 判据一览（`world-core/tools/spec_bridge.py`）
+
+> **条数不在这里复述**：判据会增（实测本轮之内 9 → 11）。**以 `--json` 的 `passed`/`failed` 为准。**
+> 下表**逐条列名**，不编号总数；加一条判据就加一行。
 
 `openspec validate` 只判**形态**；下面七条是它的**内容侧补位**，任一不成立即非零退出：
 

@@ -37,7 +37,7 @@
 - [ ] ★ **覆盖率达标**：行 ≥80%、核心逻辑分支 ≥90%
       <!-- 阈值可裁剪，但必须在项目开发计划的裁剪说明里写明理由与补偿措施 -->
       实测值：**不适用**（理由：本 change 不改产品代码，无新增可覆盖代码；**阈值未裁剪**，沿用既有基线）
-- [ ] ★ 覆盖**正常 / 边界 / 异常 / 空值**四类路径 —— **待填**（理由：`spec_bridge.py` **七条**判据须各带反例，`--self-test` 现 8 条反例）
+- [ ] ★ 覆盖**正常 / 边界 / 异常 / 空值**四类路径 —— **待填**（理由：`spec_bridge.py` 的**每条**判据都须各带反例，`--self-test` 已逐条造反例；**判据与反例的条数以该命令的输出为准，本处不复述**）
 - [ ] ★ 无遗留 **P0 / P1** 缺陷 —— **待填**（理由：`audit.md` 登记的 5 条 P0 属 `fc-2026-002`，不在本 change 范围）
 - [ ] 单元测试全部通过 —— **待填**（理由：本 change 的"测试"＝`spec_bridge.py --self-test`）
 - [ ] 无新增循环依赖（分层方向正确：低层不依赖高层） —— **不适用**（理由：不改模块依赖）
@@ -55,7 +55,7 @@
 - [ ] ★ **触发条件成立**（FC-1…FC-6）——**建议值：成立**（依据见下两行）。**这不是判定**：「触发条件是否成立」由主持人判，AI 只给建议与代价；**建议不等于是**
       <!-- FC-6「个人偏好——我觉得这样更优雅」一律驳回 -->
       命中的编号：**FC-1（契约不足）／FC-2（职责错位）／FC-3（假设被推翻）／FC-5（测试不可达）**；**未命中 FC-4／FC-6**
-      现象证据：① 流程侧 `world-core/docs/` 下 **133 个 `.md`/`.csv`** 检索 `openspec` **0 命中**；② `openspec validate --archived` 当时 = `0 passed / 1 failed`（`✗ 2 incomplete tasks (18/20)`）；③ `spec_bridge*` 五处**全无**；④ 规格侧 REQ 号 **0 处** vs `WC-SRS-001` **371 处**；⑤ 六路逐条审计 **46 条**（严重 15，见 `audit.md`）。**逐条依据句见 `proposal.md` 的「R5 触发条件」表；数值口径见 `openspec/BRIDGE.md` §六。**
+      现象证据：① 流程侧 `world-core/docs/` 下检索 `openspec` 的命中数（**以 `openspec/BRIDGE.md` §七 数值权威表的现算值为准 ＋ 用表内复算命令复算；本处不复述数**）；② `openspec validate --archived` 当时 = `0 passed / 1 failed`（`✗ 2 incomplete tasks (18/20)`）；③ `spec_bridge*` 五处**全无**；④ 规格侧 REQ 号 **0 处** vs `WC-SRS-001` 的 REQ 号，两侧计数**同以 §七 现算值为准**；⑤ 六路逐条审计 **46 条**（严重 15，见 `audit.md`）。**逐条依据句见 `proposal.md` 的「R5 触发条件」表；数值口径见 `openspec/BRIDGE.md` §七。**
 - [ ] ★ 至少给出 **2 个方案对比**，且**含"不改"或"最小改"案** —— **建议值：满足**（见 `design.md` 方案对比：甲机制先行／乙不改或最小改／丙一个巨型 change）。**这不是判定**：由主持人核；**建议不等于是**
 - [ ] ★ 影响范围明确，**回归范围可推导**（R-A / R-B / R-C / R-D）—— **建议值：满足**（见 `design.md` 影响分析节）。**这不是判定**：由主持人核；**建议不等于是**
 - [ ] 若为破坏性变更，已通知**全部使用方** —— **建议值：不适用**（破坏性变更：无；但 3 份主规格的 `## Purpose` 有更正，见 `proposal.md`）。**这不是判定**：由主持人核；**建议不等于是**
@@ -70,7 +70,7 @@
 |---|---|
 | 验收在哪台机器 / 什么环境跑的 | VM `world`（VirtualBox Arch Linux，内核 `7.2.6-arch2-1`），工作区 `/root/world/world-core`；**主机无 Rust 工具链，一切构建与验收只在 VM 内** |
 | 版本 / 提交号（**★ 复核对象已冻结**，M14） | **`90cfa3d80bbed55ef6acef0c4b7aa98964fc23d9`**（`main`；冻结时点 2026-09-27 23:29:26 +0800，工作区**零改动**）。本 change 的复核一律以 `git show 90cfa3d:<path>` 为准；**冻结之后的提交属另一轮**（文档收敛 `fc-2026-003`），不在本次复核范围。 |
-| **本轮机器读数（四要素，由 `openspec/tools/collect_evidence.py` 现取）** | 时点 `2026-09-27 23:29:26 +0800`／提交号 `90cfa3d`／工作区改动 **0 件**：`openspec validate --all --strict` **10 passed, 0 failed（rc=0）**；`validate --archived` **1 passed, 0 failed（rc=0）**；`spec_bridge.py` **通过 8 / 失败 1（rc=1）**——唯一红＝判据⑥ 归档件评审未签；`spec_bridge.py --self-test` **rc=0**（九条判据 ＋ 11 反例逐条「已红 OK」、正控全绿）。**VM 独立复核（执行者跑，非工区自报）**：`bash check.sh` **rc=1，唯一 ❌ 是第 ⑧ 步规格层守卫**（红项＝⑥），②–⑦ 全过（含契约门禁「模块节 10 == 登记 10」）；`cargo test --locked` **rc=0**（125 处 `test result: ok`）。 |
+| **本轮机器读数（四要素，由 `openspec/tools/collect_evidence.py` 现取）** | 时点 `2026-09-27 23:29:26 +0800`／提交号 `90cfa3d`／工作区改动 **0 件**：`openspec validate --all --strict` **10 passed, 0 failed（rc=0）**；`validate --archived` **1 passed, 0 failed（rc=0）**；`spec_bridge.py` **通过 8 / 失败 1（rc=1）**——唯一红＝判据⑥ 归档件评审未签；`spec_bridge.py --self-test` **rc=0**（**判据与反例的条数以该命令的输出为准，本处不复述**——实测该数在本轮之内就增大过，写死即过期；自证口径是「**每条**判据至少一个反例 ＋ 正控全绿」）。**VM 独立复核（执行者跑，非工区自报）**：`bash check.sh` **rc=1，唯一 ❌ 是第 ⑧ 步规格层守卫**（红项＝⑥），②–⑦ 全过（含契约门禁「模块节 10 == 登记 10」）；`cargo test --locked` **rc=0**（125 处 `test result: ok`）。 |
 | 关键工具链版本 | cargo **1.98.1** `(797e8a9bc 2026-08-05)` / rustc **1.98.1** `(48a229cea 2026-09-01)`；Python **3.11.15**；OpenSpec CLI **1.13.2** |
 | 验收命令与原始输出在哪 | 基线复现：`ssh world "cd /root/world/world-core && bash check.sh"` → **rc=0**（构建／冒烟／三条专属测试／契约 25 项／投影同源／纯文本审计／系统级验收 52 项 0 失败／S1 验证面 59＋117 项断言 0 失败）。**本轮已跑**，用于确认"证据环境今天真的能跑" |
 | 归档环境指纹的路径 | 　**待补**（实施合入后写入 `world-core/docs/证据/`） |
@@ -119,8 +119,8 @@
 
 | 门禁 | 施行前 | 施行后 |
 |---|---|---|
-| `python3 world-core/tools/spec_bridge.py`（本 change 新造的守卫） | **不存在** | **6 通过 / 1 失败，rc=1**（七条判据；失败的是**判据⑥**：归档件的评审未签——那条红是**既存事实**，见 `openspec/BOOK/冲突总账.md`；**本 change 归档前必须先签，签后该条转绿**） |
-| ├ 其 `--self-test`（五条反例必红） | — | **rc=0**：五条反例逐条"已红 OK"，正控全绿 |
+| `python3 world-core/tools/spec_bridge.py`（本 change 新造的守卫） | **不存在** | **6 通过 / 1 失败，rc=1**（**条数以 `--json` 的 `passed`/`failed` 为准**；失败的是**判据⑥**：归档件的评审未签——那条红是**既存事实**，见 `openspec/BOOK/冲突总账.md`；**本 change 归档前必须先签，签后该条转绿**） |
+| ├ 其 `--self-test`（**每条**反例必红） | — | **rc=0**：**每条**反例逐条"已红 OK"，正控全绿（**条数不写死**，以该命令输出为准） |
 | `openspec validate --all --strict` | `9 passed / 1 failed`（红的是空壳 `fc-2026-002`） | **`9 passed / 0 failed`** |
 | `openspec validate --archived` | **`0 passed / 1 failed`**（`✗ 2 incomplete tasks (18/20)`，即 schema 自己预言过的"常设项永久挡住"） | **`1 passed / 0 failed`** |
 | VM `bash check.sh` | `RC=0`（无第 ⑧ 步） | **`RC=0`，含第 ⑧ 步**（日志 `/tmp/after-bridge.log`） |

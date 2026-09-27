@@ -43,7 +43,7 @@ name: world-core 门禁
 #
 # 三个新作业：
 #   openspec-validate  形态门禁    `openspec validate --all --strict`
-#   spec-bridge        规格层守卫  `world-core/tools/spec_bridge.py`（**七条**判据）
+#   spec-bridge        规格层守卫  `world-core/tools/spec_bridge.py`
 #   module-graph       原子化机核  `world-core/tools/module_graph.py`（WC-ATOM-001 §二 A-1／A-4／A-2）
 #
 # ⚠️ **今天有两条是红的，且不许掩盖**（逐条读数写在各自作业的注释里，实测时点 2026-09-27）：
@@ -253,7 +253,7 @@ jobs:
           openspec validate --all --strict
 
   spec-bridge:
-    name: 规格层守卫（spec_bridge.py 七条判据）
+    name: 规格层守卫（spec_bridge.py）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -261,9 +261,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: 守卫先自证会红（反例不变红 ⇒ 该守卫是装饰，拒绝合入）
-        # 2026-09-27 实测：rc=0（⑦ 条判据各有一个反例，逐条"已红 OK"）。
+        # 2026-09-27 实测：rc=0（**每条**判据各有一个反例，逐条"已红 OK"）。
+        # 条数**不在此复述**——以 `python world-core/tools/spec_bridge.py --json` 的 `passed`/`failed` 为准（skill §八）。
         run: python world-core/tools/spec_bridge.py --self-test
-      - name: 规格层守卫 —— 归档硬前置／证据存在性／默认档／编号桥／覆盖在册／归档已签／让路登记
+      - name: 规格层守卫（逐条判据与条数以 --json 的 passed/failed 为准）
         # ── 已知红，如实红，不许跳过 ────────────────────────────────────────
         # 2026-09-27 实测（仓库根；`HEAD=50f30ac` 与 `HEAD=ab9d765` 两次复跑同值）：`通过 6 / 失败 1`，**rc=1**。
         # 唯一红项＝判据⑥「归档件的评审已签」：

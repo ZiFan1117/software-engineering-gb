@@ -12,12 +12,12 @@
       **不得**用 `openspec status --json` 的 `defaultSchema` 判（实测它读的是 CLI 源码里的常量
       `planning-home.js:4 const REPO_DEFAULT_SCHEMA = 'spec-driven'`，与 `config.yaml` 无关；CLI 回显那句 `with schema 'spec-driven'` 同理）。
       实测：探测 change 的 `.openspec.yaml` ＝ `schema: opsx-swe-gb` ✓（探测件已删）
-- [x] 1.2 新增 `world-core/tools/spec_bridge.py`，五条判据（与 `specs/spec-governance/spec.md` 逐条对应）　**★ 后续追加两条**：⑥ 归档件的评审已签（`7c7e0b1`）、⑦ 让路登记（`415577d`）——**现为七条**
+- [x] 1.2 新增 `world-core/tools/spec_bridge.py`（与 `specs/spec-governance/spec.md` 逐条对应）　**★ 后续追加**：⑥ 归档件的评审已签（`7c7e0b1`）、⑦ 让路登记（`415577d`），⑧⑨ 及此后各条仍继续增加——**判据条数与逐条清单一律以 `--json` 的 `passed`/`failed` 为准，本处不复述条数**
       ① 归档硬前置 ② 证据存在性（**两种形态都查**：`<path>::<fn>` 与 `<path> --self-test`）③ 默认档守卫
       ④ 编号桥覆盖 ⑤ 覆盖在册
-      **验收**：`python3 world-core/tools/spec_bridge.py` 逐条列出结论。**★ 读数带时点（M11）**：本条落笔时（当时五条判据）＝ `5 通过 / 0 失败`，rc=0；**现在的读数是 `6 通过 / 1 失败`，rc=1**（判据⑦ 加入、且判据⑥ 因归档件未签而红）——**读数会变，故验收只认"逐条列结论"这个形态，不认写死的数**
-- [x] 1.3 `spec_bridge.py --self-test`：为**每条**判据各造一个反例，反例不变红即判该守卫是装饰　**现状**：七条判据 ＋ 八条反例（反例⑤ 用改名实现、不删夹具）
-      **验收**：`--self-test` rc=0，五条反例逐条打印"已红 OK"、正控（完好沙盒）全绿 ✓
+      **验收**：`python3 world-core/tools/spec_bridge.py` 逐条列出结论。**★ 读数带时点（M11）**：本条落笔时 ＝ `5 通过 / 0 失败`，rc=0；**此后读数已多次变化（判据增加、红项随登记件状态而变）⇒ 现值一律以当场跑出的 `--json` 的 `passed`/`failed` 为准，本处不再登记任何"现在的读数"**——**验收只认"逐条列结论"这个形态，不认写死的数**
+- [x] 1.3 `spec_bridge.py --self-test`：为**每条**判据各造一个反例，反例不变红即判该守卫是装饰　**现状**：**每条判据配一个反例**（反例⑤ 用改名实现、不删夹具）；**判据与反例的条数以 `--self-test` 的输出及 `--json` 的 `passed`/`failed` 为准，本处不复述**
+      **验收**：`--self-test` rc=0，**每条反例**逐条打印"已红 OK"、正控（完好沙盒）全绿 ✓（**条数不写死**）
 - [x] 1.4 把 `spec_bridge.py` 接进 `world-core/check.sh`（**新增第 ⑧ 步**，不改既有步骤号 ③／③b／④／⑥／⑦ 的含义）
       **验收**：`check.sh` 第 ⑧ 步可 grep 定位；`set -euo pipefail` 下该步失败即整脚本非零退出 ✓
 - [x] 1.5 在 VM 内跑一次完整出厂门禁
@@ -72,7 +72,7 @@
       （★ 按席② 的 C1 更正：**不写"7 项全绿"**——`--all` 的射程是「全部 spec ＋ 全部未归档 change」，项数会随仓内 change 多少而变）
 - [x] 6.2 归档层：`openspec validate --archived` ⇒ **1 passed / 0 failed** ✓
 - [x] 6.3 **未改动的证明（★ 判据已收窄，原写『零改动』是假勾）**：`openspec/specs/**` 里**除 3 处 `## Purpose` 段外零改动**；`world-core/src/`、`world-core/tests/` **零改动**
-      **验收（★ 判据＋实测，读数不许写死）**：判据＝`git diff -U0 bf2eae7 <该轮提交> -- openspec/specs` 的**每个 hunk 都落在 `## Purpose` 段内**（出现 Requirement 级 hunk 即失败）；**实测（457c954）**：`3 files changed, 13 insertions(+), 3 deletions(-)``git diff --stat fd9a892 HEAD -- world-core/src world-core/tests` **为空**
+      **验收（★ 判据＋实测，读数不许写死）**：判据＝`git diff -U0 bf2eae7 <该轮提交> -- openspec/specs` 的**每个 hunk 都落在 `## Purpose` 段内**（出现 Requirement 级 hunk 即失败）；**实测（`bf2eae7`→`457c954`，2026-09-27 复算）：`3 files changed, 11 insertions(+), 5 deletions(-)`——读数随提交变，以当场复算为准**；另 `git diff --stat fd9a892 HEAD -- world-core/src world-core/tests` **为空**
       （为什么改判据：本轮按「以书为主」更正了三处 Purpose，而原判据写的是「零改动」——**它当时已成假**。对抗席乙 把这条列为最重：一条已勾的假任务是「已知假勾进基线」的入口。）
 - [x] 6.4 门禁层：VM 内 `bash check.sh` **RC=0**，含第 ⑧ 步 ✓（**该读数取自判据⑥ 落地之前**）；环境指纹见 `review.md` §五
       **★ 待重跑**：判据⑥ 落地后 `check.sh` 第 ⑧ 步会因归档件未签而 exit 1 ⇒ **签完必须重跑一次并把新读数写进 §五**
@@ -91,9 +91,15 @@
       H-21 归属夸大（原文只说"能指向命令或测试位置"，见 `:224`；"断言须与声明相符"出自 `评审门禁与检查单.md:272/276` 的反面清单 #5/#9）
       **验收**：逐条补齐并改正出处
 - [x] 7.3 **schema 与 README 一致性**（席⑤ P1-3/P1-4、席① B11）：`README.md:66` 写 `R-A…R-E`，而 `schema.yaml:86`／`templates/design.md:26`／
-      `templates/review.md:52` 与流程侧权威表（`附件三:265`）**只有 R-A…R-D**，`R-E` 全流程 0 命中；
+      `templates/review.md:52` 与流程侧权威表（`附件三:265`）**只有 R-A…R-D**
       `README.md:7` 说"项目级 schema 优先级最高"与实测相反（默认档由 `config.yaml` 决定）
       **验收**：`R-E` 删掉或改名；README 改成"默认档由 `config.yaml` 的 `schema:` 决定"；主本同步 ＋ 七件 sha256 一致
+      **★ 留痕（假勾，2026-09-27 补记）**：本条原写的判据是「`R-E` **全流程 0 命中**」，**勾上它的时候这句话并不成立**——
+      `openspec/changes/fc-2026-002-spec-revisions/design.md:63` 那一行的 `R-E` 仍在（且与同一行的「流程侧没有 R-E」自相矛盾），
+      而 `openspec/BOOK/冲突总账.md:209` 已把 M6 记作「**已关**」⇒ **台账说已关、实际没关**。
+      **发现者／时间**：**独立评审席·甲**，`2026-09-27`（逐字证据见 `openspec/BOOK/冲突总账.md:303` 第 7 条）。
+      **本轮已改**：`R-E` 作为**档名**去除，"出厂判据强度不变"的内容挂到 `R-D` 之下并注明「原名 `R-E`」。
+      **判据改成会红的形态**：`grep -rn 'R-E' openspec/` 的命中**只允许**是①否定句（"流程侧没有 R-E"）②历史留痕里的「原名 R-E」；**出现第三个用途即判失败**
 - [x] 7.4 **README §四 第 11 行的口径**（席⑤ P0-2）：`validate --archived ✓ 1 passed, 0 failed` 是**沙盒口径**；
       活仓当天是 `0 passed / 1 failed`（那条"永久挡住"的常设项）。现已转绿（`1 passed / 0 failed`）
       **验收**：该行注明口径与时点，或改写成"活仓实测"

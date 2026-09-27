@@ -6,7 +6,7 @@
 # 没有一个**唯一的、能被人和 CI 同时调用**的入口。评审 T-22 指出该缺口；
 # `WC-SCMP-001` §8.4 G-07 也把"入口脚本未入库"记为待办。
 #
-# 本脚本做什么（四步，全部可复现）：
+# 本脚本做什么（全部可复现；实跑步骤由下方 `step()` 逐条累积，**不在文案里写死条数**）：
 #   ① 构建（--locked，锁依赖）
 #   ② 骨架冒烟：在**一次性沙箱**里打开世界 → 必须打印 READY
 #   ③ 三条专属验收测试（追加→读回 / 重启→还在 / ★删读模型→重算一致）
@@ -21,6 +21,17 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 BIN="${CARGO_TARGET_DIR:-target}/debug/world-core"   # 2026-09-27：感知 CARGO_TARGET_DIR（干净 target 下此前后 rc=127，见 R4S2-09）
+
+# ── 步骤清单：**由脚本自身累积，不手写**（skill §八：一个事实只有一个权威载体）──────
+# 为什么要有它：原结论行是**手写**的步骤名串，写它的时候只列到「规格层守卫」——
+#   第 ⑨ 步（机核层守卫）落地后，那句结论就成了漏报，且没有任何东西会因此变红。
+#   "手写一份步骤名"与"手写一个条数"是同一种病：加一步就过期。
+# 现在：每个步骤用 `step` 声明一次，**标题与结论清单同源**；步数由 `${#STEPS[@]}` 现算。
+STEPS=()
+step() { # step <步骤标题>
+  STEPS+=("$1")
+  printf '── %s\n' "$1"
+}
 
 # ── 判定助手：**显式取 rc**，不把判定交给管道语义（`W-06`）──────────────
 # 为什么不用 `cmd | tail -N`：那条写法"看起来在留档、实际上把判定权交了出去"——
@@ -66,7 +77,7 @@ echo "  工具 : $(cargo --version 2>/dev/null || echo 'cargo 缺失')"
 
 # ── ① 构建 ───────────────────────────────────────────────────────────
 echo
-echo "── ① 构建（--locked）────────────────────────────────────────"
+step "① 构建（--locked）"
 cargo build --locked --quiet
 echo "  ✅ 构建通过"
 
@@ -77,7 +88,7 @@ cp ontology.json policy.json "$SB"/
 chmod 755 "$SB"; chmod 644 "$SB/ontology.json" "$SB/policy.json"
 
 echo
-echo "── ② 骨架冒烟（沙箱账本：$SB）──────────────────────────────"
+step "② 骨架冒烟（沙箱账本：$SB）"
 OUT="$("$BIN" --ontology "$SB/ontology.json" --ledger "$SB/ledger.jsonl" --policy "$SB/policy.json" check)"
 echo "$OUT" | sed 's/^/  /'
 echo "$OUT" | grep -q READY || { echo "  ❌ 未打印 READY"; exit 1; }
@@ -99,18 +110,18 @@ echo "  ✅ 摘要链：新账本带链，--require-chain 通过"
 
 # ── ③ 三条专属验收测试 ──────────────────────────────────────────────
 echo
-echo "── ③ 三条专属验收测试（WC-SQAP-001 §2.4）─────────────────"
+step "③ 三条专属验收测试（WC-SQAP-001 §2.4）"
 cargo test --locked --test acceptance -- t1_ t2_ t7_ 2>&1 | grep -E 'running [0-9]+ tests|test result:' | sed 's/^/  /'
 echo "  ✅ 追加→读回 / 重启→还在 / ★删读模型→重算一致"
 
 echo
-echo "── ③b 契约测试（覆盖 M05 门禁 / M08 检查点 / M09 通道）──────"
+step "③b 契约测试（覆盖 M05 门禁 / M08 检查点 / M09 通道）"
 cargo test --locked --test contract 2>&1 | grep -E 'running [0-9]+ tests|test result:' | sed 's/^/  /'
 echo "  ✅ 门禁失败路径 / 静态墙 / 单写者 / 检查点 / 通道身份 / 错误码契约"
 
 # ── ④ 两个投影同源 ──────────────────────────────────────────────────
 echo
-echo "── ④ 投影与同源核对（REQ-F-018/019/020）──────────────────"
+step "④ 投影与同源核对（REQ-F-018/019/020）"
 W() { "$BIN" --ontology "$SB/ontology.json" --ledger "$SB/ledger.jsonl" --policy "$SB/policy.json" "$@"; }
 W append change '{"subject":"world://notice/n-1","path":"muted","before":null,"after":true}' >/dev/null
 W append act '{"capability":"notice.mute","verb":"do","request_id":"r-check","params":{}}' >/dev/null
@@ -125,12 +136,12 @@ W project check | sed 's/^/  /'
 
 echo
 echo
-echo "── ⑤ 纯文本审计（REQ-N-001 / AC-07）────────────────────"
+step "⑤ 纯文本审计（REQ-N-001 / AC-07）"
 run_tail 2 "纯文本审计" python3 tools/plain_text_audit.py ontology.json policy.json "$SB/ledger.jsonl"
 echo "  ✅ 账本/词表/策略均为纯文本（UTF-8、无 NUL、无可疑控制字符、逐行可解析）"
 
 echo
-echo "── ⑥ 系统级验收（TC-037–TC-040，真实二进制端到端）──────────"
+step "⑥ 系统级验收（TC-037–TC-040，真实二进制端到端）"
 # 为什么放在这里：`cargo test` 验模块与接口（L1/L2），本步验**产物本身**（L3）——
 # 只看退出码、真实文件字节与命令输出。它同时是 S5 起 `RTM_STRICT=true` 的
 # 系统级/验收级证据（见 WC-SCMP-001 §8.4 G-16）。
@@ -138,7 +149,7 @@ run_tail 1 "系统级验收判定器自证" bash tools/system_acceptance.sh --se
 run_tail 3 "系统级验收（TC-037–TC-040）" bash tools/system_acceptance.sh
 
 echo
-echo "── ⑦ S1 需求验证面补建（第一轮 TC-042/046–052；第二轮 TC-053–TC-075）──"
+step "⑦ S1 需求验证面补建（第一轮 TC-042/046–052；第二轮 TC-053–TC-075）"
 # 为什么放在这里：R1 的九席独立评审实测指出，SRS §五 声明的一批用例**从未实存**，
 # 而若干 `REQ-F-*` 的「应当失败」反例**只挂在这些不存在的用例上**——
 # 按本项目逐字纪律「反例不红视为未校验」，那些条目当时**不可校验**。
@@ -162,22 +173,21 @@ run_tail 20 "表块行宽审计（转义感知）" python3 tools/table_width_aud
 #   (a)(b) 两类仍属无害噪声、**不改判据强度**，故保留。
 
 echo
-echo "── ⑧ 规格层守卫（OpenSpec 层：五条判据）─────────────────────"
+step "⑧ 规格层守卫（OpenSpec 层）"
 # 为什么放在这里：`openspec validate` 只判**形态**（结构、每个 Scenario 恰好 4 个 `#`、delta 语法），
-# 它**不查**：证据行指向的测试是否真的存在（改名即失锚，且不会变红）、归档目录有没有 `review.md`、
-# 默认档是不是融合档、编号桥有没有覆盖规格树下每条 Requirement、承载覆盖缺口的 change 还在不在。
-# 这五条此前**只写在 schema 的文字里，没有任何执行者**——实测：一个**没有** `review.md` 的 change
-# `openspec archive --yes` 照样 rc=0 归档。`tools/spec_bridge.py` 就是这五条的执行者。
-# 它自己也要能自证会红（`--self-test`：五条各造一个反例，反例不变红即判该守卫是装饰）。
+# 它**不查**那几件核心的事：证据行指向的测试是否真的存在（改名即失锚，且不会变红）、归档目录有没有
+# `review.md`、默认档是不是融合档、编号桥有没有覆盖规格树下每条 Requirement、承载覆盖缺口的 change
+# 还在不在。这些此前**只写在 schema 的文字里，没有任何执行者**——实测：一个**没有** `review.md` 的
+# change `openspec archive --yes` 照样 rc=0 归档。`tools/spec_bridge.py` 就是它们的执行者。
+# **判据条数与逐条结论一律以 `spec_bridge.py --json` 的 `passed`/`failed` 为准**，
+# 本处文案不复述条数（skill §八：一个事实只有一个权威载体，数值一律现算）。
+# 它自己也要能自证会红（`--self-test`：**每条**判据各造一个反例，反例不变红即判该守卫是装饰）。
 # 仓库根由脚本自身位置向上定位（world-core/tools/ → 仓库根）；VM 上已同步 `openspec/` 层，故两边都能跑。
-run_tail 2 "规格层守卫自证（五条判据各造反例，反例必红）" python3 tools/spec_bridge.py --self-test
-run_tail 8 "规格层守卫（归档硬前置／证据存在性／默认档／编号桥／覆盖在册）" python3 tools/spec_bridge.py
+run_tail 2 "规格层守卫自证（每条判据各造反例，反例必红）" python3 tools/spec_bridge.py --self-test
+run_tail 8 "规格层守卫" python3 tools/spec_bridge.py
 
 echo
-echo "== 结论：全通过（构建 / 冒烟 / 三条专属测试 / 契约测试 / 投影同源 / 纯文本审计 / 系统级验收 / S1 验证面补建 / 规格层守卫）=="
-
-echo
-echo "── ⑨ 机核层守卫（WC-ATOM-001 §四 机核清单：单意图／四件同夹／deps==import 且无环）──"
+step "⑨ 机核层守卫（WC-ATOM-001 §四 机核清单：单意图／四件同夹／deps==import 且无环）"
 # 为什么放在这里：`WC-ATOM-001`（原子化编程约定，本项目**强制**）§四 机核清单第 1–3 条
 # 此前**没有执行者**（该表自己写着「未建」/「未建闸」）。三条判据：
 #   ① A-1 每个模块有且只有一句 `intent`（≤30 字）；出现并列两事（与／和／及）即报可疑；
@@ -189,3 +199,14 @@ echo "── ⑨ 机核层守卫（WC-ATOM-001 §四 机核清单：单意图／
 # 今天这三条**应该是红的**（本项目尚未按原子化组织）——红就如实报红；
 # 交付的是"判据立起来且会红"，不是把红刷成绿。
 run_tail 12 "机核层守卫（WC-ATOM-001 §四：单意图／四件同夹／deps==import 且无环）" python3 tools/module_graph.py
+
+# ── 结论行：**由步骤清单生成**，不手写 ────────────────────────────────
+# 为什么搬到这里、为什么是生成的：原结论行**手写在检查中途**（第 ⑧ 步之后、第 ⑨ 步之前），
+#   于是第 ⑨ 步若失败，"全通过"四个字**已经先打印出去了**——那正是本项目最忌的
+#   "把没做到写成做到了"。且它手写的步骤名串只列到「规格层守卫」，第 ⑨ 步落地即漏报。
+# 现在：① 位置在**全部步骤之后**；② 清单来自 `step()` 累积的 `STEPS`——加一步自动进清单；
+#   ③ 步数由 `${#STEPS[@]}` 现算，不写死（skill §八：一个事实只有一个权威载体，数值一律现算）。
+echo
+echo "== 结论：全通过（本脚本实跑的步骤，逐条如下）=="
+for s in "${STEPS[@]}"; do printf '   ✅ %s\n' "$s"; done
+printf '   共 %d 步（由 STEPS 长度现算，不写死）\n' "${#STEPS[@]}"

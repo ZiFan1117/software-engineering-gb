@@ -40,7 +40,7 @@
 | `atoms/<id>/tests/` | `world-core/tests/*.rs` 里该原子的用例（**每条承诺都要有会红的断言**） |
 | `detail.json`（生成物边车） | `WC-MODREG-001` 模块注册表（**生成物，勿手编**） |
 | `deps == import` 闸 | 待建：`world-core/tools/module_graph.py --check`（**本件确立要求，实现列进 `cover-unimplemented-capabilities`**） |
-| `npm run gate` 全闸 | `world-core/check.sh`（已有 8 步）＋ `spec_bridge.py`（规格层 6 条判据） |
+| `npm run gate` 全闸 | `world-core/check.sh`（**实跑步骤由脚本自身打印的步骤清单承载，本件不复述步数**）＋ `spec_bridge.py`（规格层守卫；**判据条数以 `--json` 的 `passed`/`failed` 为准**） |
 | `_shared/CONTRACT.md` 跨原子公共契约 | `world-core/docs/S2-设计/WC-IC-001`（接口契约总册）＋ `openspec/schemas/` 的融合档公约 |
 
 ## 四、机核清单（**这一条要求必须能红**）
