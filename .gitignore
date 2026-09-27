@@ -10,3 +10,15 @@ __pycache__/
 
 # OpenSpec 归档进程锁（内容是 pid 与 nonce，属运行时状态，不入库）
 openspec/changes/archive/.openspec-archive.lock
+
+# 临时驱动脚本（下划线开头）：变异／对照这类**一次性**的驱动脚本，属工具过程件、不是交付物。
+# 为什么要有这条：实测工区把 `_mut_d.sh`／`_mut2_d.sh`／`_cmp_d.sh` 等 6 个驱动脚本落在了仓内，
+# 它们**不该进版本控制**——skill §四「不做为了检查而另造的东西」，
+# 且它们不属于"四件同夹"的任何一件。约定：临时脚本一律放**仓外**（如 `D:\Code\_scratch\`）；本规则兜底。
+_*.sh
+_*.py
+_*.ps1
+_*.md
+_*.json
+_*.log
+_*.b64
