@@ -142,6 +142,11 @@
 - [x] 7.1 通告也过门禁：任何主体可以写任何通告这一现状 SHALL 被收口
       **已结账（含一处必须说清的既有事实）**：**闸本身已在 HEAD 上**——`World::adjudicate_notice`（`src/lib.rs:336`，随副本起点 `b00e2d6` 入库）
       ＋ `tests/contract.rs::c23a/c23b` 已在册，**不是本轮新增**；本轮补的是**断言面**：
+      **★ 先把简称解出来（免得读者去仓里找一个叫 `c23a` 的函数）**：本仓三条 `c23` 用例的**真名都是 `c23_…`、无字母后缀**；
+      `c23a`／`c23b`／`c23c` 是它们的**内部编号**——由各自的临时目录名标出（`tmpdir("c23a")` 等，见 `tests/contract.rs:1291`／`:1366`／`:1395`）：
+      `c23a`＝`c23_notice_with_reserved_prefix_is_refused_for_outsiders`（`:1290`）｜
+      `c23b`＝`c23_notice_from_unlisted_actor_is_refused`（`:1365`）｜
+      `c23c`＝`c23_gate_notice_says_what_it_refused`（`:1394`）。
       ① `c23b`（不在册主体）原来**只断言错误码、完全没断言"留流水"**；② 通告的闸**没有命令行这一级**的端到端用例；
       ③ **没有任何断言钉住"在册主体也写不了保留前缀"与"不在册"两条路的分工**。
       新增 `tests/trace_notice.rs::f71`：① 在册主体发 `type=gate.rejected` ⇒ rc=2＋`ext.world.Gate.NoticeNotAllowed`＋**伪造行 0 条**；
