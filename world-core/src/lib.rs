@@ -498,3 +498,26 @@ impl World {
         State::fold(&self.ledger.read_all()?)
     }
 }
+
+/// `M09`（通道）对内核提出的窄接口：**纯转发**到 [`World::commit_requested`]。
+///
+/// 为什么要在这里写这个 `impl`（而不是让 `src/channel.rs` 直接 `use crate::World`）：
+/// `WC-ATOM-001` §二 A-4 要求模块号依赖**单向 DAG**，而通道与运行时互相 `use` 会成环。
+/// 依赖的真实方向只有一个——**运行时驱动通道**（`src/main.rs:622`）；通道需要的是
+/// "谁能收下这条请求"，不是"世界长什么样"。把这条事实写成窄接口后：
+/// `M09 → M04` 这条边**从源码里消失**，而**行为一字未改**（转发，不复制任何逻辑）。
+///
+/// ⚠️ 这里**不许**出现第二条写路径：转发目标就是 [`World::commit_requested`] 本身，
+/// "取号 → 造事件 → 法律 → 门禁 → 落笔"仍然只有那一条（`M04` 的唯一写入口不变）。
+impl crate::channel::RequestSink for World {
+    fn commit_requested(
+        &mut self,
+        kind: &str,
+        actor: &str,
+        body: Value,
+        trace: Option<&str>,
+        to: Option<&str>,
+    ) -> Result<Value, String> {
+        World::commit_requested(self, kind, actor, body, trace, to)
+    }
+}

@@ -35,7 +35,7 @@
 | **M06** | 语言投影（Language Projection） | 结构化出口：逐行 JSON，给程序读。 | `src/project/language.rs` | **IF-003** 语言投影出口 | `M03` |
 | **M07** | 视觉投影（Visual Projection） | 渲染出口：终端可读，**排版仍可被审计**。 | `src/project/visual.rs` | **IF-004** 视觉投影出口 | `M03` |
 | **M08** | 检查点（Checkpoint） | **带 `base_seq` 的缓存**，非真相；删掉后重算结果必须相同。 | `src/checkpoint.rs` | **IF-010** 检查点读写与核验 | `M03`、`M05` |
-| **M09** | 通道（Channel） | 跨进程入口：**一个套接字一个身份**，权限即身份。 | `src/channel.rs`（`channel.json` 为其入参；**本仓 `world-core/` 根目录无此文件**，实测仅有 `ontology.json`、`policy.json`） | **IF-006** 跨进程通道 | `M04`、`M05` |
+| **M09** | 通道（Channel） | 跨进程入口：**一个套接字一个身份**，权限即身份。 | `src/channel.rs`（`channel.json` 为其入参；**本仓 `world-core/` 根目录无此文件**，实测仅有 `ontology.json`、`policy.json`） | **IF-006** 跨进程通道 | `M05` |
 | **M10** | 载体适配器（Carrier Adapter） | **载体侧的手**：按清单调载体，只执行不裁决。 | `src/carrier/`（计划：`mod.rs`、清单解析、`device.rs`、`package.rs`、`job.rs`、`undo.rs`、`confirm.rs`）；执行清单 `cap.d/*.yaml` 为其入参，**与门禁策略同名对齐** | **IF-011** 载体动作执行 | **无**（源码 import 面没有兄弟模块引用——三条"设计意图"见本表下的说明） |
 
 > **「职责」列就是 A-1 的 `intent`**（登记表没有单独的 `intent` 列）：**一句话、≤30 字、不许并列两事**

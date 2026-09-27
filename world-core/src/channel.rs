@@ -49,10 +49,32 @@
 //!   长驻服务与并发留待后续（且需与 `A-01` 单写者锁一并设计）；
 //! - 不做鉴权之外的传输保护（本机 Unix 套接字 + 文件权限即其边界）。
 
-use crate::World;
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+
+/// **通道对内核提出的唯一要求**：把一条已经验明身份的请求交给世界落笔。
+///
+/// 为什么要有这一层（而不是直接 `use crate::World`）：`M09`（通道）与 `M04`（运行时）
+/// 若互相 `use`，模块号图上就是一条**双向边**，而 `WC-ATOM-001` §二 A-4 要求依赖**单向 DAG**。
+/// 事实本来也是单向的——**运行时驱动通道**（`src/main.rs:622 use world_core::channel::…`），
+/// 通道只在"这条请求交给谁"上需要一个**受方**。用一个窄接口把这件事写进类型：
+/// 通道**不认识 `World`**，只认识"能收下这条请求的东西"。
+///
+/// 接口宽度刻意压到**一处**（`commit_requested`），签名与 `World::commit_requested`
+/// **逐字相同**；`impl` 是**纯转发**，不改变"唯一写入口"的任何语义
+/// （取号 → 造事件 → 法律 → 门禁 → 落笔 仍在 `M04` 一条路上）。
+pub trait RequestSink {
+    /// 落一条**已经验明身份**的请求：`actor` 由套接字映射给出，**不取自请求体**。
+    fn commit_requested(
+        &mut self,
+        kind: &str,
+        actor: &str,
+        body: Value,
+        trace: Option<&str>,
+        to: Option<&str>,
+    ) -> Result<Value, String>;
+}
 
 /// 一条监听项：套接字路径 ↔ 身份。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -228,14 +250,14 @@ pub fn bind(expect: &Listener) -> Result<std::os::unix::net::UnixListener, Strin
 /// 一次坏请求不该让总线停摆；但错误会如实打印。
 #[cfg(unix)]
 pub fn serve_n(
-    world: &mut World,
+    sink: &mut impl RequestSink,
     listener: &std::os::unix::net::UnixListener,
     expect: &Listener,
     n: usize,
 ) -> Result<usize, String> {
     let mut ok = 0usize;
     for _ in 0..n {
-        match serve_once(world, listener, expect) {
+        match serve_once(sink, listener, expect) {
             Ok(_) => ok += 1,
             Err(e) => eprintln!("[FAIL] {e}"),
         }
@@ -245,7 +267,7 @@ pub fn serve_n(
 
 #[cfg(unix)]
 pub fn serve_once(
-    world: &mut World,
+    sink: &mut impl RequestSink,
     listener: &std::os::unix::net::UnixListener,
     expect: &Listener,
 ) -> Result<Value, String> {
@@ -286,7 +308,7 @@ pub fn serve_once(
     //    `trace`（因果）**透传**：请求里给了就带上信封。跨进程的"请求—结果"配对
     //    靠它闭环——结果事件的 `trace` 指向意图事件的 `id`（`M10` 接线，2026-09-27）。
     //    它**不做引用完整性校验**（`REQ-F-031` 的 v1 口径）：指向不存在的 id 不拒绝。
-    match world.commit_requested(
+    match sink.commit_requested(
         &req.kind,
         &expect.actor,
         req.body,
