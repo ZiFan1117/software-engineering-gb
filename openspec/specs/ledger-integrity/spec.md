@@ -256,7 +256,7 @@ SHALL NOT 修改或删除已经写下的事件。
   | ② | 对什么做的 | 信纸 `body.subject`／`body.path` | **有位置**：同上，`t1` 逐条断言 |
   | ③ | 从什么变成什么 | 信纸 `body.before`／`body.after` | **有位置**：`t1` 断言 `after`；`before` 由 `change` 家族的信封形状钉住 |
   | ④ | 因为什么才发生 | 信封 `trace` | **有位置、但今天不校验**（与书 §2.9 自述一致）：`tests/trace_notice.rs::f61`–`f66`；其中 `f65` 按"**会失败的检查**"写——实现若开始拒绝悬空 `id`，该条即红 |
-  | ⑤ | 排在第几位 | 信封 `seq` | **有位置**：账本按 `seq` 排序与缺号判定由 `tests/contract.rs` 的账本域用例钉住 |
+  | ⑤ | 排在第几位 | 信封 `seq` | **有位置**（★ 2026-09-28 补：原写"由 `tests/contract.rs` 的账本域用例钉住"——**只给"域"、不点名**，与 ①–④⑥ 的写法不一致，调查员把它记为弱处）：`tests/acceptance.rs::t4_seq_gap_refuses_to_start`（缺号 ⇒ 拒启）；`tests/contract.rs` 的 `c15`（`:926` 逐字断言 `ext.world.Ledger.SeqGap`）；`c22_file_always_ends_on_a_line_boundary`（行边界）；`c32_last_line_without_trailing_newline_is_cut_and_seq_is_reused`（末行半行被截 ＋ `seq` 复用）。**实现侧**：`src/ledger.rs` 的 `if seq != last + 1` |
   | ⑥ | 谁允许的 | 门禁裁决的流水（`gate.*` 旗标与通告） | **有位置、但今天不校验**（与书 §2.9 自述一致）：`tests/cli.rs::cli09` 断言不可逆动作**必带** `gate.friction:<等级>`；`tests/trace_notice.rs::f71` 断言被拒的通告**留流水** |
   | ⑦ | 什么单位 | **无字段** | **今天没有位置可填**（与书 §2.9 自述一致）——**如实标缺格，不许含糊成"已答"** |
 - **并且**（书 §2.9 `:363` 的边界，**照抄不并轨**）：这七个问题**另有一套"八问"的问法**，两套**名目不同、条数不同、合成不了一套**，**并轨这件事今天还没有结论** ⇒ 本要求 SHALL NOT 被读成"已经把两套并成一套"。
