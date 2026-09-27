@@ -101,9 +101,9 @@ FC: WC-FC-2026-002
 | 1 | FC-3 | `world-core/docs/S0-立项/WC-SCMP-001-v0.1.md:2537` 逐字「### K-3【高】在 v1（无链）账本上做一次正常 `append` 会把世界锁死 —— 升级路径自杀」；同件 `:2541` 逐字「**后果（EV-11b）**：无链账本 → `check` 警告但 `READY`（**设计意图是兼容**）→ 一次合法 `append` 成功 → 下次打开 `Ledger.MixedChain … 拒绝使用`」 |
 | 2 | FC-3 | `world-core/src/gate.rs:287-293` 逐字 `Some(c) if !c.reversible => { if self .irreversible_actors .iter() .any(\|a\| pattern_matches(a, actor)) { Decision::Allow }` ⇒ **白名单主体执行不可逆动作时判 `Allow`、不加摩擦**；而 `openspec/specs/gate-enforcement/spec.md:36` 逐字写「系统 SHALL 对声明为不可逆的能力追加摩擦」 |
 | 3 | FC-3 | `world-core/src/project/mod.rs:124-145` 是 `assert_same_source`，其三个不等分支在 `project check` 里**结构上不可达**——`world-core/src/main.rs:408-409` 逐字 `let a = language::render(&state, world, vocab);`／`let b = visual::render(&state, world, vocab);` 两份投影**共用同一个 `state` 与 `vocab`** |
-| 4 | FC-1 | `world-core/docs/理论/语义世界-第五章-今天做到几分.md:108` 逐字「**绿而无效**。命令跑得通（`world-core project check`），只比头部四项（`src/project/mod.rs` 第 124 行），两份还是它自己渲染的（`src/main.rs` 第 394–397 行，2026-09-27 读）。按"能不能证明"判，这一格是红的」 |
+| 4 | FC-1 | `world-core/docs/理论/语义世界-理论书-第一版-合订.md:736` 逐字「**绿而无效**。命令跑得通（`world-core project check`），只比头部四项（`src/project/mod.rs` 第 124 行），两份还是它自己渲染的（`src/main.rs` 第 394–397 行，2026-09-27 读）。按"能不能证明"判，这一格是红的」 |
 | 5 | FC-1 | `world-core/tests/contract.rs:120-123` 逐字 `assert!( msg.contains("MissingField") && msg.contains(field), "删除 \`{field}\` 应被拒且指明字段，实得: {msg}" );`，而 `world-core/src/ontology.rs:32` 的错误前缀自带 `ext.world.` ⇒ `field=="world"` 那一轮**恒真** |
-| 6 | FC-3 | 门禁**读不到风险等级**：`world-core/src/gate.rs:44-48` 的结构只有 `pub reversible: bool` 一个字段（`world-core/docs/理论/语义世界-第五章-今天做到几分.md:93` 逐字「闸读的那份评级里只有一个布尔值」）；而 `world-core/cap.d/*.json` 逐项写 `risk`，`risk` 只被 `world-core/src/carrier/capd.rs:186` 读 |
+| 6 | FC-3 | 门禁**读不到风险等级**：`world-core/src/gate.rs:44-48` 的结构只有 `pub reversible: bool` 一个字段（`world-core/docs/理论/语义世界-理论书-第一版-合订.md:721` 逐字「闸读的那份评级里只有一个布尔值」）；而 `world-core/cap.d/*.json` 逐项写 `risk`，`risk` 只被 `world-core/src/carrier/capd.rs:186` 读 |
 
 **环境指纹**：本 change 的**起草**在主机 `D:\Code\08-worldcore-openspec`（Windows）完成，
 源码与文档证据逐条用 `read` 工具就地读取；**实施（补断言）与验收只在 VM `world` 内做**，

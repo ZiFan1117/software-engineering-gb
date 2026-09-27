@@ -22,7 +22,7 @@
 >    `match project::assert_same_source(&a, &b) {` —— 两份投影由**同一个 `state`、同一个 `vocab`** 渲染。
 > ③ 三个不等分支：`world-core/src/project/mod.rs:126-131`（`ha.world != hb.world`）、
 >    `:132-138`（`ha.vocab != hb.vocab`）、`:139-145`（`ha.last_seq != hb.last_seq || ha.state != hb.state`）。
-> ④ 项目文档判词：`world-core/docs/理论/语义世界-第五章-今天做到几分.md:108` 逐字
+> ④ 项目文档判词：`world-core/docs/理论/语义世界-理论书-第一版-合订.md:736` 逐字
 >    「**绿而无效**。命令跑得通（`world-core project check`），只比头部四项（`src/project/mod.rs` 第 124 行），
 >    两份还是它自己渲染的（`src/main.rs` 第 394–397 行，2026-09-27 读）。按"能不能证明"判，这一格是红的」。
 >    台账 `world-core/docs/理论/WC-PREFACE-LOG-001-v0.5.md:421` 逐字
@@ -128,10 +128,10 @@
 > **改的是哪一类问题**：④ 与项目文档冲突（**P0 必做项**）。这就是 `audit.md` 的 **P1** 与 **P2**。
 >
 > 项目文档判词：
-> ① `world-core/docs/理论/语义世界-第五章-今天做到几分.md:108` 逐字
+> ① `world-core/docs/理论/语义世界-理论书-第一版-合订.md:736` 逐字
 >    「**绿而无效**。命令跑得通（`world-core project check`），只比头部四项（`src/project/mod.rs` 第 124 行），
 >    两份还是它自己渲染的（`src/main.rs` 第 394–397 行，2026-09-27 读）。按"能不能证明"判，这一格是红的」；
-> ② `world-core/docs/理论/语义世界-第四章-它怎么落到机器上.md:192` 逐字（引框架 5.2 行）
+> ② `world-core/docs/理论/语义世界-理论书-第一版-合订.md:2312` 逐字（引框架 5.2 行）
 >    「| 5.2 | 两份记录的一致性核对：只比头部四项，且是自己渲染自己比（**红**） | 实测台账（`src/project/mod.rs` 第 124 行；`src/main.rs` 第 394–397 行） |」；
 > ③ 台账 `world-core/docs/理论/WC-PREFACE-LOG-001-v0.5.md:421`（`B-4` 行）逐字
 >    「**绿而无效**（**只比头部四项、不比内容；且它是自己渲染两份再自己比，从未比过两份由不同一方独立生成的投影**——括注已按 §八 的更正改一致，M-25）」；
@@ -161,7 +161,7 @@
 - **THEN** `project check` **仍然报绿** —— 本断言证明的是**边界**而不是实现缺陷；
       它把该命令的覆盖限定为"同一份输入下的身份一致性核对"
 - **证据**：需补断言（列进 tasks）——实现侧为 `world-core/src/project/mod.rs:124-145`；
-      文档出处为 `world-core/docs/理论/语义世界-第五章-今天做到几分.md:108`。
+      文档出处为 `world-core/docs/理论/语义世界-理论书-第一版-合订.md:736`。
 
 #### Scenario: 该命令的三个不等分支在命令路径上不可达（边界固定）
 

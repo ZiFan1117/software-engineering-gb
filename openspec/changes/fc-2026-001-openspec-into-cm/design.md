@@ -23,7 +23,7 @@
 1. **这一层没有受控身份**：`world-core/docs/` 下全部 `.md`/`.csv` 检索 `openspec`，**命中 0 处**——改它无号可挂、无基线可归、无签字可查。
 2. **归档门禁今天是红的**：`openspec validate --archived` → `Totals: 0 passed, 1 failed`，明细 `✗ 2 incomplete tasks (18/20 completed)`；那两条是 `## 6. 基线之后的维护` 下的常设项，`git show 311ff30` 证明是"收口归档"那次提交自己加进 `tasks.md` 的。
 3. **融合档承诺的闸没有部件**：融合档逐字写「归档门禁由 `openspec validate --archived` ＋ `spec_bridge.py` 共同承担」；五个位置（08 仓、`10-openspec-swe-gb` 主本、`09-dsh-openspec-fixed`、`06-swe-gb`、07 主仓）逐个检索 `spec_bridge*` → **全部无**。
-4. **编号桥两头都在、中间没接**：流程侧 `WC-SRS-001` 378 处 REQ 号、`WC-RTM-001.csv` 68 处、`world-core/tools/` 引用 38 个不同号；规格侧 **0 处**（23 条 Requirement 标题一条没号）。
+4. **编号桥两头都在、中间没接**：流程侧 `WC-SRS-001` **371 处** REQ 号、`WC-RTM-001.csv` **66 处**（权威值见 `openspec/BRIDGE.md` §六）、`world-core/tools/` 引用 38 个不同号；规格侧 **0 处**（23 条 Requirement 标题一条没号）。
 5. **基线只核过"名字存在性"**：`tasks.md:16/17/22`、`design.md:121` 逐字只核"证据行指向真实存在的测试名"，自报"6 份规格 / 40 条证据 / 0 条未命中"。本轮六路逐条复核后：**46 条对不上**（严重 15 / 重要 12 / 一般 14 / 提示 5）——逐条见本 change 的 `audit.md`（由 `specmap.json` 生成，未手抄）。**其中 5 条把书里判红的东西写成了绿。**
 
 **证据环境是分裂的**（承上一版 design，仍然成立）：主机是 git 仓库与编辑处，但**没有 Rust 工具链**；构建与验收只在 VM 内做（`ssh world`，Arch Linux，cargo 1.98.1，`/root/world/world-core`）。本轮已实测：`bash check.sh` **rc=0 全通过**（构建 / 冒烟 / 三条专属测试 / 契约 25 项 / 投影同源 / 纯文本审计 / 系统级验收 52 项 / S1 验证面 59＋117 项断言）。
@@ -48,7 +48,7 @@
 **Non-Goals:**
 
 - **不在本 change 内做那 46 条内容修订**——另立 `fc-2026-002`（理由见"方案对比 · 方案丙"）。
-- 不改 `world-core/` 下任何产品代码、测试或行为；**6 份既有主规格一字不改**。
+- 不改 `world-core/` 下任何产品代码、测试或行为；**6 份既有主规格里 3 份的 `## Purpose` 在本次更正**（`gate-enforcement`／`projections`／`read-model`），**23 条 Requirement 一字不动**；谁让／为什么／谁批的见 `proposal.md` 的「破坏性变更」条。
 - 不替人裁定任何待人裁项（`G-X` 必要性、七问/八条判据是否并轨、第五章 5.4 四类归属口径）。
 - **不建立第二套文档体系**：不改流程侧任何册子、不设"同一批文件两处登记"。
 
@@ -61,7 +61,7 @@
 | **受影响模块** | ① `openspec/config.yaml`（默认档）② 新增 `openspec/specs/spec-governance/`（新能力进主规格）③ `openspec/schemas/**`（改掉"双读＋一行指针"的写法；主本 `10-openspec-swe-gb` 同步）④ `openspec/changes/archive/2026-09-27-baseline-verified-doctrine/**`（补 `review.md`、移常设项）⑤ 新增 `openspec/MAINTENANCE.md`（规格层自己的维护清单）⑥ `world-core/tools/spec_bridge.py`（新增）⑦ `world-core/check.sh`（加一步）⑧ `world-core/.scope-declaration.json`（范围门禁要求时按需收窄） |
 | **受影响需求** | 流程侧 **22 条**被映射（编号桥，见 `mapping.md`）；**5 条承诺取不到号**（登记为「无号」）；**9 条非绿需求无规格落点**（进覆盖 change） |
 | **需重跑的测试** | ① VM：`bash check.sh`（rc=0 为准出前提，本轮已跑）② 新增：`python3 world-core/tools/spec_bridge.py --self-test`（**五条判据各自的反例必须真红**）③ `openspec validate --all --strict`（6 项 → **7 项全绿**）④ `openspec validate --archived`（本 change 目标是**由红转绿**） |
-| **回归范围** | **R-A 既有规格**：6 份主规格 **一字不动** ⇒ 回归 = `git diff` 在这 6 个文件上为**空**<br>**R-B 工具**：`spec_bridge.py` 新增并接 `check.sh` ⇒ 回归 = `--self-test` 五条反例全红 ＋ `check.sh` 仍 rc=0<br>**R-C 归档件**：补 `review.md`、移两条常设项 ⇒ 回归 = `validate --archived` 由 `0 passed/1 failed` 变 `1 passed/0 failed`<br>**R-D 新能力**：`spec-governance` 进主规格 ⇒ 回归 = `validate --all --strict` 由 6 项变 **7 项且全绿**<br>**R-E 产品面**：`world-core/src/`、`tests/` **零改动** ⇒ 回归 = `git diff --stat` 为空 |
+| **回归范围** | 按流程侧权威四档（`附件三-评审与门禁.md:265`「R-A 冒烟回归 / R-B 模块回归 / R-C 契约回归 / R-D 全量回归」；**流程侧没有 R-E**）：<br>**R-A 冒烟**：6 份主规格的 **23 条 Requirement 一字不动** ⇒ 判据 = `git diff --stat fd9a892 HEAD -- openspec/specs` **只允许 3 files / 7 insertions(＋3)（即三段 `## Purpose`）**；**出现 Requirement 级改动即判失败**<br>**R-B 模块**：`spec_bridge.py` 新增并接 `check.sh` ⇒ 判据 = `--self-test` 七条反例全红 ＋ `check.sh` 第 ⑧ 步通过<br>**R-C 契约**：归档件补 `review.md`、移两条常设项 ⇒ 判据 = `validate --archived` 由 `0 passed/1 failed` 变 `1 passed/0 failed`<br>**R-D 全量**：`spec-governance` 进主规格 ＋ 覆盖 change 在册 ⇒ 判据 = `validate --all --strict` 全绿且 `list --specs` 由 6 条变 7 条；**产品面**（`world-core/src/`、`tests/`）零改动并入本档，判据 = `git diff --stat` 在那两处为空 |
 | **工作量估算** | 默认档 0.1 ＋ `spec_bridge.py`（五条判据＋自证）0.8 ＋ 编号桥复核与登记 0.3 ＋ 归档遗留 0.3 ＋ `spec-governance` 进主规格 0.2 ＋ 覆盖 change 起草 0.5 ≈ **2.2 人日**（AI 起草；评审与人签不计） |
 | **需通知的使用方** | 下一位执行者（默认档改变其工作方式）；评审席（新增 `review.md` 闸）。**无破坏性接口变更，不需对外通知** |
 
@@ -112,6 +112,24 @@
 - **动已归档的 change**（补 `review.md`、移常设项）→ **缓解**：只补件与移项、不改结论、逐处留痕；`review.md` 里写明处置理由与前后 diff 口径。
 - **VM 是单点**：不在线则基线不可复验 → **缓解**：如实登记；不假装主机能代替（主机无 Rust 工具链）。
 
+## L5 覆盖边界
+
+> **书 L5 那一层的落点**：**"规格已定、只是今天没做到"的东西放这里**——逐条四格。
+> **本节不得被读成"能力已成立"**：它登记的正是"还没成立"。
+> ⚠ **本节是 2026-09-27 按新档规从下一节的「排除清单」里搬过来的**：原先这几条被写成"属兑现问题"塞在排除清单里，
+> **把 L5 混进了 L6 的桶**（独立评审席Ⅲ 的判词：「它把'未定'整批挪进了 L5／或把 L5 塞进 L6」）。
+> 分界就是书那一条：**能判红绿的进本节；判不了红绿的进排除清单。**
+
+| # | 书里的判据出处 | 今天的实测读数（红／绿 ＋ 命令与输出） | 为什么还没做到 | 落点 |
+|---|---|---|---|---|
+| 1 | 书第五章判红项与 `REQ-F-023` 投递/应答 | **红**：`subscribe`／`notify`／`push`／`watch` 在 `world-core/src/` **零命中**（溯源一 T23） | 规格已定（该能力有需求号），实现没做 | `cover-unimplemented-capabilities` tasks **第 1 组** |
+| 2 | 书第五章 5.5「可不可逆，两份配置对不上」 | **红**：闸读不到风险等级（`src/gate.rs:44-48` 只读 `reversible` 布尔）；`policy.json:32` 的 `irreversible_actors` 只有 `world://user`，而该主体同时可写任意对象（`audit.md` G1/G2） | 规格已定、实现把摩擦挂在了**执行者身份**上 | `cover-*` tasks **第 8 组** |
+| 3 | 书第五章 5.3「没声明过的东西照样落账」 | **红**：`grep -rn 'concepts' world-core/src/` **命中 0 处**；实测未声明实体与字段均 `rc=0` 落笔（书 5.3 判红） | `concepts` 声明写在文件里，落笔时无人读它 | `cover-*` tasks **第 9 组** |
+| 4 | `WC-SCMP-001:2537`「### K-3【高】…升级路径自杀」 | **红（未修）**：无链账本一次 `append` 即自锁死；台账标【高】且**原基线排除清单漏了它** | 缺陷已登记、未修 | `cover-*` 的 `ledger-integrity` delta「无链账本的升级路径边界」＋ tasks 第 4 组 |
+| 5 | 书第四章 4.5 写侧适配（**整节零落点**） | **红 / 零落点**：`写侧｜旧系统｜适配｜适配器｜不裁决` 在规格树与三个在办 delta **全零命中** | 这一层**连规格都还没写** ⇒ 落点先补规格 | **待立**：并入 `cover-*`（本轮已登记为 9 处零落点之一） |
+| 6 | 书第五章 5.4 强制力（部分红） | **红一半**：CLI 缺省身份 `world://user` 可执行不可逆动作（实测 `rc=0`，零流水，`WC-SCMP-001:1250` T-02）；规格把"属主与权限"写成绿（`audit.md` G5） | 规格写宽了 + 实现未覆盖祖先链 | 规格侧 `fc-2026-002`（已改）；实现侧 `cover-*` tasks 第 8 组 |
+| 7 | `WC-THEORY-DEFECT-001-v0.2.md:43–69` 登记的 **29 条未修缺陷** | **红（按台账未修）**：含 D-01 通道无超时、D-03 `notice` 不进读模型 | 规格已定、实现没做到 | 逐条并入各自的 change；**汇总落点**在覆盖 change 的 tasks 与缺陷台账 |
+
 ## 排除清单
 
 > **明确不写进 specs 的东西，逐条给出处。** 没有这一节，规格会被读成"什么都已定"。
@@ -119,9 +137,9 @@
 | 不写入 | 为什么 | 出处 |
 |---|---|---|
 | **46 条规格内容修订** | 另有 change；本件只登记 | 本 change `audit.md`（46 条逐条，带文件:行号） |
-| **`G-X` 必要性举证** | 决定这一层有没有存在的必要，属裁定事项 | `语义世界-评审一览.md:39`（自标"最重的一条"） |
-| **七问与八条判据"一套还是两套"** | 框架明标待人裁 | `语义世界-全书框架.md:76` |
-| **第五章 5.4 四类归属口径** | 正文按今天的实际强制力写，源件那一列写法不同 | `语义世界-评审一览.md:40` |
+| **`G-X` 必要性举证** | 决定这一层有没有存在的必要，属裁定事项 | `语义世界-理论书-第一版-合订.md:1549`（自标"最重的一条"） |
+| **七问与八条判据"一套还是两套"** | 框架明标待人裁 | `语义世界-理论书-第一版-合订.md:1638` |
+| **第五章 5.4 四类归属口径** | 正文按今天的实际强制力写，源件那一列写法不同 | `语义世界-理论书-第一版-合订.md:1550` |
 | **29 条未修缺陷**（含 D-01 通道无超时、D-03 `notice` 不进读模型） | "规格已定、实现没做到"，属兑现问题 | `WC-THEORY-DEFECT-001-v0.2.md:43–69` |
 | **`K-3` 升级路径自杀（无链账本一次 `append` 即自锁死）** | 未修缺陷，且**原基线排除清单漏了它** | `WC-SCMP-001-v0.1.md:2537/2541/2544`；`audit.md` L1 |
 | **通告的闸（D-13）、通道资源边界、家族演进、未知旗标、本体命名空间、`trace` 透传、可逆性判定、`concepts` 实体层** | 未实现能力，进覆盖 change 的 delta ＋ tasks | `audit.md`（C/E/G/R 组）；`REQ-F-026/027/029/030/031` |

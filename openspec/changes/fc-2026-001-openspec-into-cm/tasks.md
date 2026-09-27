@@ -71,8 +71,11 @@
 - [x] 6.1 规格层：`openspec validate --all --strict` ⇒ **9 passed / 0 failed** ✓
       （★ 按席② 的 C1 更正：**不写"7 项全绿"**——`--all` 的射程是「全部 spec ＋ 全部未归档 change」，项数会随仓内 change 多少而变）
 - [x] 6.2 归档层：`openspec validate --archived` ⇒ **1 passed / 0 failed** ✓
-- [x] 6.3 **未改动的证明**：`openspec/specs/**`（6 份既有主规格）与 `world-core/src/`、`world-core/tests/` **零改动** ✓（由 git diff 核）
-- [x] 6.4 门禁层：VM 内 `bash check.sh` **RC=0**，含第 ⑧ 步 ✓；环境指纹见 `review.md` §五
+- [x] 6.3 **未改动的证明（★ 判据已收窄，原写『零改动』是假勾）**：`openspec/specs/**` 里**除 3 处 `## Purpose` 段外零改动**；`world-core/src/`、`world-core/tests/` **零改动**
+      **验收**：`git diff --stat fd9a892 HEAD -- openspec/specs` = `3 files changed, 7 insertions(+), 3 deletions(-)`；`git diff --stat fd9a892 HEAD -- world-core/src world-core/tests` **为空**
+      （为什么改判据：本轮按「以书为主」更正了三处 Purpose，而原判据写的是「零改动」——**它当时已成假**。对抗席乙 把这条列为最重：一条已勾的假任务是「已知假勾进基线」的入口。）
+- [x] 6.4 门禁层：VM 内 `bash check.sh` **RC=0**，含第 ⑧ 步 ✓（**该读数取自判据⑥ 落地之前**）；环境指纹见 `review.md` §五
+      **★ 待重跑**：判据⑥ 落地后 `check.sh` 第 ⑧ 步会因归档件未签而 exit 1 ⇒ **签完必须重跑一次并把新读数写进 §五**
 - [ ] 6.5 `review.md` 的 **R5 节签字**（人）＋ 实施完成后补 **R4 节签字**（人）——**留人**
 
 ## 7. 五席评审发现的整改（本轮新增；每条都有 `path:line` 出处）
