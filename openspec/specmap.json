@@ -284,14 +284,33 @@
        "line": 117,
        "when": "以符号链接作为法律路径、或以对 group/other 可写的文件作为法律路径打开世界",
        "then": "拒绝启动，但错误串**不含** `ext.world.` 码——本断言证明的是**边界**而不是实现缺陷",
-       "ev": []
+       "ev": [
+        "world-core/tests/contract.rs",
+        "c24",
+        "world-core/src/guard.rs",
+        "assert_not_symlink",
+        "assert_not_other_writable",
+        "assert_owned_by",
+        "ext.world.",
+        "world-core/src/guard.rs::assert_not_other_writable"
+       ]
       },
       {
        "title": "策略版本不符出口无错误码（边界固定）",
        "line": 125,
        "when": "以 `policy` 版本号不为 1 的策略打开世界",
        "then": "拒绝启动，错误串为散文，**不含** `ext.world.` 码",
-       "ev": []
+       "ev": [
+        "world-core/tests/contract.rs",
+        "c24",
+        "world-core/src/gate.rs",
+        "Policy",
+        "load",
+        ":1504",
+        "policy",
+        ":1516",
+        "world-core/src/gate.rs"
+       ]
       }
      ]
     },
@@ -3299,7 +3318,7 @@
   "caps": 9,
   "reqs": 48,
   "scns": 85,
-  "evs": 146,
+  "evs": 163,
   "srs": 41,
   "judges": 17,
   "booksecs": 46

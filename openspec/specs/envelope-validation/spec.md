@@ -118,7 +118,7 @@ SHALL NOT 要求调用方去匹配中文散文措辞。
 
 - **WHEN** 以符号链接作为法律路径、或以对 group/other 可写的文件作为法律路径打开世界
 - **THEN** 拒绝启动，但错误串**不含** `ext.world.` 码——本断言证明的是**边界**而不是实现缺陷
-- **证据（待补）**：**本条尚无断言**（列进 tasks）——实现侧为 `world-core/src/guard.rs::assert_not_other_writable`（:43）
+- **证据**：`world-core/tests/contract.rs` 的 **`c24`（「已知无码出口」，任务 2.6）**——其头注的表逐字列三行**标签**「① 静态墙·**符号链接**」「② 静态墙·**mode 位**」「③ 静态墙·**属主**」（三行的实现分别是 `world-core/src/guard.rs` 里的 `assert_not_symlink`／`assert_not_other_writable`／`assert_owned_by`；★ 2026-09-28：本处**初版把表里那三个简写原样引进引文**，判据② 当场按"文件路径"校验而报红 ⇒ 现把它们移出引文、写成**带路径**的形式），并逐字写明「**c24**：四条**已知无码出口**的错误串**不含** `ext.world.` 前缀——这是**边界**，不是缺陷」＋为什么"没有码"也要有断言（★ 2026-09-28 订正：本条原写「**本条尚无断言**（列进 tasks）」——**那句今天不成立**）——实现侧为 `world-core/src/guard.rs::assert_not_other_writable`（:43）
       与同文件的符号链接断言；文档出处为 `world-core/docs/S2-设计/WC-IC-001-v0.1.md:350-352`，
       三行末列逐字都写「⚠ **无码**」。
 
@@ -126,7 +126,7 @@ SHALL NOT 要求调用方去匹配中文散文措辞。
 
 - **WHEN** 以 `policy` 版本号不为 1 的策略打开世界
 - **THEN** 拒绝启动，错误串为散文，**不含** `ext.world.` 码
-- **证据（待补）**：**本条尚无断言**（列进 tasks）——实现侧为 `world-core/src/gate.rs`:113-117。
+- **证据**：`world-core/tests/contract.rs` 的 **`c24`** 第 **④** 行（表内逐字「④ 策略**版本不符**」＋实现是 `world-core/src/gate.rs` 里 `Policy` 的装载函数（`load`）＋逐字「门禁策略版本不支持：期望 1，实得 2」）；`:1504` 逐字注释「④ 策略版本不符：其余一切都合法，只有 `policy` 不是 1」，`:1516` 把它纳入逐条断言）（★ 2026-09-28 订正：本条原写「**本条尚无断言**（列进 tasks）」——**那句今天不成立**）——实现侧为 `world-core/src/gate.rs`:113-117。
 
 ### Requirement: REQ-F-027 家族演进与向前兼容
 
