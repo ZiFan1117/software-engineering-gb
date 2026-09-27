@@ -100,6 +100,11 @@ book_lines = rl(BOOK)
 chapters = []
 cur = None
 for i, ln in enumerate(book_lines):
+    # ★ 遇到**任何** H1 都要结算当前章：只有"序 / 第N章"开新章，其余 H1（`# 语义世界`／`# 附录`）**终结**当前章。
+    #   为什么（实测）：合订本 `:985` 是 `# 附录`，它**不匹配**下面的章规则；若不结算，附录里的 44 个 H2
+    #   会被记成"第六章"的 `六.1`–`六.44`（第六章真实只有 8 节 `6.1`–`6.8`）⇒ `counts.booksecs` 会报 90 而非 46。
+    if re.match(r"^#\s+", ln):
+        cur = None
     mch = re.match(r"^#\s+(序|第.+?章)\s*$", ln)
     if mch:
         cur = {"chap": mch.group(1).replace("第", "").replace("章", "").strip() or mch.group(1),
