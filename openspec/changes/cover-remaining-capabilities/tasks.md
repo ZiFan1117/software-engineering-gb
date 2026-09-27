@@ -155,3 +155,28 @@
 - [ ] 9.1 **把这三种处置交给裁定人**（`proposal.md` 既有口径：属"谁让"的裁定，**agent 不代选**）；
 - [ ] 9.2 裁定后**回头统一**一遍：按裁定结果，把本批加过的行内订正注**逐处对齐**（该留的留成"一句话＋依据"形态，该移的移进该 change 的 `design.md`／`audit.md`，该删的在 `fc-2026-003` 里一并删）。
   **未裁定之前不动**（避免两线互相覆盖）。
+
+## 10. 规格树里**成簇的「本条尚无断言」**：8 处待逐条核实（2026-09-28 扫出）
+
+> **来源**：把"过期陈述"的扫查从流程文档做到**规格树**（`openspec/specs/**`）⇒ 共 **33 处**，
+> 其中 **8 处**是同一个形态：`- **证据（待补）**：**本条尚无断言**（列进 tasks）…`。
+> **为什么要核**：`fc-2026-004-assertions` 就是"补断言"那一件（**34 条**），它**加了断言**，但**未必同步了这些证据行**——
+> 若某条的断言已落地而规格仍写"尚无断言"，**读者会以为它没做**（与已订正的那几处同病）。
+> **一处已当场改掉**（不在此清单）：`delivery-and-resources/spec.md:11` 的括注（同一 Requirement 的 `:17`／`:28` 上一轮已改，**这个括注漏了**）。
+
+- [ ] 10.1 **逐条核实这 8 处**（每处要回答：它那个 Requirement 现在**有没有会红的断言**？有 ⇒ 把证据行改成真证据；没有 ⇒ **保留"尚无断言"并写明为什么**）：
+  | # | 坐标 | 该行自述的实现侧 |
+  |---|---|---|
+  | 1 | `openspec/specs/read-model/spec.md:105` | `world-core/src/main.rs`:28-30 与 `:153` |
+  | 2 | `openspec/specs/ledger-integrity/spec.md:181` | `world-core/src/ledger.rs`:506（**K-3 的修复判据**） |
+  | 3 | `openspec/specs/ledger-integrity/spec.md:191` | 缺陷出处 `WC-SCMP-001`:2537／:2541（K-3） |
+  | 4 | `openspec/specs/gate-enforcement/spec.md:89` | `refused` 指纹的落点 |
+  | 5 | `openspec/specs/gate-enforcement/spec.md:238` | （该行自述"这两句今天尚无断言"） |
+  | 6 | `openspec/specs/projections/spec.md:95` | `world-core/src/project/mod.rs`:124-145 |
+  | 7 | `openspec/specs/projections/spec.md:103` | `world-core/src/main.rs`:408-410 |
+  | 8 | `openspec/specs/envelope-validation/spec.md:121` 与 `:129` | `guard.rs::assert_not_other_writable`（:43）／`gate.rs`:113-117 |
+  （另有 `channel-identity/spec.md:53` 一处同形态 ⇒ **一并核**，共 9 处。）
+  **★ 两处已有旁证**：`projections` 的 `:95`／`:103` 很可能**已过期**——`fc-2026-004` 的 `tasks.md` 逐字说它把 `cli13`／`cli14` 挂到这两条上
+  （该件**已归档**、35/35 全勾）；**但仍以实物为准**（要真去 `tests/cli.rs` 核那两个用例断的是什么）。
+- [ ] 10.2 **核完统一改**（每处都写"原写的是什么、为什么今天成立/不成立"——照本批已改的那九处的同法）；
+  **不许拿"扫到了"当"过期了"**（那与本仓最忌的"把没做到写成做到"是**镜像**：把"没核"写成"是烂的"）。
