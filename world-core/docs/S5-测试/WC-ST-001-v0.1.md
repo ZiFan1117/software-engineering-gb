@@ -14,6 +14,8 @@
 | `atom_reversibility.rs` | 可逆性与两处配置互校（`a*`） |
 | `atom_declared_only.rs` | 声明以外不许落账（`b*`） |
 | `delivery.rs` | 投递与应答（`to` 的语义、`request_id` 配对） |
+| `ontology_ext.rs` | 本体扩展面（未知旗标忽略／扩展项与核心重名须拒／只加扩展则折叠不变） |
+| `trace_notice.rs` | `trace` 的写入入口与读回／通告的闸（两条拒绝路径不许互相冒充） |
 | `perf.rs` | 性能面（带检查点路径的目标） |
 
 **脚本面**（`world-core/tools/`，由 `check.sh` 或人工调用）：
@@ -31,6 +33,10 @@
 python -c "import re,pathlib;print(sum(1 for p in pathlib.Path('world-core/tests').glob('*.rs') for l in p.read_text(encoding='utf-8').splitlines() if re.match(r'\s*fn [a-z]+\d', l)))"
 ```
 （口径：测试函数名以字母＋数字开头；**以命令输出为准**。）
+
+**★ 这张表会漂（如实登记）**：本文档**不自带门禁**——新增一个测试文件而忘了改这张表，**没有任何判据会红**。
+实测（2026-09-28）：本表原列 **7** 个测试二进制，而仓内实有 **9** 个（缺 `ontology_ext.rs`／`trace_notice.rs`，它们是本轮新加的能力测试）⇒ **已按实补齐**；`WC-AT-001` 与 `WC-RN-001` 同期也有过期陈述（门禁已转绿而文档仍写"今天不满足"），一并改掉。
+**要防这类漂移，得让门禁承担**（把"文档里的清单 ≡ 目录里的实际文件"做成一条会红的检查）——**今天没有这条判据**，故此处只保证"**以命令输出为准**"这句口径在，且**不把清单当权威**。
 
 ## 二、在哪跑（**构建与测试只在 VM**）
 
