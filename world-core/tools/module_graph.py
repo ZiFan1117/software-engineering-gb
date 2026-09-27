@@ -32,13 +32,33 @@ r"""module_graph.py —— 机核层的守卫：把 `WC-ATOM-001` §四 机核�
    **怎么抽依赖**（逐条写死口径，避免"看起来建了图"）：
      · 建**模块树**：`src/lib.rs` 的 `pub mod X;` ＋ `src/<dir>/mod.rs` 的 `pub mod Y;`
        ⇒ `X → src/X.rs`（或 `src/X/mod.rs`）、`Y → src/<dir>/Y.rs`；`crate::` 即根。
-     · `crate::A::B::…` / `world_core::A::…` 的**首个路径段** `A` 经模块树解析到**其宿主 .rs 文件**，
-       再看该文件登记在哪个模块号下 ⇒ 得到一条**模块间边**（`use crate::gate::…` 是 M05 内部，
-       不是跨模块边，故**不产边**——这是"兄弟模块集"的字面口径）。
+     · 解析**到模块**，不是解析到"首段"：`crate::A::B::C::…` 取**模块树里最长的真模块前缀**
+       （`world_core::project::language::parse` ⇒ 模块是 `project::language`，`parse` 是函数）。
+       该模块的**宿主 .rs 文件**登记在哪个模块号下 ⇒ 得到一条**模块间边**
+       （`use crate::gate::…` 是 M05 内部，不是跨模块边，故**不产边**——这是"兄弟模块集"的字面口径）。
+     · **花括号里的每一项都解析**：`use world_core::project::{self, language, visual};`
+       ⇒ `self`＝`project` 本身，`language`／`visual` 各自落到 `project::language`／`project::visual`。
+       只取首段会把 `visual`(M07) 丢掉，于是 `M04` 明明 import 了 M07、却被报成"声明了但代码里没有"。
+     · **共同模块不作边目标**：`WC-MODREG-001` §2.1 登记为「**不占号**」的文件（`src/event.rs`、
+       `src/project/mod.rs` 这类）**不产生依赖边**。理由：A-4 判的是**模块号之间**的 DAG，
+       一个显式声明不占号的文件按定义落在这个映射之外；把它当边目标时**归属是任意的**
+       （`project/mod.rs` 横跨 M06/M07，工具挑 M06 ⇒ `M07` 里一句 `use crate::project::{…}`
+       被记成"依赖 M06"——凭空一条边）。**跳过不静默**：逐条列在报告里
+       （正跑单独打印一段、JSON 有 `import_edges_skipped_shared`），只是**不算 offender**。
+     · **两处都抽**：① 行首 `use …`；② **行内全限定路径**（`crate::guard::assert_not_other_writable(…)`
+       ——Rust 不写 `use` 也能直接用全路径，本仓 `src/ontology.rs:134`、`src/channel.rs:184` 就是这么写的）。
+       只抽 ① 会把**真的依赖**判成「声明了但代码里没有」⇒ 逼人把真依赖从登记表里删掉：
+       那不是"报得严"，是**拿关卡去改坏唯一数据源**（A-4 判的是"声明集 ≡ 真实依赖集"）。
+     · **注释与字符串不算**：整行 `//`／`///`／`//!` 里的 `crate::…` 是文档链接（`src/delivery.rs:21`、
+       `src/event.rs:9` 这类），字符串字面量里的 `crate::…` 是数据；抽了它们，一句 `//!` 或一个字符串
+       就能凭空造出一条跨模块边。**只抽代码里真会被解析的路径。**
+       （已知边界：嵌套花括号 `use a::{b::{c, d}};` 只展开外层——本仓实测 0 处；
+       内层名字解析不到模块 ⇒ 不产边，宁少不错。）
      · **只抽生产路径**：`#[cfg(test)]` 起始的 `mod` 块内的 `use` **不计入**（`WC-MODREG-001`
        §4.2 自己就是这么划界的：「两条看似回边、实为测试内」）。`tests/*.rs` 整文件视为测试侧，
        是 `WC-ATOM-001` §三 的「测试」落点，不是实现依赖面。
-     · 无环：对**声明边 ∪ 真实 import 边**跑 Kahn 拓扑排序，排不完即有环，报出环上模块号。
+     · 无环：对**声明边 ∪ 真实 import 边**分别跑 Kahn 拓扑排序（排不完即有环），
+       再用**强连通分量**把**每一条**真环各打印一条逐段可验的环路径（不是因为"报不出路径"才退化成节点集合）。
      · `deps == import`：登记表「依赖模块」列 → `{模块号: 出边集}`，与真实 import 边集**逐模块相等**；
        不一致时分别列出「声明了但代码里没有」与「代码里有但没声明」。
 
@@ -77,6 +97,7 @@ r"""module_graph.py —— 机核层的守卫：把 `WC-ATOM-001` §四 机核�
 from __future__ import annotations
 
 import argparse
+import builtins
 import io
 import json
 import os
@@ -263,6 +284,17 @@ IMPORT_RE = re.compile(
     r"(?:(?P<kind>crate|world_core|super|self)\s*::|::\s*)?"
     r"(?P<rest>[A-Za-z_][A-Za-z0-9_:{}, \t]*)"
 )
+#: **行内全限定路径**（`use` 以外的地方写的 `crate::A…` / `world_core::A…`）：
+#:   `crate::guard::assert_not_other_writable(dir, "通道目录")?;`（`src/channel.rs:184`）
+#:   `let client = world_core::carrier::kernel::KernelClient::new(sock);`（`src/main.rs:877`）
+#: 为什么要它：Rust 允许不用 `use` 直接写全路径，而 A-4 判的是**真实依赖面**——
+#: 不抽它，`src/ontology.rs:134`／`src/channel.rs:184` 两条**真的**跨模块调用就不产边，
+#: 于是登记表里 `M01 → M05`、`M09 → M05` 两条**真声明**被判成"声明了但代码里没有"。
+#: 抓到的是**整条路径**（`carrier::recover::orphans`），再由 `_mod_candidate` 取模块树里最长的真模块前缀。
+INLINE_PATH_RE = re.compile(
+    r"\b(?:crate|world_core)\s*::\s*([A-Za-z_][A-Za-z0-9_]*(?:\s*::\s*[A-Za-z_][A-Za-z0-9_]*)*)")
+#: 整行注释（`//`、`///`、`//!`）：里面的 `crate::…` 是**文档链接**，不是依赖。
+COMMENT_LINE_RE = re.compile(r"^\s*//")
 #: `#[test]` 行（含 `#[tokio::test]`、带参数形态；与 `#[cfg(unix)]` 等其它属性无关）。
 TEST_ATTR_RE = re.compile(r"^\s*#\s*\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\s*::\s*)*test\s*[\]\(]")
 #: 根级条目声明（`pub struct World {` / `pub enum X` / `pub trait T` / `pub fn f` / `pub type A`）。
@@ -352,11 +384,80 @@ def build_module_tree(wc, files):
     return tree, test_only
 
 
+def _in_string(line, idx):
+    """`idx` 这个位置是不是落在**字符串字面量**里（数它前面有多少个未转义的双引号）。
+
+    够用的粗判：路径不会跨行，`r"…"` 也照数引号。为什么需要它：
+    `let s = "crate::readmodel::State";` 是**数据**，把它当依赖就凭空多一条边。
+    """
+    n, i = 0, 0
+    while i < idx:
+        c = line[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == '"':
+            n += 1
+        i += 1
+    return n % 2 == 1
+
+
+def _longest_module(tree, path):
+    """把 `a::b::c` 解析成模块树里**最长的那个真模块前缀**（都没有则返回 `""`）。
+
+    为什么要"最长"而不是"首个路径段"：Rust 的路径可以一路写到**条目名**
+    （`world_core::project::language::parse`：模块是 `project::language`，`parse` 是函数）。
+    取最长真模块前缀 ⇒ ① 不会把函数/类型名当成模块（它们不在模块树里）；
+    ② `a::b::c` 与 `a::b` 得到**同一条**边；③ `use world_core::project::{self, language, visual};`
+    里花括号的每一项都能各自落到**它自己的**模块上（⑦ 的判据面）。
+    """
+    parts = [p for p in path.split("::") if p]
+    for k in range(len(parts), 0, -1):
+        cand = "::".join(parts[:k])
+        if cand in tree:
+            return cand
+    return ""
+
+
+def _mod_candidate(tree, path):
+    """路径 → 产边候选名：**树里最长的真模块前缀**优先，否则退回**首个路径段**。
+
+    退回首段是为了根级名字（`use world_core::World;` 的 `World` 是 `src/lib.rs` 的条目、
+    不是模块树里的模块）——它由 `seg_owner` 的第 ②③ 级落点接住。
+    """
+    hit = _longest_module(tree, path)
+    if hit:
+        return hit
+    return path.split("::")[0].strip()
+
+
+def _brace_members(rest):
+    """`use` 路径原文里花括号列表的成员名（去 `as` 别名、去空白；`self` 原样保留由调用方丢弃）。
+
+    只展开**一层**花括号：`use a::b::{c, d as e};` ⇒ `["c", "d"]`。
+    嵌套形态（`use a::{b::{c, d}, e};`）**不展开内层**——本仓实测 0 处；
+    遇到时内层名字解析不到模块 ⇒ 不产边（保守方向：宁可少一条，也不少错一条）。
+    """
+    m = re.search(r"\{(.*)", rest or "")
+    if not m:
+        return []
+    body = m.group(1).split("}")[0]
+    out = []
+    for item in body.split(","):
+        item = item.strip()
+        if item:
+            out.append(re.split(r"\s+as\s+", item)[0].strip())
+    return out
+
+
 def file_use_edges(path, text, tree, test_only, crate_names):
-    """单个 .rs 文件 → (生产边集, 测试边集)，元素为**首段名字**（`gate` / `World` / `carrier`…）。
+    """单个 .rs 文件 → (生产边集, 测试边集)，元素为**模块名**（`gate` / `World` / `project::language`…）。
 
     · 行级状态机：`#[cfg(test)]` 之后紧跟的 `mod NAME {` 起始的整块计入"测试边"，
       其余计入"生产边"（`WC-MODREG-001` §4.2 的划界口径：测试内的 use 不是发布产物里的边）。
+    · 行首 `use` 与**行内全限定路径**（`crate::guard::f(…)`）**两处都抽**——口径与理由见文件头；
+      整行注释与字符串字面量里的路径**不算**（那是文档链接与数据，不是依赖）。
+    · `use a::b::{self, c};` 里**花括号的每一项都解析**：`c` 落到 `a::b::c`（⑦ 的判据面）。
     · 根级裸名（`use gate::{…};`）在 `crate_names` 里查到名字才算边；查不到即丢弃
       （不会把 `use serde_json::…` 误算成兄弟模块边）。
     """
@@ -374,18 +475,30 @@ def file_use_edges(path, text, tree, test_only, crate_names):
             if j < len(lines) and re.match(r"^\s*(?:pub\s+)?mod\s+\w+\s*\{", lines[j]):
                 in_test += 1
             continue
+        if COMMENT_LINE_RE.match(line):
+            continue                                  # 注释行（`///`／`//!`）里的路径是文档链接
+        dest = tests if in_test else prod
         m = IMPORT_RE.match(line)
-        if not m:
-            continue
-        kind, rest = m.group("kind"), (m.group("rest") or "")
-        if kind in ("super", "self"):
-            continue                                  # 模块内部，不是"兄弟模块"面
-        seg = re.split(r"[:{]", rest, 1)[0].strip()
-        if not seg:
-            continue
-        if kind is None and seg not in crate_names:
-            continue                                  # 根级裸名但不在 crate 作用域里 ⇒ 外部 crate
-        (tests if in_test else prod).add(seg)
+        if m:
+            kind, rest = m.group("kind"), (m.group("rest") or "")
+            if kind not in ("super", "self"):         # 模块内部，不是"兄弟模块"面
+                head = re.split(r"[{,\s]", rest, 1)[0].strip().rstrip(":")
+                mod = _mod_candidate(tree, head)
+                if mod and (kind is not None or _longest_module(tree, head) or mod in crate_names):
+                    dest.add(mod)
+                    for mem in _brace_members(rest):
+                        if mem in ("", "self", "*"):
+                            continue
+                        deep = _longest_module(tree, "%s::%s" % (head, mem))
+                        if deep and deep != mod:
+                            dest.add(deep)            # 花括号里的**模块**项：各归各的模块
+                # 根级裸名但不在 crate 作用域里 ⇒ 外部 crate，丢弃
+        for im in INLINE_PATH_RE.finditer(line):
+            if _in_string(line, im.start()):
+                continue
+            cand = _mod_candidate(tree, re.sub(r"\s+", "", im.group(1)))
+            if cand:
+                dest.add(cand)
     return prod, tests
 
 
@@ -457,10 +570,23 @@ def seg_owner(wc, rows, source, seg, shared=None):
     """`crate::<seg>` / 根级裸名 `<seg>::` 解析到哪个模块号（模块树 → 宿主文件 → 登记行）。
 
     三级落点（都写死，不做"看起来像"）：
-      ① 模块树里的 `<seg>`（`src/<seg>.rs` / `src/<dir>/mod.rs` 的 `pub mod` 声明）；
+      ① 模块树里的 `<seg>`（`src/<seg>.rs` / `src/<dir>/mod.rs` 的 `pub mod` 声明；
+         多段路径 `project::language` 也走这一级——`seg` 由 `_mod_candidate` 取最长真模块前缀）；
       ② 根级再导出的承载文件（`src/lib.rs` 里 `use crate::<seg>::…;`）；
       ③ 同名文件 `src/<seg>.rs`。
-    宿主文件 → 模块号：先查登记表「源码路径」列，再查 `§2.1` 声明的**共同模块**归属。
+    宿主文件 → 模块号：查登记表「源码路径」列；落在 `§2.1` 声明的**共同模块**上则**跳过**（见下）。
+
+    返回 `(模块号, 告警, 跳过原因)`（后两者互斥、都可能为空串）：
+      · `模块号 is None` ＋ `告警` 非空 ⇔ **解析不到 / 没登记**（调用方按"依赖抽取告警"报，不静默）；
+      · `模块号 is None` ＋ `跳过原因` 非空 ⇔ 解析到了**共同模块**（`§2.1` 显式登记"不占号"）——
+        按口径**不作依赖边目标**（调用方同样逐条报出来，不静默）。
+
+    **为什么共同模块不作边目标**（口径由执行者裁定，机核工区照做）：
+    A-4 判的是**模块号之间**的单向 DAG；一个显式声明"不占号"的文件按定义就落在这个映射之外。
+    把它当边目标时**归属是任意的**——`src/project/mod.rs` 横跨 M06/M07，工具挑 M06，
+    于是 `M07` 里一句 `use crate::project::{…}` 被记成"依赖 M06"（**凭空一条边**）；
+    `src/event.rs`（属 M01 的机制面）同理把 `src/gate.rs:581` 记成"依赖 M01"。
+    这两条假边正是 2026-09-28 那两条新 offender 的**唯一**来源。
 
     **不做"模块内部引用"的过滤**：那属于调用方（`build_edges` 按导入文件的归属模块过滤）。
     在这里过滤会让"从测试文件里解析兄弟模块"（没有导入方模块号可比）一律返回 None——
@@ -472,58 +598,137 @@ def seg_owner(wc, rows, source, seg, shared=None):
         if modpath == seg:
             path = f
             break
-    if path is None:
+    if path is None and "::" not in seg:
         path = source.get("root_items", {}).get(seg)   # ② 根级条目（`pub struct World`）
-    if path is None:
+    if path is None and "::" not in seg:
         path = source.get("root_exports", {}).get(seg)
-    if path is None:
+    if path is None and "::" not in seg:
         cand = os.path.join(wc, SRC_REL, seg + ".rs")
         if os.path.isfile(cand):
             path = cand
     if path is None:
-        return None, "解析不到 `%s` 的宿主文件（模块树里没有它）" % seg
+        return None, "解析不到 `%s` 的宿主文件（模块树里没有它）" % seg, ""
     mid, n = owning_module(wc, rows, path)
     if mid is None:
-        # ③ `WC-MODREG-001` §2.1 明示的共同模块：按声明的归属算（不是"没登记"）
-        mid = shared.get(rel(wc, path))
-        if mid is None:
-            return None, "`%s` 的宿主文件 %s 没有被任何模块号登记" % (seg, rel(wc, path))
-        return mid, ""
+        # `WC-MODREG-001` §2.1 明示的共同模块（"不占号"）：**不作边目标**（理由见 docstring）
+        if rel(wc, path) in shared:
+            return None, "", ("共同模块 `%s`（§2.1 登记「不占号」，名义归属 %s）不作边目标"
+                              % (rel(wc, path), shared[rel(wc, path)]))
+        return None, "`%s` 的宿主文件 %s 没有被任何模块号登记" % (seg, rel(wc, path)), ""
     if n > 1:
-        return mid, "`%s` 的宿主文件 %s 同时命中多个登记行" % (seg, rel(wc, path))
-    return mid, ""
+        return mid, "`%s` 的宿主文件 %s 同时命中多个登记行" % (seg, rel(wc, path)), ""
+    return mid, "", ""
 
 
 def build_edges(wc, rows, source, shared=None):
-    """真实 import 边：{模块号: 出边集}（生产面），并返回测试面边与解析告警。"""
+    """真实 import 边：{模块号: 出边集}（生产面）；返回 (生产边, 测试边, 解析告警, 按口径跳过的边)。"""
     prod_edges = {mid: set() for mid in rows}
     test_edges = {mid: set() for mid in rows}
-    warn = []
+    warn, skipped = [], []
     for r, d in sorted(source["info"].items()):
         owner, n = owning_module(wc, rows, os.path.join(wc, r))
         if owner is None:
-            continue                                  # 未登记文件：A-2 的覆盖面单独报
+            continue                                  # 未登记文件（含共同模块自身）：A-2 的覆盖面单独报
         for bucket, segs in (("prod", d["prod_segs"]), ("test", d["test_segs"])):
             for seg in sorted(segs):
-                tgt, why = seg_owner(wc, rows, source, seg, shared)
+                tgt, why, skip = seg_owner(wc, rows, source, seg, shared)
                 if tgt is None:
                     if why:
                         warn.append("%s: `%s`：%s" % (r, seg, why))
+                    elif skip:
+                        # **不静默**：跳过要能数得出来、指得出是哪一行（与"依赖抽取告警"同一风格）
+                        skipped.append("%s: `%s`：%s" % (r, seg, skip))
                     continue
                 if tgt == owner:
                     continue                          # 模块**内部**引用，不构成跨模块边
                 (prod_edges if bucket == "prod" else test_edges)[owner].add(tgt)
-    return prod_edges, test_edges, warn
+    return prod_edges, test_edges, warn, sorted(set(skipped))
 
 
 # ────────────────────────── 环检测 ──────────────────────────
-def find_cycles(nodes, edges, label_edges=None):
-    """Kahn 拓扑排序；排不完 ⇒ 有环。
+def _sccs(nodes, adj):
+    """Tarjan 强连通分量（**迭代版**，不吃递归深度），返回各分量（分量内节点升序、分量间按首节点升序）。
 
-    返回 (是否有环, 环路径或节点集合, 是否为**真环路径**)。
+    为什么要 SCC：Kahn 排不完时剩下的节点＝**环上的节点 ∪ 环的下游节点**。
+    直接把这堆节点当"环上模块"报，是**多报**——实测本仓真环只有 `M04 ↔ M09`，
+    而剩余节点是 9 个（`M01,M02,M03,M04,M05,M06,M08,M09,M10`），读者会读成"这 9 个互相成环"。
+    """
+    nodeset = set(nodes)
+    index, low, on_stack, stack, out = {}, {}, set(), [], []
+    counter = 0
+    for root in nodes:
+        if root in index:
+            continue
+        index[root] = low[root] = counter
+        counter += 1
+        stack.append(root)
+        on_stack.add(root)
+        work = [(root, iter(sorted(v for v in adj.get(root, ()) if v in nodeset)))]
+        while work:
+            v, it = work[-1]
+            advanced = False
+            for w in it:
+                if w not in index:
+                    index[w] = low[w] = counter
+                    counter += 1
+                    stack.append(w)
+                    on_stack.add(w)
+                    work.append((w, iter(sorted(x for x in adj.get(w, ()) if x in nodeset))))
+                    advanced = True
+                    break
+                if w in on_stack:
+                    low[v] = min(low[v], index[w])
+            if advanced:
+                continue
+            work.pop()
+            if work:
+                u = work[-1][0]
+                low[u] = min(low[u], low[v])
+            if low[v] == index[v]:
+                comp = []
+                while True:
+                    w = stack.pop()
+                    on_stack.discard(w)
+                    comp.append(w)
+                    if w == v:
+                        break
+                out.append(sorted(comp))
+    return sorted(out)
+
+
+def _walk_cycle(comp, adj):
+    """在一个强连通分量里走出一条环（自 `comp[0]` 起，沿字典序首个后继）。
+
+    为什么走得出来：分量大小 ≥2（或自环）时，**分量内每个节点在分量内的出度 ≥1**，
+    于是"沿后继一直走"必然回到走过的点；回到哪一点，就从哪一点截出环。
+    走不到后继时返回 `None`（理论上不可达）——守住"没验过的不许叫环"。
+    """
+    inset = set(comp)
+    path, pos, cur = [], {}, comp[0]
+    while cur not in pos:
+        pos[cur] = len(path)
+        path.append(cur)
+        nxt = [v for v in sorted(adj.get(cur, ())) if v in inset]
+        if not nxt:
+            return None
+        cur = nxt[0]
+    return path[pos[cur]:] + [cur]
+
+
+def find_cycles(nodes, edges, label_edges=None):
+    """Kahn 拓扑排序；排不完 ⇒ 有环。返回 `(是否有环, [环路径…]（或剩余节点集合）, 是否每条都逐段验过)`。
+
     ★ 2026-09-28 修（评审席·乙 发现）：旧实现在"走不下去"时 `break`，
     于是 `path=[cur]` 会退化成 **自环**（打印成 `M01 → M01`，而图上根本没有这条边）。
-    现在**只在路径首尾确实相接时**才把它当"环路径"报出去；否则退化为"环上节点集合"并标注。
+    此后改为"只在路径首尾确实相接时才算环路径，否则退化为环上节点集合"。
+
+    ★ 本轮修（机核工区）：上面那条退化**本身仍是错的**，两处：
+      ① **只报一条**环：图里同时有多条环时，读者只看到碰巧先走到的那条
+         （实测：工作区里 `M02→M05→M10→M02` 与 `M04→M09→M04` 两条真环同时存在，
+         旧输出只打印前者 ⇒「源码 import 环」这句话**漏了 `M04 ↔ M09`**）；
+      ② **退化时报的"节点集合"含环外节点**（环的下游全在内），读者会读成"这些模块互相成环"。
+    现在改为：**先求强连通分量，每个真环各走出一条环路径，逐段验证后全部打印**；
+    一条都验不出来时才退回"剩余节点集合"并标注"路径未定"。
     """
     nodes = sorted(nodes)
     indeg = {n: 0 for n in nodes}
@@ -545,22 +750,16 @@ def find_cycles(nodes, edges, label_edges=None):
     if seen == len(nodes):
         return False, [], False
     left = [n for n in nodes if indeg[n] > 0]
-    # 从剩余节点里走出一条**真环**：走不动就换起点，全都走不动才退化
-    for start in left:
-        path, cur, guard = [], start, 0
-        while cur not in path and guard <= len(nodes) + 1:
-            path.append(cur)
-            nxt = [v for v in sorted(adj[cur]) if indeg[v] > 0]
-            if not nxt:
-                break
-            cur = nxt[0]
-            guard += 1
-        if cur in path:
-            cyc = path[path.index(cur):] + [cur]
-            # ★ 验一遍：每段都真有边、且收尾相接——**没验过的不许叫"环"**
-            ok = len(cyc) >= 2 and all(cyc[i + 1] in adj.get(cyc[i], ()) for i in range(len(cyc) - 1))
-            if ok:
-                return True, cyc, True
+    cycles = []
+    for comp in _sccs(left, adj):
+        if len(comp) == 1 and comp[0] not in adj.get(comp[0], ()):
+            continue                                  # 单点且无自环 ⇒ 只是环的下游，不在环上
+        cyc = _walk_cycle(comp, adj)
+        # ★ 验一遍：每段都真有边、且收尾相接——**没验过的不许叫"环"**
+        if cyc and len(cyc) >= 2 and all(cyc[i + 1] in adj.get(cyc[i], ()) for i in range(len(cyc) - 1)):
+            cycles.append(cyc)
+    if cycles:
+        return True, cycles, True
     return True, left, False          # 找不到可打印的真环 ⇒ 只报节点集合，并标注"路径未定"
 
 
@@ -784,7 +983,11 @@ def j_a1_intent(wc, rows, reg_path, reg_text):
 
 
 def j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres):
-    """② A-4 依赖单向 DAG，且 `deps == import`（逐模块逐边相等）。"""
+    """② A-4 依赖单向 DAG，且 `deps == import`（逐模块逐边相等）。
+
+    「按口径跳过的边」（共同模块不作边目标）**不进这里**：它是口径、不是缺陷——
+    算成 offender 会让"红"失去意义。它由 `check()` 收进报告、正跑单独打印一段（不静默）。
+    """
     bad = []
     if not rows:
         return ["%s —— §2 模块登记表取不到行，「依赖模块」列**一条边都取不到**："
@@ -814,14 +1017,15 @@ def j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres):
     # ★ 2026-09-28 修（评审席·乙 发现）：
     #   旧实现只报并集环，读者极易把它读成"源码循环依赖"；且它**漏报**真实源码环（`M04 ↔ M09`）。
     #   现在两条线各报一次，并给"来自未校验声明边"的边打标——那种环**改代码也消不掉**。
+    # ★ 本轮修：两条线都改成**列出全部真环**（强连通分量分解），不再"只报碰巧先走到的那一条"。
     nodes = sorted(rows)
     real_only = {mid: set(prod_edges.get(mid, set())) for mid in nodes}
-    cyc_real, path_real, real_is_cycle = find_cycles(nodes, real_only)
+    cyc_real, cycles_real, real_is_cycle = find_cycles(nodes, real_only)
     union = {mid: set(rows[mid]["deps"]) for mid in nodes}
     for mid in nodes:
         union.setdefault(mid, set())
         union[mid] |= prod_edges.get(mid, set())
-    cyc, path, is_cycle = find_cycles(nodes, union)
+    cyc, cycles_union, is_cycle = find_cycles(nodes, union)
 
     def _edge_src(u, v):
         """这条边从哪来：真实 import ／ 声明 ／ 两者都有。"""
@@ -829,28 +1033,38 @@ def j_a4_dag_deps(wc, rows, reg_path, prod_edges, test_edges, unres):
         d = v in rows[u]["deps"]
         return "真实" if (r and not d) else ("声明" if (d and not r) else ("真实＋声明" if (r and d) else "?"))
 
-    def _fmt(path):
-        if not path:
+    def _fmt(items, verified):
+        """把环列表印成人能核的样子：`M04-[真实]-> M09 → M09-[真实]-> M04`（逐段标来源）。
+
+        `verified=False` 时 `items` 是"剩余节点集合"（不是环路径）⇒ 必须**写明它不是环路径**，
+        否则读者会把环的下游节点也当成环上模块。
+        """
+        if not items:
             return "—"
-        return " → ".join("%s-[%s]-> %s" % (path[i], _edge_src(path[i], path[i + 1]), path[i + 1])
-                          for i in range(len(path) - 1)) if len(path) > 1 else "、".join(path)
+        if not verified:
+            return ("节点集合 " + "、".join(items)
+                    + "（⚠ 工具未能打印出逐段可验的环路径：这些是 Kahn 剩余节点，**含环的下游**，不等于环上模块）")
+        return "；".join(
+            " → ".join("%s-[%s]-> %s" % (c[i], _edge_src(c[i], c[i + 1]), c[i + 1])
+                       for i in range(len(c) - 1))
+            for c in items)
 
     _cyc_note = []
     if cyc_real:
         _cyc_note.append("**源码 import 环**（只看真实 import 边，工具独立判定）："
-                         + ("　".join(path_real) if real_is_cycle else "节点集合 " + "、".join(path_real)))
-    _cyc_note.append("**声明边 ∪ 真实边 的环**：" + _fmt(path)
-                     + ("" if is_cycle else "　（⚠ 工具未能打印出一条逐段可验的真环路径，只报节点集合："
-                        + "、".join(path) + "）"))
-    # 兼容旧调用：下面仍用 `cyc` 与 `path`
+                         + _fmt(cycles_real, real_is_cycle))
+    _cyc_note.append("**声明边 ∪ 真实边 的环**：" + _fmt(cycles_union, is_cycle))
 
     if cyc:
         # 环的两种口径都写进 offender（评审席·乙 的建议④）
         path_desc = " ／ ".join(_cyc_note)
-        bad.append("依赖图**有环**（拓扑排序失败，Kahn 剩余节点）：%s —— "
+        bad.append("依赖图**有环**（Kahn 拓扑排序排不完 ⇒ 至少一个强连通分量在环上）：%s —— "
                    "`WC-ATOM-001` §二 A-4 要求单向 DAG" % path_desc)
     for w in unres:
         bad.append("依赖抽取告警（不静默跳过）：%s" % w)
+    # 按口径跳过的边（共同模块不作边目标）：**不静默**，但**不算 offender**——
+    # 它是口径本身（`WC-MODREG-001` §2.1），不是缺陷；把它算成红会让"红"失去意义。
+    # 这一项随报告一起出（正跑会单独打印一段，JSON 里有 `import_edges_skipped_shared`）。
     return bad
 
 
@@ -922,7 +1136,7 @@ def check(wc, intent_column="职责", base=None):
     spec_idx = index_specs(wc, base)
     real_tokens = all_test_tokens(wc)
     anchors = test_anchor(wc, rows, source, spec_idx, real_tokens)
-    prod_edges, test_edges, unres = build_edges(wc, rows, source, shared)
+    prod_edges, test_edges, unres, skipped = build_edges(wc, rows, source, shared)
 
     judgments = [
         ("① A-1 单意图原子性（每模块有且只有一句 intent，≤%d 字，无并列两事）" % INTENT_MAX_CHARS,
@@ -970,6 +1184,8 @@ def check(wc, intent_column="职责", base=None):
         "judgments": res,
         "modules": modules,
         "files_unclaimed": sorted(unclaimed),
+        # 按口径跳过的边（共同模块不作边目标）：**逐条列出**，不静默、也不算 offender。
+        "import_edges_skipped_shared": sorted(skipped),
         "test_only_modules": sorted(source["test_only"]),
         "planned_modules": sorted(m for m, r in rows.items() if not any(
             os.path.exists(os.path.join(wc, p)) for p in r["src_all"])),
@@ -999,7 +1215,14 @@ SANDBOX_MODREG = """# WC-MODREG-001 模块清单与模块号登记表
 | **M01** | 本体 | 词表身份的唯一出处 | `src/ontology.rs` | **IF-005** | 无 |
 | **M02** | 门禁 | 现在能不能做的裁决 | `src/gate.rs`、`src/guard.rs` | **IF-002** | `M01` |
 | **M03** | 读模型 | 状态由账本折叠而来 | `src/readmodel.rs` | **IF-009** | `M02` |
-| **M04** | 运行时 | 运行时的组装入口 | `src/lib.rs`、`src/main.rs` | **IF-008** | `M02`、`M03` |
+| **M04** | 运行时 | 运行时的组装入口 | `src/lib.rs`、`src/main.rs` | **IF-008** | `M02`、`M03`、`M05` |
+| **M05** | 投影 | 出口只有一种说法 | `src/project/visual.rs` | **IF-004** | `M01` |
+
+### §2.1 共同模块、未登记文件与模块号边界
+
+| 共同模块 | 占号 | 归属 | 依据 |
+|---|---|---|---|
+| `src/project/mod.rs` | **不占号** | 属 `M01` 的机制面（沙盒用；名义归属故意挑一个 M04 **没有** import 的号） | 用来验"共同模块不作边目标"这条口径 |
 
 ## §3 模块编号规则
 
@@ -1009,12 +1232,41 @@ SANDBOX_MODREG = """# WC-MODREG-001 模块清单与模块号登记表
 SANDBOX_SRC = {
     # ⚠️ `lib.rs` 必须写成**根级裸名 use**（`use gate::{…};`）——这是 `src/lib.rs:23-26` 的
     # 真实形态，也是抽取器最容易漏的一种；沙盒里不写它，就等于没在验这条。
-    "src/lib.rs": ("pub mod gate;\npub mod guard;\npub mod ontology;\npub mod readmodel;\n"
+    "src/lib.rs": ("pub mod gate;\npub mod guard;\npub mod ontology;\npub mod project;\n"
+                   "pub mod readmodel;\n"
                    "use gate::{Decision, Policy};\nuse readmodel::State;\n"),
-    "src/main.rs": "fn main() {}\n",
+    # ⚠️ `main.rs` 里 `use world_core::project::{self, visual};` 是 **⑦ 的判据面**：
+    #    · 首段 `project` 指向**共同模块** `src/project/mod.rs`（§2.1 不占号）⇒ 按口径**不产边**
+    #      （正控附条④：判据② 不许红，且"M04 的真实集里没有 M01"——若共同模块被当边目标，
+    #      它按名义归属记成 M01，而 M04 没声明 M01 ⇒ 立刻红）；
+    #    · 花括号里的 `visual` 指向**占号**模块 `M05` ⇒ **必须产边** `M04 → M05`
+    #      （反例⑫：把 `visual` 从花括号里删掉 ⇒ `M04` 必报"声明了但代码里没有（M05）"）。
+    "src/main.rs": ("fn main() {}\n"
+                    "\n"
+                    "pub fn cli() {\n"
+                    "    use world_core::project::{self, visual};\n"
+                    "    let _ = project::shared_helper();\n"
+                    "    let _ = visual::render();\n"
+                    "}\n"),
     "src/ontology.rs": "use std::collections::BTreeMap;\n",
     "src/guard.rs": "use std::path::Path;\n",
-    "src/gate.rs": "use crate::guard;\nuse crate::ontology;\n",
+    # 共同模块本体（§2.1「不占号」）：它自己**不占任何模块号**，它的 `pub mod visual;` 让
+    # `project::visual` 出现在模块树里（⑦ 要解析的正是这一层）。
+    "src/project/mod.rs": ("pub mod visual;\n"
+                           "\n"
+                           "pub fn shared_helper() -> bool { true }\n"),
+    "src/project/visual.rs": "use crate::ontology::Ontology;\n",
+    # ⚠️ `gate.rs` 里指向 `ontology`(M01) 的**唯一**证据必须是**行内全限定路径**——
+    #    这个文件里没有、也不许有 `use crate::ontology;`。它就是 ⑥ 的判据面：
+    #    · 正控附条②：`M02 → M01` 必须**真的出现在生产边集里**，且判据② 不许红；
+    #    · 反例⑨：把那一行删掉，`M02` 声明的 `M01` 立刻变"声明了但代码里没有"（必红）。
+    #    只验"不红"是不够的——两边都空也会不红，所以正控附条② 连"边在不在"一起钉。
+    "src/gate.rs": ("use crate::guard;\n"                       # 同模块（M02 内部 ⇒ 不产边）
+                    "\n"
+                    "pub fn check(p: &std::path::Path) -> bool {\n"
+                    "    let _ = crate::ontology::Ontology::load(p);\n"
+                    "    true\n"
+                    "}\n"),
     "src/readmodel.rs": "use crate::gate::Decision;\n",
 }
 
@@ -1043,6 +1295,11 @@ SANDBOX_TESTS = {
         "fn c03_readmodel_folds() {\n"
         "    let _s: Option<State> = None;\n"
         "    let _ = world_core::readmodel::fold;\n"
+        "}\n"
+        "\n"
+        "#[test]\n"
+        "fn c04_visual_renders() {\n"
+        "    let _ = world_core::project::visual::render();\n"
         "}\n"
         "\n"
         "fn fixture_helper() {}\n"
@@ -1086,7 +1343,7 @@ def _build_sandbox(root, wc_name="world-core"):
         os.path.join(wc, IC_BOOK_REL),
         SANDBOX_BOOK % {"sections": "\n".join(
             SANDBOX_BOOK_SECTION % {"k": k, "mid": mid}
-            for k, mid in enumerate(("M01", "M02", "M03", "M04"), start=1))},
+            for k, mid in enumerate(("M01", "M02", "M03", "M04", "M05"), start=1))},
     )
     _write(
         os.path.join(root, SPECS_REL, "cap-a", "spec.md"),
@@ -1141,6 +1398,19 @@ def _reg_edit(path, old, new, tag, failures):
 
 def self_test():
     """正控（全绿）＋ 每条判据各造反例（必红）＋ 恢复后回绿。"""
+    # 用例计数：**由打印行现算**，不写死——本仓实测过"总结行写『反例 10』、实际打了 12 条"。
+    # 只按**行首**分类（`正控附条…` 必须先于 `正控…` 试，故按 key 长度降序）。
+    tally = {"正控": 0, "正控附条": 0, "反例": 0, "恢复后复跑": 0}
+    real_print = builtins.print
+
+    def print(*args):                       # noqa: A001 —— 只在本函数内遮蔽，用来按类计数
+        text = " ".join(str(a) for a in args)
+        for key in sorted(tally, key=len, reverse=True):
+            if text.strip().startswith(key):
+                tally[key] += 1
+                break
+        real_print(*args)
+
     print("== module_graph.py --self-test ==")
     failures = []
     with tempfile.TemporaryDirectory(prefix="modgraph-") as tmp:
@@ -1158,17 +1428,31 @@ def self_test():
                 for o in r["offenders"]:
                     print("       · %s" % o)
 
-        # ── 正控附条：**测试面不得漏进生产面**（否则 A-4 的 deps==import 会被测试 use 污染）──
-        # 沙盒：`src/**` 里除 `gate.rs`（`use crate::ontology;`）外**没有**任何文件 import M01；
+        # ── 正控附条①：**测试面不得漏进生产面**（否则 A-4 的 deps==import 会被测试 use 污染）──
+        # 沙盒：`src/**` 里指向 M01 的**生产**证据只有 `gate.rs` 那**一行行内路径**
+        # （`crate::ontology::Ontology::load(p)`，见 SANDBOX_SRC 注）；
         # 而 `tests/cli.rs` 里有 `use world_core::ontology::…`（M01）＋ `use world_core::{event, World};`。
         # 故 M04 的**生产** import 面必须**不含 M01**（含了就是把测试面算进来了），
         # 且它带裸 `use world_core::{…}`（非子模块名）也必须**不产边、不报错**。
         m04 = [m for m in base["modules"] if m["id"] == "M04"]
         leak = [m["id"] for m in m04 if "M01" in m["deps_import"]]
-        print("  正控附条（`tests/*.rs` 与 `#[cfg(test)]` 的 use 不得算进生产面）：%s"
+        print("  正控附条①（`tests/*.rs` 与 `#[cfg(test)]` 的 use 不得算进生产面）：%s"
               % ("OK" if not leak else "*失败 生产面含 M01：%s" % leak))
         if leak:
             failures.append("测试面漏进生产面：%s" % leak)
+
+        # ── 正控附条②：**行内全限定路径**必须产边（⑥ 的判据面）───────────────────
+        # 沙盒里 `M02 → M01` **只有** `src/gate.rs` 那句 `crate::ontology::Ontology::load(p)` 作证
+        # （该文件里没有 `use crate::ontology;`）。两件事一起钉，缺一不可：
+        #   ① 它必须真的**落在生产边集里**——只验"判据②不红"是假绿：两边都取空也会不红；
+        #   ② 判据② 在正控下**不许红**（声明的 `M01` 已被这行代码印证）。
+        m02 = [m for m in base["modules"] if m["id"] == "M02"][0]
+        a4_ok = [r["ok"] for r in base["judgments"] if r["key"] == "a4_dag_deps"][0]
+        inline_edge = "M01" in m02["deps_import"]
+        print("  正控附条②（行内 `crate::ontology::…` 须产边：M02→M01 已在生产面=%s 且判据②不红=%s）：%s"
+              % (inline_edge, a4_ok, "OK" if (inline_edge and a4_ok) else "*失败 ⑥ 的判据面是装饰"))
+        if not (inline_edge and a4_ok):
+            failures.append("行内全限定路径未产边（M02 → M01 缺失）或判据② 误红")
 
         def run():
             return check(wc, base=root)
@@ -1178,6 +1462,68 @@ def self_test():
                 if r["key"] == key:
                     return (not r["ok"]), r["offenders"]
             return False, []
+
+        # ── 正控附条③：**注释与字符串里的 `crate::…` 不算依赖** ─────────────────
+        # 往 M02 的另一个文件（`src/guard.rs`）塞一条文档链接与一条字符串常量，都指向 `M03`：
+        # 抽了它们，`M02` 的 import 集就会多出 `M03` ⇒ 判据② 报"代码里有但没声明"。
+        # **它不许红**：文档链接是"说"、字符串是数据，都不是依赖。
+        guard = os.path.join(wc, "src", "guard.rs")
+        _write(guard, "/// 见 [`crate::readmodel::State`]（文档链接，不是依赖）。\n"
+                      "pub fn note() -> &'static str { \"crate::readmodel::State\" }\n")
+        rep_c = run()
+        red_c, off_c = is_red(rep_c, "a4_dag_deps")
+        m02c = [m for m in rep_c["modules"] if m["id"] == "M02"][0]
+        leak_c = red_c or ("M03" in m02c["deps_import"])
+        print("  正控附条③（注释与字符串里的 `crate::readmodel::…` 不产边 ⇒ 判据② 不应红）：%s"
+              % ("OK" if not leak_c else "*失败 注释或字符串被当成了依赖"))
+        if leak_c:
+            failures.append("注释行或字符串字面量里的路径被误算成依赖")
+        _write(guard, SANDBOX_SRC["src/guard.rs"])
+
+        # ── 正控附条④：**共同模块（§2.1「不占号」）不作边目标**（本轮执行者裁定的口径）──
+        # 沙盒：`src/main.rs` 里 `use world_core::project::{self, visual};`
+        #   · 首段 `project` → `src/project/mod.rs`，§2.1 登记"不占号、属 M01 的机制面"。
+        #     若把它当边目标，`M04` 的真实集里就会出现 **M01**（而 `M04` 没声明 M01）⇒ 立刻红。
+        #   · 花括号里的 `visual` → `src/project/visual.rs`＝**占号 M05** ⇒ 必须产边 `M04 → M05`。
+        # **三件一起钉**：判据②不红 ＋ 真实集里没有 M01 ＋ 跳过的那条**要在报告里数得出来**（不静默）。
+        m04c = [m for m in base["modules"] if m["id"] == "M04"][0]
+        skip_txt = "\n".join(base["import_edges_skipped_shared"])
+        no_m01 = "M01" not in m04c["deps_import"]
+        has_m05 = "M05" in m04c["deps_import"]
+        listed = "project/mod.rs" in skip_txt
+        shared_ok = a4_ok and no_m01 and has_m05 and listed
+        print("  正控附条④（共同模块不作边目标：判据②不红=%s／M04 真实集无 M01=%s／有占号 M05=%s"
+              "／跳过已列出=%s）：%s"
+              % (a4_ok, no_m01, has_m05, listed, "OK" if shared_ok else "*失败 口径没生效"))
+        if not shared_ok:
+            failures.append("共同模块被当成了边目标，或跳过没被列出来（静默跳过）")
+
+        # ── 反例⑨（⑥ 的"改坏⇒红"）：把那唯一一行**行内**证据删掉 ────────────────
+        # 期望：`M02` 声明的 `M01` 再也拿不到代码印证 ⇒ 判据② 报"声明了但代码里没有（M01）"。
+        # 这同时是正控附条② 的反向验证：证明"不红"不是因为判据根本不看 M02。
+        gate = os.path.join(wc, "src", "gate.rs")
+        _write(gate, "use crate::guard;\n\npub fn check(_p: &std::path::Path) -> bool {\n    true\n}\n")
+        red, off = is_red(run(), "a4_dag_deps")
+        hit = any("M02" in x and "声明了但代码里没有" in x and "M01" in x for x in off)
+        print("  反例⑨（删掉 gate.rs 里唯一的行内 `crate::ontology::…` ⇒ 判据② 应红）：%s"
+              % ("已红 OK" if (red and hit) else "*没红"))
+        if not (red and hit):
+            failures.append("反例⑨未变红：行内证据删掉后声明仍被当成已印证（⑥ 的判据面是装饰）")
+        _write(gate, SANDBOX_SRC["src/gate.rs"])
+
+        # ── 反例⑫（⑦ 的"改坏⇒红"）：把花括号里的 `visual` 删掉 ──────────────────
+        # 期望：`M04` 声明的 `M05` 失去唯一证据（`project` 那半是共同模块、按口径本就不产边）
+        # ⇒ 判据② 报"M04：声明了但代码里没有（M05）"。这正是本仓 `src/main.rs:411` 的形态。
+        mainrs = os.path.join(wc, "src", "main.rs")
+        _write(mainrs, SANDBOX_SRC["src/main.rs"].replace(
+            "use world_core::project::{self, visual};", "use world_core::project::{self};", 1))
+        red, off = is_red(run(), "a4_dag_deps")
+        hit = any("M04" in x and "声明了但代码里没有" in x and "M05" in x for x in off)
+        print("  反例⑫（删掉 `use world_core::project::{…}` 里的 `visual` ⇒ 判据② 应红）：%s"
+              % ("已红 OK" if (red and hit) else "*没红"))
+        if not (red and hit):
+            failures.append("反例⑫未变红：花括号里的模块项被漏抽（⑦ 的判据面是装饰）")
+        _write(mainrs, SANDBOX_SRC["src/main.rs"])
 
         # ── 反例①：A-1 把 M03 的 intent 改成占位符 ──────────────────────
         if _reg_edit(reg, "| 状态由账本折叠而来 |", "| 待补 |", "反例①", failures):
@@ -1243,17 +1589,18 @@ def self_test():
         _write(book, keepb)
         _write(spec, keeps)
 
-        # ── 反例④b：A-2 一整行"只有身份、没有落点"（登记表新增 M05，实现/测试/契约都缺）──
+        # ── 反例④b：A-2 一整行"只有身份、没有落点"（登记表新增 M06，实现/测试/契约都缺）──
         # 这一条正对本项目的今天：`WC-MODREG-001` 登记了 `M10` 而 `src/carrier/` 曾不存在。
+        # （号取 M06 而不是 M05：沙盒里 M05 已占给投影模块 `src/project/visual.rs`。）
         _write(reg, SANDBOX_MODREG.replace(
             "\n## §3 模块编号规则",
-            "| **M05** | 通道 | 一个套接字一个身份 | `src/channel.rs` | **IF-006** | 无 |\n"
+            "| **M06** | 通道 | 一个套接字一个身份 | `src/channel.rs` | **IF-006** | 无 |\n"
             "\n## §3 模块编号规则", 1))
         red, off = is_red(run(), "a2_four_in_one")
-        hit_impl = any("M05" in x and "实现缺" in x for x in off)
-        hit_test = any("M05" in x and "测试缺" in x for x in off)
-        hit_cont = any("M05" in x and "契约缺" in x for x in off)
-        print("  反例④b（登记表新增 M05 而三件都缺 => 判据③ 应红）：%s（实现缺=%s 测试缺=%s 契约缺=%s）"
+        hit_impl = any("M06" in x and "实现缺" in x for x in off)
+        hit_test = any("M06" in x and "测试缺" in x for x in off)
+        hit_cont = any("M06" in x and "契约缺" in x for x in off)
+        print("  反例④b（登记表新增 M06 而三件都缺 => 判据③ 应红）：%s（实现缺=%s 测试缺=%s 契约缺=%s）"
               % ("已红 OK" if (red and hit_impl and hit_test and hit_cont) else "*没红",
                  hit_impl, hit_test, hit_cont))
         if not (red and hit_impl and hit_test and hit_cont):
@@ -1325,6 +1672,42 @@ def self_test():
         _write(onto, keepo)
         _write(os.path.join(wc, "src", "readmodel.rs"), SANDBOX_SRC["src/readmodel.rs"])
 
+        # ── 反例⑩：环路径**必须打印得出来**，且**不得把环外节点算进环** ──────────
+        # 这是本仓工作区真实形态的缩小版：真环只有 `M03 ↔ M04`，但两个环上节点的
+        # **字典序首位后继**都通向死路 `M01`（`M03→M02→M01`、`M04→M02→M01`）。
+        # 旧实现沿首位后继走，从任何起点都走不出环 ⇒ 退化成"节点集合 M01、M02、M03、M04"
+        # —— 把**不在环上**的 M01/M02 也报成环上模块（实测本仓真环只有 M04↔M09，它报 9 个节点）。
+        rdm = os.path.join(wc, "src", "readmodel.rs")
+        keepr = read_text(rdm)
+        _write(os.path.join(wc, "src", "lib.rs"),
+               SANDBOX_SRC["src/lib.rs"].replace("pub mod readmodel;",
+                                                 "pub mod readmodel;\npub struct World;", 1))
+        _write(rdm, "use crate::gate::Decision;\nuse crate::World;\n")     # M03→M02、M03→M04
+        rep10 = run()
+        red10, off10 = is_red(rep10, "a4_dag_deps")
+        cyc_txt = "\n".join(x for x in off10 if "有环" in x)
+        ok10 = (red10 and "M03" in cyc_txt and "M04" in cyc_txt and "→" in cyc_txt
+                and "节点集合" not in cyc_txt and "M01" not in cyc_txt and "M02" not in cyc_txt)
+        print("  反例⑩（首位后继是死路时仍须打印真环 M03↔M04，且死路 M01/M02 不得被算成环上模块）：%s"
+              % ("已红 OK" if ok10 else "*失败 逐字=%r" % cyc_txt))
+        if not ok10:
+            failures.append("环路径搜索退化：只报节点集合（含环外节点）或打印不出环")
+        _write(rdm, keepr)
+        _write(os.path.join(wc, "src", "lib.rs"), SANDBOX_SRC["src/lib.rs"])
+
+        # ── 反例⑪：**两条互不相连的真环必须都打印**（旧实现只报碰巧先走到的那一条）──
+        # 实测本仓工作区就是这种图：`M02→M05→M10→M02` 与 `M04→M09→M04` 同时存在 ⇒
+        # 只报一条时，「源码 import 环」这句话就是**漏报**。这里用字面图直接钉住 `find_cycles`。
+        two = {"M01": {"M02"}, "M02": {"M01"}, "M03": {"M01"},       # M03 是环的下游（死路诱饵）
+               "M04": {"M05"}, "M05": {"M04"}}
+        has2, cycs2, ok2 = find_cycles(sorted(two), two)
+        got2 = sorted(tuple(sorted(set(c))) for c in cycs2) if ok2 else []
+        want2 = [("M01", "M02"), ("M04", "M05")]
+        print("  反例⑪（两条互不相连的真环 ⇒ 两条都要打印，且不含死路 M03）：%s"
+              % ("OK" if (has2 and ok2 and got2 == want2) else "*失败 实得 %s" % (got2,)))
+        if not (has2 and ok2 and got2 == want2):
+            failures.append("多条环时未全部打印（或把环外节点算进了环）")
+
         # ── 反例⑦：A-2 的「测试」件——删掉唯一指到 M03 的用例 ─────────────
         # 这里同时验两件事（都是"少了那个用例"的直接后果）：
         #   ① M03 的**测试缺**（函数体里再没有 `readmodel`）；
@@ -1367,7 +1750,8 @@ def self_test():
         print("  => 按本项目口径：**这条守卫是装饰，拒绝合入**。")
         return 1
     print("  => 自证通过：**三条判据**逐条在反例下变红、在正控下全绿"
-          "（正控 1 ＋ 正控附条 1 ＋ 反例 10 ＋ 恢复后复跑 1）。")
+          "（正控 %d ＋ 正控附条 %d ＋ 反例 %d ＋ 恢复后复跑 %d——**数由上面打印的行现算**，不写死）。"
+          % (tally["正控"], tally["正控附条"], tally["反例"], tally["恢复后复跑"]))
     return 0
 
 
@@ -1422,6 +1806,10 @@ def main(argv=None):
         for mid, deps in rep["import_edges_test_only"].items():
             if deps:
                 print("     %s → %s" % (mid, ",".join(deps)))
+        if rep["import_edges_skipped_shared"]:
+            print("   按口径跳过（**共同模块不作边目标**，`WC-MODREG-001` §2.1；逐条列出、不静默）：")
+            for s in rep["import_edges_skipped_shared"]:
+                print("     %s" % s)
         print()
         for r in rep["judgments"]:
             print("  %s %s" % ("[OK]" if r["ok"] else "[FAIL]", r["judgment"]))
