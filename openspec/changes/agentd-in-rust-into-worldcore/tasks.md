@@ -26,22 +26,31 @@
       **正控**：把 `Multi::record` 改成"第一个失败就 `return Err`"⇒ `g03` 必须红（证明它真的在核"每一路都调用"），而 `g02`／`g04` 仍绿。
       **验收**：VM 上 `cargo test --locked --test agent_audit` rc=0；本机 `spec_bridge.py` 回到 16/0。
 
-- [ ] 1.2 **行分隔的结构化请求与应答**：落 `world-core/src/agent/protocol.rs` ＋ `world-core/tests/agent_protocol.rs`（`p01`–`p03`），并改回该条 3 行证据。
+- [x] 1.2 **行分隔的结构化请求与应答**：落 `world-core/src/agent/protocol.rs` ＋ `world-core/tests/agent_protocol.rs`（`p01`–`p03`），并改回该条 3 行证据。
       **原子**：`design.md` 原子表第 2 行。
       **断言在哪**：`world-core/tests/agent_protocol.rs` 的 `p01_one_request_one_response_in_order`／`p02_bad_bytes_do_not_swallow_the_next_request`／`p03_refusals_are_structured_not_prose`。
-      **变异怎么变红**：把 `serve()` 里"解析不了就写一条协议错应答 **并继续读**"改成 **`return Err`（中止）** ⇒ `p02` 必须红（坏字节之后那条好请求收不到应答）。
-      **正控**：`p01` 在变异下**仍应绿**（它不经过坏字节路径）——若它一起红，说明变异打宽了。
-      **验收**：VM 上 `cargo test --locked --test agent_protocol` rc=0；本机守卫 16/0。
+      **变异怎么变红**（**实测**）：把 `serve()` 里解析不了的分支从"写一条协议错**然后继续**"
+      改成 `return Err(..)`（中止）⇒ **`p02` FAILED**，而 `p01`／`p03` **仍绿**（正控成立）；
+      恢复后 `test result: ok. 3 passed; 0 failed`。
+      **验收**：VM 上 `cargo test --locked --test agent_protocol` ⇒ `ok. 3 passed; 0 failed`；本机守卫 16/0。
 
-- [ ] 1.3 **完工通告（不另立登记簿）**：落 `world-core/src/agent/completion.rs` ＋ `world-core/tests/agent_completion.rs`（`j01`–`j04`），并改回该条 4 行证据。
+- [x] 1.3 **完工通告（不另立登记簿）**：落 `world-core/src/agent/completion.rs` ＋ `world-core/tests/agent_completion.rs`（`j01`–`j04`），并改回该条 4 行证据。
       **原子**：`design.md` 原子表第 3 行。
       **断言在哪**：`world-core/tests/agent_completion.rs` 的 `j01_completion_is_a_ledger_notice`／`j02_start_failure_still_leaves_a_notice`／`j03_pending_comes_from_the_ledger_not_a_registry`／`j04_reading_completion_is_idempotent`。
-      **变异怎么变红**：把 `completion::pending()` 改成**读一个"登记簿"文件**来回答待办 ⇒ `j03` 必须红（把登记簿删掉后答案就变了）。
-      **正控**：`j04` 在变异下**仍应绿**（幂等与登记簿无关）。
+      **变异怎么变红**（**两处实测，都经历过一次"假绿"才写对**）：
+      - 变异甲：让 `pending()` 的答案**依赖一份与那两份输入无关的外部文件**（第二本登记簿的等价形态），
+        并在跑用例前把该文件放到 `/tmp` ⇒ **`j03` FAILED**，`j01`／`j02`／`j04` **仍绿**；
+        恢复后 `ok. 4 passed; 0 failed`。
+        ⚠ **如实记一次假绿**：本用例第一版**压根没造那个夹具文件**，于是"读不到"时实现退回空表、
+        答案照旧 ⇒ **变异打上去它仍然绿**。⇒ 夹具必须先让"读它"与"不读它"给出**不同**的答案。
+        第二版把夹具写进 `/tmp` 并在用例外备好 ⇒ 才真的抓到。**"反例不变红 ⇒ 该判据是装饰"这条
+        在本件上真的发生了两次（`g01` 一次、`j03` 一次），都不是我自己发现的。**
+      - 变异乙：`Status::from_wait(None)` 改成 `Status::Running` ⇒ **`j02` FAILED**（没能跑起来被读成
+        "还在跑"）；恢复后 `ok. 4 passed; 0 failed`。
       **★ 一条硬纪律**：本模块**不许**出现"登记簿／registry／jobs.json"这类东西——
       逐字依据：`world-core/src/carrier/recover.rs` 头注「现在**那本登记簿是多余的**：
       登记簿要回答的"哪些活还没干完"，由**账本折叠**回答」。
-      **验收**：VM 上 `cargo test --locked --test agent_completion` rc=0；本机守卫 16/0。
+      **验收**：VM 上 `cargo test --locked --test agent_completion` ⇒ `ok. 4 passed; 0 failed`；本机守卫 16/0。
 
 - [ ] 1.4 **动手前的载体撤销点：可观察断言**：落 `world-core/tests/agent_undo.rs`（`u01`–`u04`），并改回该条 4 行证据。
       **原子**：`design.md` 原子表第 5 行。**本件不改** `src/carrier/providers.rs`（行为已在，差的是断言）。
@@ -50,7 +59,7 @@
       **正控**：`u03` 在变异下**仍应绿**（不需要撤销的策略本来就不该调）。
       **验收**：VM 上 `cargo test --locked --test agent_undo` rc=0；本机守卫 16/0。
 
-- [ ] 1.5 把 `world-core/src/agent/mod.rs`（头注 ＋ 三行 `pub mod`）与 `world-core/src/lib.rs` 的一行 `pub mod agent;` 落在**第 1.1 笔**里（不要让它们单独成一笔：单独落会让 `cargo` 找不到 `audit.rs`）。
+- [x] 1.5 把 `world-core/src/agent/mod.rs`（头注 ＋ `pub mod`）与 `world-core/src/lib.rs` 的一行 `pub mod agent;` 落在**第 1.1 笔**里（不要让它们单独成一笔：单独落会让 `cargo` 找不到模块源文件）。
 
 ## 2. 文档口径改写（被三句裁定推翻的 5 件 28 处）
 

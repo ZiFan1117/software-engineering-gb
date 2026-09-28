@@ -74,19 +74,19 @@ Agent 运行时 SHALL 以**行分隔的 JSON** 暴露一次调用：**一行请�
 
 - **WHEN** 在一个连接上依次发两条合法请求
 - **THEN** 两条各收到一条与之对应的应答，且应答顺序与请求顺序一致
-- **证据（待补）**：`world-core/tests/agent_protocol.rs::p01_one_request_one_response_in_order`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_protocol.rs::p01_one_request_one_response_in_order`
 
 #### Scenario: 不可解析的请求不吞掉下一条
 
 - **WHEN** 先发一串无法解析成 JSON 的字节，紧接着发一条合法请求
 - **THEN** 坏的那条收到 `ok=false` 且 `err_code` 点名协议错误，**紧跟的合法那条仍被正常处置**并给出成功应答
-- **证据（待补）**：`world-core/tests/agent_protocol.rs::p02_bad_bytes_do_not_swallow_the_next_request`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_protocol.rs::p02_bad_bytes_do_not_swallow_the_next_request`
 
 #### Scenario: 失败也结构化，不靠散文
 
 - **WHEN** 一条合法请求被处置而结果是拒绝
 - **THEN** 应答的 `ok` 为假且 `err_code` 非空——调用方 SHALL 能只按 `err_code` 分支
-- **证据（待补）**：`world-core/tests/agent_protocol.rs::p03_refusals_are_structured_not_prose`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_protocol.rs::p03_refusals_are_structured_not_prose`
 
 ### Requirement: 〔无号·待流程侧增补〕完工发通告，但不另立登记簿
 
@@ -101,26 +101,26 @@ SHALL NOT 静默。
 - **WHEN** 一个活儿被启动并结束（含非零退出）
 - **THEN** 从账本折叠出的读模型里 SHALL 找得到一条以该活儿标识为主题的完工通告，
   其终态与实际结果一致（非零退出 ⇒ 终态为失败且退出码非零）
-- **证据（待补）**：`world-core/tests/agent_completion.rs::j01_completion_is_a_ledger_notice`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_completion.rs::j01_completion_is_a_ledger_notice`
 
 #### Scenario: 启动失败也留可读回的事实
 
 - **WHEN** 一个活儿因为命令无法启动而失败
 - **THEN** 账本里 SHALL 仍有一条以该活儿标识为主题的完工通告，终态为失败，
   且 SHALL NOT 只在进程内存里报告
-- **证据（待补）**：`world-core/tests/agent_completion.rs::j02_start_failure_still_leaves_a_notice`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_completion.rs::j02_start_failure_still_leaves_a_notice`
 
 #### Scenario: 待办不靠第二本登记簿（正控：删掉登记簿，答案不变）
 
 - **WHEN** 把任何载体侧的"登记簿"文件删掉（或压根不建），再从账本折叠回答"哪些活没干完"
 - **THEN** 答案 SHALL 不变——**"还没干完"的判据是"有意图、无完工通告"，与登记簿无关**
-- **证据（待补）**：`world-core/tests/agent_completion.rs::j03_pending_comes_from_the_ledger_not_a_registry`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_completion.rs::j03_pending_comes_from_the_ledger_not_a_registry`
 
 #### Scenario: 完工通告的读回是幂等的
 
 - **WHEN** 同一个账本被折叠两次
 - **THEN** 两次得到的完工通告**逐字节相同**（读法是叶子，不持有状态、不写盘）
-- **证据（待补）**：`world-core/tests/agent_completion.rs::j04_reading_completion_is_idempotent`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_completion.rs::j04_reading_completion_is_idempotent`
 
 ### Requirement: 〔无号·待流程侧增补〕动手前的载体撤销点：编排可观察，失败即不执行
 

@@ -30,3 +30,5 @@
 //! ⇒ 本模块**SHALL NOT** 引入任何"登记簿"文件。
 
 pub mod audit;
+pub mod completion;
+pub mod protocol;
