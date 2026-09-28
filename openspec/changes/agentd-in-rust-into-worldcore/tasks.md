@@ -38,7 +38,9 @@
 > 顺序固定：**实现 ＋ 会红断言 ＋ 把该件证据行的「（待补）」改回真证据**，三样在**同一笔**里。
 > 为什么：判据② 会核证据行指向的测试是否真实存在——**先落证据行、后落测试**会让树变红。
 
-- [ ] 1.1 **结构化审计留痕**：落 `world-core/src/agent/audit.rs` ＋ `world-core/tests/agent_audit.rs`（`g01`–`g04`），并把 delta 里该条 4 行证据的「（待补）」改回真证据。
+- [x] 1.1 **结构化审计留痕**：落 `world-core/src/agent/audit.rs` ＋ `world-core/tests/agent_audit.rs`（`g01`–`g04`），并把 delta 里该条 4 行证据的「（待补）」改回真证据。
+      **实测读数（VM）**：`cargo test --locked --test agent_audit` ⇒ `test result: ok. 4 passed; 0 failed`；
+      `cargo test --locked --lib agent::audit` ⇒ `ok. 5 passed; 0 failed`（提交 `98ccb88`）。
       **原子**：`design.md` 原子表第 1 行。
       **断言在哪**：`world-core/tests/agent_audit.rs` 的 `g01_newline_in_value_does_not_split_the_frame`／`g02_file_fallback_is_jsonl_with_timestamp`／`g03_multi_sink_isolates_failures`／`g04_field_names_come_from_the_fixed_set`。
       **变异怎么变红**（**实测的读数与"我以为的"不一样，按实测写**）：
@@ -81,8 +83,7 @@
 - [x] 1.4 **动手前的载体撤销点：可观察断言**：落 `world-core/tests/agent_undo.rs`（`u01`–`u04`），并改回该条 4 行证据。
       **★ 本条已落库**（R5／追认到手之后落的）。**实测读数（VM）**：`cargo test --locked --test agent_undo` ⇒ `test result: ok. 4 passed; 0 failed`；`cargo fmt --all -- --check` CLEAN；`cargo clippy --all-targets -- -D warnings` 无告警。
       **已完成的部分（可以做的：设计＋断言清单）**：断言清单与判据已写进 `design.md` 的原子表
-      与本条下方「断言在哪」；**断言文件本身已在本机工作区写好但未入库**（`git status` 里是 `??`），
-      **等 R5 批准或 H-14 追认之后再落**。
+      与本条下方「断言在哪」。**断言文件已入库**（提交 `6b2e77b`，`git status` 里不再是 `??`）。
       **原子**：`design.md` 原子表第 5 行。**本件不改** `src/carrier/providers.rs`（行为已在，差的是断言）。
       **断言在哪**：`world-core/tests/agent_undo.rs` 的 `u01_undo_happens_once_and_after_the_confirmation`／`u02_undo_failure_blocks_the_action`／`u03_no_undo_policy_means_zero_undo_calls`／`u04_carrier_undo_is_not_world_rollback`。
       **变异怎么变红**（**已实测**）：把 `src/carrier/providers.rs::execute` 里「需要撤销点则先做、
