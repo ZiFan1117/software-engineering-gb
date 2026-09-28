@@ -257,7 +257,8 @@ jobs:
         #   上一步 `validate --all --strict` 管的是 **change 与 spec**，它对 `openspec/schemas/**`
         #   **一个字节都不读** ⇒ 新增档 `opsx-swe-gb-atom` 在此之前**没有任何作业在看**：
         #   把它的 `template:` 改坏、或删掉 `templates/*.md`，`validate --all --strict`
-        #   照旧 `13 passed, 0 failed`、rc=0（实测见下）。
+        #   照旧 rc=0、`0 failed`（passed 数是**活数**，随 change 数变，**本处不复述**；
+        #   以该命令自己的输出为准）。同一棵改坏的树上的**反例**见下。
         #   而它的模板正是每个新 change 的**产物骨架**——它坏了，错误会一路漏到新 change 里才被人看见。
         #   另：生成链（`gen_specmap.py` → `gen_secmap.py` → `gen_bridge_md.py`）**没有自己的作业**，
         #   它的判据⑬ 只在 `spec-bridge` 作业里；本步**不是**它的检查（别把本步读成"生成链有作业了"）。
@@ -268,7 +269,10 @@ jobs:
         #   `schema.yaml` 的 `template: proposal.md` 改成指向一个不存在的文件（该占位串在 `schema.yaml` 里**只出现 1 处**），
         #   同一条命令给 **rc=1** 且逐字报：
         #     error: Template file 'no-such-template-file.md' not found for artifact 'proposal'
-        #   把改动还原后 **rc=0**（沙盒内 `schema.yaml` 的 sha256 回到改前值 c07c739c…，逐字节一致）。
+        #   把改动还原后 **rc=0**（沙盒内 `schema.yaml` 逐字节还原＝回到该次实验开始时的原值，
+        #   证明"真改过、真还原"）。**该 sha256 本处不写值**：`schema.yaml` 会被别的线改
+        #   （实测：`e8f6a86` 之后 `d0495dd` 又改过它 4 行）⇒ 要核就现取：
+        #   `git rev-parse <sha>:openspec/schemas/opsx-swe-gb-atom/schema.yaml` 或直接 sha256sum。
         # 正控读数（2026-09-28，本机 CLI 1.13.2，本仓树）：本步 **rc=0**。
         # 上一步的 passed 数**本处不复述**——它随 change 数变（2026-09-28 同日之内就因别的工区
         # 归档了一个 change 而变过），**写死必然过期**。以该命令自己的输出为准。
