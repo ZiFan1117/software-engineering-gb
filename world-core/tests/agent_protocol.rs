@@ -173,7 +173,12 @@ fn p03_refusals_are_structured_not_prose() {
     // 客户端助手：一发一收，形态一致
     let mut wire: Vec<u8> = Vec::new();
     let mut reader: &[u8] = b"{\"ok\":true,\"data\":{\"x\":1}}\n";
-    let got = call(&mut wire, &mut reader, &Request::new("a.b", "do", json!({}))).unwrap();
+    let got = call(
+        &mut wire,
+        &mut reader,
+        &Request::new("a.b", "do", json!({})),
+    )
+    .unwrap();
     assert!(got.ok);
     assert_eq!(got.data, Some(json!({ "x": 1 })));
     let sent = String::from_utf8(wire).unwrap();

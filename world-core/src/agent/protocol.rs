@@ -64,8 +64,8 @@ impl Request {
 
     /// 从一行解析。对不上形态 ⇒ `Err`（**不猜**）。
     pub fn from_line(s: &str) -> Result<Self, String> {
-        let v: Value = serde_json::from_str(s)
-            .map_err(|e| format!("{E_PROTOCOL}: 请求不是合法 JSON：{e}"))?;
+        let v: Value =
+            serde_json::from_str(s).map_err(|e| format!("{E_PROTOCOL}: 请求不是合法 JSON：{e}"))?;
         let capability = v
             .get("capability")
             .and_then(Value::as_str)
@@ -141,8 +141,8 @@ impl Response {
 
     /// 从一行解析。形态不合法 ⇒ `Err`。
     pub fn from_line(s: &str) -> Result<Self, String> {
-        let v: Value = serde_json::from_str(s)
-            .map_err(|e| format!("{E_PROTOCOL}: 应答不是合法 JSON：{e}"))?;
+        let v: Value =
+            serde_json::from_str(s).map_err(|e| format!("{E_PROTOCOL}: 应答不是合法 JSON：{e}"))?;
         let ok = v
             .get("ok")
             .and_then(Value::as_bool)
@@ -150,7 +150,10 @@ impl Response {
         Ok(Response {
             ok,
             data: v.get("data").cloned(),
-            err_code: v.get("err_code").and_then(Value::as_str).map(str::to_string),
+            err_code: v
+                .get("err_code")
+                .and_then(Value::as_str)
+                .map(str::to_string),
             err_msg: v.get("err_msg").and_then(Value::as_str).map(str::to_string),
         })
     }
@@ -258,7 +261,10 @@ mod unit {
         let no = Response::refused("X", "因为");
         let l2 = no.to_line();
         assert!(l2.contains("err_code"), "拒绝必须带码：{l2}");
-        assert_eq!(Response::from_line(&l2).unwrap().err_code.as_deref(), Some("X"));
+        assert_eq!(
+            Response::from_line(&l2).unwrap().err_code.as_deref(),
+            Some("X")
+        );
     }
 
     #[test]
@@ -268,7 +274,11 @@ mod unit {
         serve(input.as_bytes(), &mut out, &handler).unwrap();
         let text = String::from_utf8(out).unwrap();
         let lines: Vec<&str> = text.lines().collect();
-        assert_eq!(lines.len(), 2, "两个请求 ⇒ 两条应答（空行不产生应答）：{text}");
+        assert_eq!(
+            lines.len(),
+            2,
+            "两个请求 ⇒ 两条应答（空行不产生应答）：{text}"
+        );
         for l in lines {
             assert!(Response::from_line(l).unwrap().ok);
         }

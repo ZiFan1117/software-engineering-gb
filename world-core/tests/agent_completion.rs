@@ -151,7 +151,11 @@ fn j02_start_failure_still_leaves_a_notice() {
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
     let got = completions_in(&events);
-    assert_eq!(got.len(), 1, "账本上必须真有一条（不是只在内存里）：{got:?}");
+    assert_eq!(
+        got.len(),
+        1,
+        "账本上必须真有一条（不是只在内存里）：{got:?}"
+    );
     assert_eq!(got[0], c);
 
     let _ = fs::remove_dir_all(&d);
@@ -200,11 +204,14 @@ fn j03_pending_comes_from_the_ledger_not_a_registry() {
     // **变异打上去它仍然绿**（本项目实测踩过：第一版 j03 就是这种假绿）。
     // ⇒ 夹具必须让"读它"与"不读它"给出**不同**的答案。
     let fake = d.join("jobs.json");
-    let completions_before = completions_in(&fs::read_to_string(&lp).unwrap()
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .map(|l| serde_json::from_str::<Value>(l).unwrap())
-        .collect::<Vec<_>>());
+    let completions_before = completions_in(
+        &fs::read_to_string(&lp)
+            .unwrap()
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| serde_json::from_str::<Value>(l).unwrap())
+            .collect::<Vec<_>>(),
+    );
     let before_with_file = pending(&intents, &completions_before);
     assert_eq!(
         before_with_file, before,
@@ -281,17 +288,10 @@ fn j04_reading_completion_is_idempotent() {
 
     // 折叠**不许**改账本一个字节（叶子）
     let bytes1 = fs::read(&lp).unwrap();
-    assert_eq!(
-        bytes0, bytes1,
-        "读一次就改账本 ⇒ 那不是读法，是写者"
-    );
+    assert_eq!(bytes0, bytes1, "读一次就改账本 ⇒ 那不是读法，是写者");
 
     // 事件数 ≡ 通告数（这一批账本里全是通告）
-    assert_eq!(
-        a.len(),
-        3,
-        "三条完工通告 ⇒ 三条；实得 {a:?}"
-    );
+    assert_eq!(a.len(), 3, "三条完工通告 ⇒ 三条；实得 {a:?}");
 
     let _ = fs::remove_dir_all(&d);
 }
