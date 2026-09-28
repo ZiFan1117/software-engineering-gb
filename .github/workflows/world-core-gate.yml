@@ -269,7 +269,9 @@ jobs:
         #   同一条命令给 **rc=1** 且逐字报：
         #     error: Template file 'no-such-template-file.md' not found for artifact 'proposal'
         #   把改动还原后 **rc=0**（沙盒内 `schema.yaml` 的 sha256 回到改前值 c07c739c…，逐字节一致）。
-        # 正控读数（2026-09-28，本机 CLI 1.13.2，本仓树）：本步 **rc=0**；上一步 **13 passed, 0 failed (13 items)**，rc=0。
+        # 正控读数（2026-09-28，本机 CLI 1.13.2，本仓树）：本步 **rc=0**。
+        # 上一步的 passed 数**本处不复述**——它随 change 数变（2026-09-28 同日之内就因别的工区
+        # 归档了一个 change 而变过），**写死必然过期**。以该命令自己的输出为准。
         run: |
           openspec --version
           npx --yes @fission-ai/openspec@1.13.2 schema validate opsx-swe-gb-atom
