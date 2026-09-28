@@ -172,7 +172,7 @@ SHALL NOT 静默。
 | 行分隔 JSON-RPC 服务（`internal/server`） | **本件新增** `world-core/src/agent/protocol.rs` | 本件 `p01`／`p02`／`p03` |
 | 完工铃登记簿（`internal/job`） | **本件按本项目裁定改为"完工通告 ＋ 账本折叠"**，落 `world-core/src/agent/completion.rs`；**登记簿不许带回来** | 本件 `j01`–`j04` |
 | 结构化审计（`internal/audit`） | **本件新增** `world-core/src/agent/audit.rs` | 本件 `g01`–`g04` |
-| btrfs 快照／回滚编排（`internal/snapshot`） | **本件新增** `world-core/src/agent/undo.rs` | 本件 `u01`–`u04` |
+| btrfs 快照／回滚编排（`internal/snapshot`） | **行为已在** `world-core/src/carrier/providers.rs::execute`（第 5 步，`undo_marker` 那个口子）；**本件只补可观察断言**，落 `world-core/tests/agent_undo.rs`。⚠ **不新增 `src/agent/undo.rs`**——该文件**不存在、也不打算存在**（本件**不改** `providers.rs` 一个字节） | 本件 `u01`–`u04` |
 
 > **"组成里有它"与"本次不重写"可以同时为真**：上表前四行的能力面**已经在世界核心里**，
 > 本件**不重写**它们，只登记它们的落点与既有断言——这不是缺席，是**已经有主**。

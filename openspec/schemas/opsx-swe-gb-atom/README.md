@@ -83,7 +83,7 @@ npx --yes @fission-ai/openspec@1.13.2 status --change <name>
 ### 2.2 第 2 样 · **国际软件开发流程（06-swe-gb 那套）**
 
 判据现口径的**仓内可达**载体：`openspec/changes/fc-2026-001-openspec-into-cm/boundary.md`
-（⚠ 融合 skill 的 `SKILL.md` 本身**不在版本控制内**——本仓 `.agents/skills/` 下 git 只跟踪 `worldcore-sdd` 与七个 `openspec-*` 技能；这一格已登记进 §六第 3 格）。
+（⚠ 融合 skill 的 `SKILL.md` 本身**不在版本控制内**——本仓 `.agents/skills/` 下 git 只跟踪 `worldcore-sdd` 与 **6 个** `openspec-*` 技能；这一格已登记进 §六第 3 格）。
 ⚠ 旧版那句「同址双读／流程侧只留一行指针／每条 Requirement 标题带 REQ 号」**已作废**。
 
 | 落在哪一条 | 文件 ＋ 字段 | 出处／复算命令 |
@@ -109,10 +109,10 @@ npx --yes @fission-ai/openspec@1.13.2 status --change <name>
 
 | 约定 | 落在原子表的哪一栏 | 谁执行（**逐条人工执行并把读数贴进第 6 栏**） |
 |---|---|---|
-| **A-1 单意图原子性** | 第 2 栏 `intent`（一句话；出现「与／和／及」并列两事即拆） | 人工判；旁证 `WC-MODREG-001` 登记表的 `intent` 由 `python world-core/tools/module_graph.py` 核（现取 `通过 3 / 失败 0`），但它**不看本表** |
+| **A-1 单意图原子性** | 第 2 栏 `intent`（一句话；出现「与／和／及」并列两事即拆） | 人工判；旁证 `WC-MODREG-001` 登记表的 `intent` 由 `python world-core/tools/module_graph.py` 核（**读数按上面那条命令现取，本表不复述**），但它**不看本表** |
 | **A-2 一个原子一个文件夹（契约＋实现＋测试同夹）** | 第 3 栏「四件同夹」——三件都要写**真实路径或用例名** | 人工判；旁证同上（`module_graph.py` 判据②核的是 `src/` 登记面） |
 | **A-3 契约字段齐** | 第 3 栏的"契约"格（规格条目／`WC-IC-001`） | 人工判 |
-| **A-4 `deps == import` 且无环** | 第 4 栏 `deps == import` | `python world-core/tools/module_graph.py`（现取 `通过 3 / 失败 0`，`--self-test` 逐条"已红 OK"）＋人工贴读数 |
+| **A-4 `deps == import` 且无环** | 第 4 栏 `deps == import` | `python world-core/tools/module_graph.py`（**读数现取，本处不复述**；自证 `--self-test`）＋人工贴读数 |
 | **A-5 生成物不许手编** | 第 5 栏「生成物（重跑命令 / 无）」 | `spec_bridge.py` **判据⑪⑫⑬**（`BRIDGE.md`／`specmap.json`／`节对齐.md` 逐字节一致） |
 | **A-6 UTF-8 无 BOM** | **第 6 栏「机核读数」**（编码这一个读数就写在这里） | `python world-core/tools/plain_text_audit.py --self-test` ⇒ 现取**含 BOM 反例判红 OK**；也可对单件跑同一条命令 |
 
@@ -236,6 +236,12 @@ validate <name> --strict（无 delta）    ⇒ rc=1  Change must have at least o
 ---
 
 ## 七、本件自己不能证明的事（**别把它读成万能背书**）
+
+0. **★ 本版（本档 7 件的字节）落在哪一笔：** 本档的现行文本最后改定于
+   **提交 `72c0269`**（该笔的提交消息属另一条线，见 `openspec/BOOK/冲突总账.md` §7.18 的事故台账），
+   其后只有台账侧的两笔补记（`冲突总账` 的 §7.18／§7.19），**本档 7 件自 `72c0269` 起未再改**。
+   ⚠ **下面第 1 条引的 `1b58dc0` 是"仓根门禁读数"的锚，不是本件字节的锚** ——
+   按 `1b58dc0` 去读本档，读到的会是**整改前**的文本。要读本版，请按 **`72c0269`**（或它之后的 HEAD）取件。
 
 1. **仓根两条门禁的读数取决于整棵仓的件，不只是本档。**
    **钉在提交上看**（`1b58dc0` 的 pristine 全树，现取）：`openspec validate --all --strict` ⇒ **`12 passed, 0 failed`**、
