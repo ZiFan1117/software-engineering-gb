@@ -82,7 +82,7 @@
 | `src/agent/audit.rs` | **不占号** | 同上（结构化审计留痕） | 同上；会红断言 `tests/agent_audit.rs::g01`–`g04` |
 | `src/agent/protocol.rs` | **不占号** | 同上（行分隔结构化请求／应答） | 同上；会红断言 `tests/agent_protocol.rs::p01`–`p03` |
 | `src/agent/completion.rs` | **不占号** | 同上（完工通告、**不另立登记簿**）；它 `use crate::event`，而 `src/event.rs` 是不占号的共同模块 ⇒ **不产生模块号之间的边** | 同上；会红断言 `tests/agent_completion.rs::j01`–`j04` |
-| **可选：把 `src/agent/` 立为新模块号（`M11`）** | **待人裁** | 本行**不是登记**，是**如实登记的开口**：立 `M11` 属**配置项变更**（同 `M10` 的先例，见 §2 表下 `M10` 行注逐字「新增模块号属配置项变更（§四），**须走变更控制并随框架基线追认**」）。它牵动 `WC-IC-001` 的接口契约册（要新增一节）与 `WC-IRS-001` 的接口号（`IF-012`）⇒ **agent 不代选**，登记于此 | 册 §7.15「★ 仍待人裁的一格」；`WC-MODREG-001` §四 |
+| **`src/agent/` 不立新模块号（`M11`）——已裁定** | **不占号（维持）** | **已裁定：不立号**（作者 2026-09-28 授权执行者裁定）。**理由**：立号属**配置项变更**、会牵动 `WC-IC-001` 新增一节契约与 `WC-IRS-001` 的接口号 `IF-012`，**收益不足**。⇒ 上面五行（`src/agent/` 四件 ＋ 目录行）**继续有效**，`src/agent/**` 继续记为**不占号的共同模块**。**让路三要素**：**让的是哪一条**＝本表 §2 下 `M10` 行注逐字「新增模块号属配置项变更（§四），**须走变更控制并随框架基线追认**」；**为什么让**＝本次裁定（不立号 ⇒ 不触发该条）；**谁批的**＝**作者**（2026-09-28 授权执行者裁定） | `openspec/changes/agentd-in-rust-into-worldcore/review.md` §一之一（转录声明）；`WC-MODREG-001` §四 |
 | `src/project/language.rs`、`src/project/visual.rs` | 各占一（`M06`/`M07`） | 各自契约在文件头 | 附录 A §一 决定理由第 1 条 |
 | 注册表列出的 `ontology.json` / `policy.json` | 数据文件，不占号 | 实存（`world-core/ontology.json` 1928 字节、`world-core/policy.json` 2385 字节） | `Get-ChildItem world-core -File` 实测 |
 | **九个模块之间无循环依赖** | — | 判定面与证据见 §4.2 | — |

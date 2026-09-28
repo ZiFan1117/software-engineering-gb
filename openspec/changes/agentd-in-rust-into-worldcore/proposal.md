@@ -1,12 +1,11 @@
 # Proposal
 
-FC: 〔待作者给号〕
+FC: WC-FC-2026-005
 
 > **号由人给，agent 不自造**（本仓体例逐字：「号由人给，agent 不自己编号」）。
-> ⚠ 本件初稿曾拟 `FC: WC-FC-2026-004`——**该号已被占用**（归档件
-> `openspec/changes/archive/2026-09-28-fc-2026-004-assertions` 正是它）⇒ **撤回该拟号**，
-> 一律写「〔待作者给号〕」。**这是待人项**，登记在 `design.md` 的 Open Questions 与
-> `openspec/BOOK/冲突总账.md` §八。
+> **本号已定**：`WC-FC-2026-005`（作者 2026-09-28 裁定；`004` 已被归档件
+> `openspec/changes/archive/2026-09-28-fc-2026-004-assertions` 占用，故取 `005`）。
+> 沿革如实保留：本件初稿曾拟 `FC: WC-FC-2026-004` ⇒ **该拟号已撤回**。
 
 ## Why
 
