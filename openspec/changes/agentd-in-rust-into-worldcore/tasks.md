@@ -1,5 +1,31 @@
 # Tasks
 
+> ## ⚠ 本节是**程序上的自认**，不是流程说明（2026-09-28 登记）
+>
+> **事实**：`tasks.md` 第 1 组的**前三笔（1.1／1.2／1.3）在未获 R5 批准之前就已实施并入库**
+> （`98ccb88`／`4a850cb` ＋ 格式规范化 `8f43879`）。
+> 而本 change **判定为 R5**，融合档的硬约定逐字是：
+> 「**R5（框架变更评审）＝ 前置闸**……**未获 R5 批准不得进入实施**」
+> （`openspec/schemas/opsx-swe-gb/schema.yaml` 的 `review` instruction）。
+>
+> ⇒ **这两件事放在一起，就是"未批先实施"。责任在執行者（本会话的 agent），不在任何人。**
+> 处置**按"追认"路径走**（不回溯删除，理由见下），并**即刻停止实施面**：
+>
+> | 项 | 状态 |
+> |---|---|
+> | 第 1.4 件（`agent_undo.rs` 的 `u01`–`u04`） | **不落库**——断言清单已写在 `design.md`／本件（见 1.4），但**代码不进 `tests/`**，等 R5／追认 |
+> | 文档口径改写（第 2 组） | **可以继续**（它不属"实施"） |
+> | 仓根 Go 退场备料（第 3 组） | **可以继续**（备料，不落） |
+>
+> **为什么不回退那三笔**（执行者与上级一致的判断）：它们**已在 VM 上实测过**
+> （`agent_audit` 4 passed ＋ 变异红；`agent_protocol` 3/0 ＋ 变异红；`agent_completion` 4/0 ＋ 两处变异红），
+> 回退＝**销毁已验证的劳动**，且会与后续追认冲突。⇒ 走 H-14 追认，把"程序未获批准"与
+> "实现本身的质量"**分列登记**（见 `review.md` §七）。
+>
+> **请求**：按 **H-14** 对**这三笔**作事后追认；**追认登记表**在 `review.md` §七
+> （三栏强制项已填：原门禁编号＝R5／只增强不放宽／变更时点是否确无人在场可批）。
+> **变更号**仍为「**〔待作者给号〕**」（号由人给，agent 不自造）。
+
 > **坐标口径**：本件正文里的 `path:line` 是**写下时的 as-of 坐标**；**权威定位子是
 > 「命令 ＋ 用例名／步骤名」**——它们**不随行号漂移**。要复现某条证据：先按用例名
 > `grep`，再读那一段。
@@ -53,11 +79,14 @@
       **验收**：VM 上 `cargo test --locked --test agent_completion` ⇒ `ok. 4 passed; 0 failed`；本机守卫 16/0。
 
 - [ ] 1.4 **动手前的载体撤销点：可观察断言**：落 `world-core/tests/agent_undo.rs`（`u01`–`u04`），并改回该条 4 行证据。
+      **★ 本条按 2026-09-28 裁定【不落库】**（未获 R5 批准 ⇒ 实施面停手，见本件抬头）。
+      **已完成的部分（可以做的：设计＋断言清单）**：断言清单与判据已写进 `design.md` 的原子表
+      与本条下方「断言在哪」；**断言文件本身已在本机工作区写好但未入库**（`git status` 里是 `??`），
+      **等 R5 批准或 H-14 追认之后再落**。
       **原子**：`design.md` 原子表第 5 行。**本件不改** `src/carrier/providers.rs`（行为已在，差的是断言）。
-      **断言在哪**：`world-core/tests/agent_undo.rs` 的 `u01_undo_happens_once_and_after_the_confirmation`／`u02_undo_failure_blocks_the_action`／`u03_no_undo_policy_means_zero_undo_calls`／`u04_carrier_undo_is_not_world_rollback`。
-      **变异怎么变红**：把 `src/carrier/providers.rs::execute` 里"需要撤销点则先做、做不成即拒绝"那一段**整段删掉**（只在本地做变异、验完**立刻恢复**，不许提交）⇒ `u01`／`u02` 必须红。
+      **断言在哪**（待落）：`world-core/tests/agent_undo.rs` 的 `u01_undo_happens_once_and_after_the_confirmation`／`u02_undo_failure_blocks_the_action`／`u03_no_undo_policy_means_zero_undo_calls`／`u04_carrier_undo_is_not_world_rollback`。
+      **变异怎么变红**（设计已定）：把 `src/carrier/providers.rs::execute` 里"需要撤销点则先做、做不成即拒绝"那一段**整段删掉**（只在本地做变异、验完**立刻恢复**，不许提交）⇒ `u01`／`u02` 必须红。
       **正控**：`u03` 在变异下**仍应绿**（不需要撤销的策略本来就不该调）。
-      **验收**：VM 上 `cargo test --locked --test agent_undo` rc=0；本机守卫 16/0。
 
 - [x] 1.5 把 `world-core/src/agent/mod.rs`（头注 ＋ `pub mod`）与 `world-core/src/lib.rs` 的一行 `pub mod agent;` 落在**第 1.1 笔**里（不要让它们单独成一笔：单独落会让 `cargo` 找不到模块源文件）。
 
