@@ -21,6 +21,7 @@
 | `family_readmodel.rs` | 家族演进与向前兼容（`REQ-F-027`）＋ 读模型侧的缺格即报错（`REQ-F-032`） |
 | `projection_leaf.rs` | 读法是叶子（书 §4.4）：几份读法之间不互相调用、不持有状态 |
 | `write_side.rs` | 写侧适配（书 §4.5）：只写不裁决／前值必须带上／对被管者 uid 的写权限边界 |
+| `agent_audit.rs` | Agent 运行时的**结构化审计留痕**（`g*`）：一条记录恒占一帧／文件回退是 JSON Lines 且带时间戳／多路出口的失败隔离／字段名是固定集合 |
 
 **脚本面**（`world-core/tools/`，由 `check.sh` 或人工调用）：
 

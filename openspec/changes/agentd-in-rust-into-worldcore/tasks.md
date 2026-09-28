@@ -15,7 +15,14 @@
 - [ ] 1.1 **结构化审计留痕**：落 `world-core/src/agent/audit.rs` ＋ `world-core/tests/agent_audit.rs`（`g01`–`g04`），并把 delta 里该条 4 行证据的「（待补）」改回真证据。
       **原子**：`design.md` 原子表第 1 行。
       **断言在哪**：`world-core/tests/agent_audit.rs` 的 `g01_newline_in_value_does_not_split_the_frame`／`g02_file_fallback_is_jsonl_with_timestamp`／`g03_multi_sink_isolates_failures`／`g04_field_names_come_from_the_fixed_set`。
-      **变异怎么变红**：把 `src/agent/audit.rs` 的 `sanitize()` 改成**恒返回原值**（不替换换行）⇒ `g01` 必须红（帧的行数会大于字段数）。
+      **变异怎么变红**（**实测的读数与"我以为的"不一样，按实测写**）：
+      ⚠ **`g01` 打不动 `sanitize`**——`PARAMS` 一律走 JSON 序列化，换行会先被**转义**成 `\n` 两个字符，
+      于是它碰不到 `sanitize`。**实测**：把 `sanitize` 改成恒返回原值 ⇒ `g01` **仍然绿**。
+      ⇒ 真正打 `sanitize` 的是**模块内单元测试** `src/agent/audit.rs` 的
+      `a_raw_newline_in_any_value_is_replaced`：**实测**同一个变异下它 **FAILED**
+      （`panicked at src/agent/audit.rs:407`），恢复后 `test result: ok. 5 passed; 0 failed`。
+      ⇒ `g01` 的口径改为它**真能**核的那件事：**帧的行数 ≡ 该记录的字段数**
+      （把它换成"按分隔符切"一类写法即红——**这一条的变异本轮未跑，如实登记为未核**）。
       **正控**：把 `Multi::record` 改成"第一个失败就 `return Err`"⇒ `g03` 必须红（证明它真的在核"每一路都调用"），而 `g02`／`g04` 仍绿。
       **验收**：VM 上 `cargo test --locked --test agent_audit` rc=0；本机 `spec_bridge.py` 回到 16/0。
 

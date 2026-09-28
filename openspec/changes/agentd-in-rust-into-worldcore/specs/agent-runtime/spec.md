@@ -42,26 +42,26 @@ Agent 每一次意图与每一次动作 SHALL 以**字段集**的形式留痕，
 
 - **WHEN** 一条审计记录的某个字段值里含换行符，必须转成行协议的一帧
 - **THEN** 那一帧里 SHALL NOT 出现裸换行，且**帧数**与写入次数相等（记录条数不因值里的换行而变多）
-- **证据（待补）**：`world-core/tests/agent_audit.rs::g01_newline_in_value_does_not_split_the_frame`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_audit.rs::g01_newline_in_value_does_not_split_the_frame`
 
 #### Scenario: 文件回退是 JSON Lines 且带时间戳
 
 - **WHEN** 用文件回退形态记录两条，再按行读回
 - **THEN** 读回 SHALL 得到两条，每条的字段与写入一致，且每条都带时间戳字段（非空）
-- **证据（待补）**：`world-core/tests/agent_audit.rs::g02_file_fallback_is_jsonl_with_timestamp`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_audit.rs::g02_file_fallback_is_jsonl_with_timestamp`
 
 #### Scenario: 多路出口：一路失败不阻塞另一路
 
 - **WHEN** 同时挂两个出口，第一个返回失败
 - **THEN** 第二个 SHALL 仍然收到这条记录，且调用方拿到的错误 SHALL 是**第一个**失败的错
-- **证据（待补）**：`world-core/tests/agent_audit.rs::g03_multi_sink_isolates_failures`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_audit.rs::g03_multi_sink_isolates_failures`
 
 #### Scenario: 字段名是固定集合，不许改名
 
 - **WHEN** 任何一条意图或动作记录被构造
 - **THEN** 它用到的字段名 SHALL 落在约定集合内（含 `MESSAGE` 与 `OUTCOME`），
   且意图记录带 `INTENT`、动作记录带 `DURATION_MS`——**改名即变红**
-- **证据（待补）**：`world-core/tests/agent_audit.rs::g04_field_names_come_from_the_fixed_set`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_audit.rs::g04_field_names_come_from_the_fixed_set`
 
 ### Requirement: 〔无号·待流程侧增补〕行分隔的结构化请求与应答：一问一答，坏字节不吞下一条
 
