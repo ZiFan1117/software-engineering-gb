@@ -77,8 +77,17 @@ impl Status {
         }
     }
 
-    /// 从名字解析（折叠账本时用）。不认识的词 ⇒ `None`（**不猜**）。
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// 从**对外口径里的那个词**解出终态；不是口径里的词 ⇒ `None`（**不猜**）。
+    ///
+    /// ⚠ **本方法刻意不叫 `from_str`、也刻意不 `impl std::str::FromStr`**，理由两条：
+    /// 1. 它**不是**一次通用解析：只认**我们自己那四个词**（`running`／`done`／`failed`／`lost`），
+    ///    认不出即 `None`——这是"**按对外的固定口径取值**"，不是"把字符串解析成 Status"；
+    /// 2. 名字叫 `from_str` 时 clippy 会以 `should_implement_trait` 判红（CI 逐字：
+    ///    `method from_str can be confused for the standard trait method std::str::FromStr::from_str`
+    ///    ⇒ `-D warnings` 下构建失败），而为了消 lint 去 `impl FromStr` 又得硬造一个 `Err` 类型
+    ///    ——那是"**为了骗过 lint 而改结构**"，比改名坏得多。
+    /// 3. ⇒ 取一个说得出它干什么的名字：`from_word`。
+    pub fn from_word(s: &str) -> Option<Self> {
         match s {
             "running" => Some(Status::Running),
             "done" => Some(Status::Done),
@@ -121,7 +130,7 @@ impl Completion {
         }
         let payload = body.get("payload")?;
         let job_id = payload.get("job_id").and_then(Value::as_str)?.to_string();
-        let status = Status::from_str(payload.get("status").and_then(Value::as_str)?)?;
+        let status = Status::from_word(payload.get("status").and_then(Value::as_str)?)?;
         let exit_code = payload
             .get("exit_code")
             .and_then(Value::as_i64)
