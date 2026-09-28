@@ -109,6 +109,47 @@ if _gov_delta.is_file():
 for i, t in enumerate(GOV, 1):
     L.append("| %d | 〔无号·待流程侧增补〕%s | 无号（待流程侧增补） |" % (i, t))
 L.append("")
+# ── 在办 change 引入的能力承诺（**主规格树里还没有这个能力**）──────────────
+# 为什么要有这一节：判据④ 只扫主规格树（`openspec/specs/**/spec.md`），
+#   而 OpenSpec 的规矩是 delta 在 change **归档时**才并入主规格 ⇒ 新能力在归档前
+#   **不在判据④ 的扫描面里**，等于它在编号桥里没有在册面。
+#   BRIDGE.md 是**生成物**（判据⑪ 逐字节核）⇒ 这个在册面必须由生成器**现取**，不许手编。
+_pending = []
+_changes_dir = _REPO / "openspec" / "changes"
+if _changes_dir.is_dir():
+    for _cd in sorted(_changes_dir.iterdir()):
+        if not _cd.is_dir() or _cd.name == "archive":
+            continue
+        _sd = _cd / "specs"
+        if not _sd.is_dir():
+            continue
+        for _capd in sorted(_sd.iterdir()):
+            _sp = _capd / "spec.md"
+            if not _sp.is_file():
+                continue
+            _cap = _capd.name
+            if _cap == "spec-governance":            # 它有专属 §三，不在此重复
+                continue
+            if (_REPO / "openspec" / "specs" / _cap / "spec.md").is_file():
+                continue                             # 已并入主规格 ⇒ 归 §一／§二
+            for _ln in _sp.read_text(encoding="utf-8", errors="replace").split("\n"):
+                if _ln.startswith("### Requirement:"):
+                    _pending.append((_cd.name, _cap, _ln[len("### Requirement:"):].strip()))
+if _pending:
+    L.append("## 三之二、在办 change 引入的能力承诺（**主规格树里还没有这个能力**，归档时并入主规格）")
+    L.append("")
+    L.append("> ⚠ **本节登记的是「该 change 的承诺」，不是「已并入的事实」**——"
+             "OpenSpec 的 delta 在 change **归档时**才并入主规格。")
+    L.append("> ⚠ **不要**为了让本节看起来成立而手动把能力塞进 `openspec/specs/`——"
+             "那会让 `archive` 报 `ADDED already exists` 而**永远归不了档**。")
+    L.append("> 流程侧今天没有对应需求 ⇒ **逐条登记为「无号·待流程侧增补」**"
+             "（**不许自造号、不许拿相近号硬凑**）。")
+    L.append("")
+    L.append("| # | 由哪个 change 引入 | 能力 | 承诺（逐字，Requirement 标题） | 号 |")
+    L.append("|---|---|---|---|---|")
+    for _i, (_ch, _cap, _t) in enumerate(_pending, 1):
+        L.append("| %d | `%s` | `%s` | %s | 无号（待流程侧增补） |" % (_i, _ch, _cap, _t))
+    L.append("")
 L.append("## 四、没有任何承诺认领的需求（%d 条 → 覆盖缺口）" % len(srs_no_req))
 L.append("")
 L.append("> 这些是**流程侧登记在册、而规格树里没有落点**的需求。它们由覆盖 change（`openspec/changes/cover-*`）承担；")
