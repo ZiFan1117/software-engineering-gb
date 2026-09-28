@@ -252,6 +252,27 @@ jobs:
         run: |
           openspec --version
           openspec validate --all --strict
+      - name: schema 形态门禁 —— openspec/schemas 下的 schema 结构与模板
+        # 为什么单列一步（**加在既有的 openspec-validate 作业里，不新开作业**）：
+        #   上一步 `validate --all --strict` 管的是 **change 与 spec**，它对 `openspec/schemas/**`
+        #   **一个字节都不读** ⇒ 新增档 `opsx-swe-gb-atom` 在此之前**没有任何作业在看**：
+        #   把它的 `template:` 改坏、或删掉 `templates/*.md`，`validate --all --strict`
+        #   照旧 `13 passed, 0 failed`、rc=0（实测见下）。
+        #   而它的模板正是每个新 change 的**产物骨架**——它坏了，错误会一路漏到新 change 里才被人看见。
+        #   另：生成链（`gen_specmap.py` → `gen_secmap.py` → `gen_bridge_md.py`）**没有自己的作业**，
+        #   它的判据⑬ 只在 `spec-bridge` 作业里；本步**不是**它的检查（别把本步读成"生成链有作业了"）。
+        # 版本与上一步的安装**同一行**（`@fission-ai/openspec@1.13.2`）；`npx --yes` 只是取用已装好的那份，
+        #   不引入浮动版本。**已实测两种写法等价**（2026-09-28，本机 CLI 1.13.2，仓库根）：
+        #   全局 `openspec schema validate opsx-swe-gb-atom` 与 `npx --yes …@1.13.2 schema validate opsx-swe-gb-atom` 同值。
+        # 反例已验过（不是橡皮图章）：在**仓外**沙盒（`openspec/schemas/opsx-swe-gb-atom/` 的副本）把
+        #   `schema.yaml` 的 `template: proposal.md` 改成指向一个不存在的文件（该占位串在 `schema.yaml` 里**只出现 1 处**），
+        #   同一条命令给 **rc=1** 且逐字报：
+        #     error: Template file 'no-such-template-file.md' not found for artifact 'proposal'
+        #   把改动还原后 **rc=0**（沙盒内 `schema.yaml` 的 sha256 回到改前值 c07c739c…，逐字节一致）。
+        # 正控读数（2026-09-28，本机 CLI 1.13.2，本仓树）：本步 **rc=0**；上一步 **13 passed, 0 failed (13 items)**，rc=0。
+        run: |
+          openspec --version
+          npx --yes @fission-ai/openspec@1.13.2 schema validate opsx-swe-gb-atom
 
   spec-bridge:
     name: 规格层守卫（spec_bridge.py）
