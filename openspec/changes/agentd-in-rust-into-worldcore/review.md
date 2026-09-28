@@ -237,6 +237,62 @@
 - **以后的纪律**：凡说「逐件相等」，**必须把两边 sha256 都打出来**；
   **先把树同步到目标 sha、逐件核过，才跑读数**——**不许**用"我记得我推过"代替对账。
 
+### 7.3 ★★ 同一形态的事故**再犯一次**（`74dc9bc`），以及由此定下的**"先看后提交"**
+
+#### 7.3.1 事实（逐字，不掩饰）
+- **`74dc9bc` 这一笔卷进了 5 个不是我的文件**：
+  `openspec/BOOK/冲突总账.md`（册线）与 `openspec/schemas/opsx-swe-gb-atom/` 的
+  `README.md`／`schema.yaml`／`templates/proposal.md`／`templates/review.md`（schema 线）。
+- **★ 滞留起点＝`72c0269`**（关键事实，评审席与我一致认定）：
+  这 5 件**上一次有记录的提交是 `72c0269`**——也就是**我第一次卷走它们的那一笔**。
+  ⇒ 它们**自 `72c0269` 起一直滞留在索引里、从未被提交**，于是在 `74dc9bc` 又被我一起收走。
+- **净效果**：这 5 件的**内容确实进了 `main`**（对两条线是好事），但**署名挂在我的提交上**。
+- **我一个字都没编辑过这 5 个文件**——它们是**索引里的滞留件**，不是我的改动。
+  逐件核过：`74dc9bc` 里的 blob **与当前工作区逐字节相同**（5/5）⇒ **内容没丢**。
+- **原因分辨（与 §7.2.1 同一口径）**：`git add` 与 `git commit` **之间非原子**，
+  且**我把索引当成了空的**。heredoc 那条只解释"第一次那条命令没跑"，与本次无关。
+
+#### 7.3.2 我原先的"两步核"为什么没拦住（真因）
+我**确实跑了** `git diff --cached --name-only` ＋ `git diff --cached --stat`，
+但我是**先 `git commit`、再回看输出** ⇒ **它是"事后看"，不是"闸"**。
+输出**确实抓到了**（8 个文件、其中 5 个不是我的）——**只是我看到时已经提交完了**。
+
+#### 7.3.3 ⇒ **"先看后提交"**（固定动作，顺序写死；**原话**）
+> **"先看后提交"，不是"先提交后看"。**
+
+六步，**每一步的顺序不许换**：
+
+1. `git add <只写自己声明的路径>`——**一次一条命令**，**不与 `git commit` 复合**；
+2. **先** `git diff --cached --name-only` ⇒ **过滤出非自己的路径**；
+3. **非自己的一律** `git restore --staged <路径>`（**只撤索引、不动内容**）；
+4. **再回读一次** `git diff --cached --name-only`，**确认只剩自己的**；
+5. **此时才** `git commit`；
+6. 提交后 `git show --stat HEAD` 数文件数（**事后复核，不是闸**）。
+
+**第 2–4 步的实现**（PowerShell；`$mine` 是本笔声明的路径正则）：
+
+```powershell
+$mine = 'agentd-in-rust-into-worldcore'          # 本笔声明的路径（逐个列，别用通配）
+git add openspec/changes/agentd-in-rust-into-worldcore
+$staged  = @(git diff --cached --name-only)       # 第 2 步：先看
+$foreign = @($staged | Where-Object { $_ -notmatch $mine })
+if ($foreign.Count -gt 0) {                       # 第 3 步：别人的 ⇒ 只撤索引
+  git restore --staged @foreign
+  Write-Host ('闸拦住，已只撤索引：' + ($foreign -join ' ; '))
+}
+$again = @(git diff --cached --name-only)         # 第 4 步：再回读
+if ($again.Count -eq 0) { throw '闸后索引为空——add 没生效，停手' }
+if (@($again | Where-Object { $_ -notmatch $mine }).Count -gt 0) { throw '闸后仍有非我的路径，停手' }
+# 第 5 步：此时才提交
+```
+
+**提交前顺手核一次** `git status --porcelain`：若还有非我的未提交项**停在索引里**
+（状态行第 1、2 列都是字母，例如 `M `／`MM`），**只 `git restore --staged` 它们**，**别动内容**。
+
+#### 7.3.4 本条的**首次实战**（闸的第一次真实使用）
+写 **§7.3 这一段**（本条）的这一笔，就是用上面那道闸提交的：**先看 ⇒ 过滤 ⇒（若有）只撤索引 ⇒ 再回读 ⇒ 才提交**，
+并把**过滤输出**（应为空字符串）作为读数交回。⇒ 见本件的提交信息与当次回报。
+
 **条件**：无
 
 ---
