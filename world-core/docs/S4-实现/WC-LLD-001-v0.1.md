@@ -21,6 +21,49 @@
 
 ---
 
+## 〇、原子表（**原子化设计在本文件里的落点**）
+
+> **栏位口径**照项目工作流的原子表五栏（出处：`openspec/schemas/opsx-swe-gb-atom/templates/design.md`
+> 的「原子表」节；约定本身出处 `WC-ATOM-001` §二）。**每个模块一行，逐栏非空**；
+> `intent` 里出现「与／和／及」并列两事 ⇒ 拆。
+>
+> **⚠ 本表不是宣言**：最后两栏是**命令与读数**，不是结论。读数现取——
+> `python world-core/tools/module_graph.py`（**以该命令输出为准，本表不复述通过数**）。
+>
+> **本表与 `WC-MODREG-001` §2 的分工（防止同一事实两处漂）**：
+> 本表的 `intent` 与 `deps` 两栏**逐字取自** `WC-MODREG-001` §2 的同名列，
+> **该册是唯一权威**；两处不一致时**以 `WC-MODREG-001` §2 为准**（本条没有机核判据，**只有人核**）。
+
+| 原子（真实路径） | intent（一句话） | 四件同夹（契约／实现／测试各在哪） | deps == import | 生成物（重跑命令／无） | 机核读数 |
+|---|---|---|---|---|---|
+| `src/ontology.rs`（`M01`） | 世界的**法律**：事件形状、合法变更的判据。 | 契约：`WC-IC-001` §5.1＋§3.5 的 `IF-005`；实现：本文件；测试：`tests/contract.rs::c04_ontology_load_rejects_missing_file_and_empty_families`、`tests/acceptance.rs::t6_bad_ontology_refuses_to_start` | 声明 `M05`＝真实 import `M05`（**逐边相等**） | 无 | 判据② 该模块 `deps_judged=True`、`deps_declared_unverified=∅`、`deps_undeclared=∅` |
+| `src/ledger.rs`（`M02`） | 世界的**事实**：只追加的语义事件日志，分配 `seq`，处理崩溃尾迹。 | 契约：`WC-IC-001` §5.2＋§3.1 的 `IF-001`；实现：本文件；测试：`tests/contract.rs::c22_file_always_ends_on_a_line_boundary`、`tests/acceptance.rs::t2_events_survive_restart` | 声明 `M05`＝真实 `M05` | 无 | 同上（该模块） |
+| `src/readmodel.rs`（`M03`） | **状态 = fold(账本)**：纯派生物，可随时删掉重算。 | 契约：`WC-IC-001` §5.3＋§3.9 的 `IF-009`；实现：本文件；测试：`tests/contract.rs::c06_incremental_apply_equals_full_fold`、`tests/acceptance.rs::t8_read_model_refuses_broken_ledger` | 声明 **无**＝真实**无**（生产代码零出边） | 无 | 同上（该模块） |
+| `src/lib.rs`、`src/main.rs`（`M04`） | 装配启动，持有**唯一写入口** `World::commit`。 | 契约：`WC-IC-001` §5.4＋§3.8 的 `IF-008`；实现：本两文件；测试：`tests/contract.rs::c15_errors_carry_machine_readable_codes`、`tests/atom_declared_only.rs::b05_cli_append_of_an_undeclared_entity_is_refused` | 声明 `M01,M02,M03,M05,M06,M07,M08,M09,M10`（9 边）＝真实 9 边 | 无 | 同上（该模块） |
+| `src/gate.rs`、`src/guard.rs`（`M05`） | 一件事**现在能不能做**：默认拒绝，按不可逆性加摩擦。 | 契约：`WC-IC-001` §5.5＋§3.2 的 `IF-002`；实现：本两文件；测试：`tests/contract.rs::c11_irreversible_is_owner_only_and_the_refusal_does_not_lie`、`tests/atom_reversibility.rs::a06_risk_sets_friction_weight_but_not_the_verdict` | 声明 `M10`＝真实 `M10` | 无 | 同上（该模块） |
+| `src/project/language.rs`（`M06`） | 结构化出口：逐行 JSON，给程序读。 | 契约：`WC-IC-001` §5.6＋§3.3 的 `IF-003`；实现：本文件；测试：`tests/acceptance.rs::t14_language_projection_matches_read_model`、`tests/projection_leaf.rs::p01_language_alone_is_complete_and_the_other_reading_never_runs` | 声明 `M03`＝真实 `M03` | 无 | 同上（该模块） |
+| `src/project/visual.rs`（`M07`） | 渲染出口：终端可读，**排版仍可被审计**。 | 契约：`WC-IC-001` §5.7＋§3.4 的 `IF-004`；实现：本文件；测试：`tests/acceptance.rs::t15_visual_projection_is_human_readable_yet_auditable`、`tests/projection_leaf.rs::p02_visual_alone_is_complete_and_the_other_reading_never_runs` | 声明 `M03`＝真实 `M03` | 无 | 同上（该模块） |
+| `src/checkpoint.rs`（`M08`） | **带 `base_seq` 的缓存**，非真相；删掉后重算结果必须相同。 | 契约：`WC-IC-001` §5.8＋§3.10 的 `IF-010`；实现：本文件；测试：`tests/cli.rs::cli15_usage_lists_three_checkpoint_subcommands`、`tests/cli.rs::cli17_checkpoint_resume_falls_back_to_post_hoc_comparison` | 声明 `M03,M05`＝真实 `M03,M05` | 无 | 同上（该模块） |
+| `src/channel.rs`（`M09`） | 跨进程入口：**一个套接字一个身份**，权限即身份。 | 契约：`WC-IC-001` §5.9＋§3.6 的 `IF-006`；实现：本文件；测试：`tests/contract.rs::c14_channel_takes_identity_from_kernel_not_from_request`、`tests/channel_bounds.rs::l02_the_second_simultaneous_connection_is_refused` | 声明 `M05`＝真实 `M05` | 无 | 同上（该模块） |
+| `src/carrier/`（`M10`，**目录型**：10 个 `.rs`） | **载体侧的手**：按清单调载体，只执行不裁决。 | 契约：`WC-IC-001` §5.10 的 `IF-011`；实现：该目录下 10 个文件；测试：`tests/atom_reversibility.rs::a07_carrier_undo_is_neither_cross_checked_nor_a_proof_of_world_reversibility` | 声明 **无**＝真实**无** | 无 | 同上（该模块；目录型也**逐边核对**，不整条跳过） |
+
+**A-1…A-6 在本文件里各落在哪一栏（逐条给落点，不写"本文件遵循原子化"）**：
+
+| 约定 | 落点 |
+|---|---|
+| **A-1 单意图** | 上表 `intent` 列**每行一句**（机器面在 `WC-MODREG-001` §2，判据①） |
+| **A-2 一个原子一个文件夹，四件同夹** | 上表「四件同夹」列**逐行给出三处落点**。⚠ **本仓的测试不在 `src/` 同夹**（在 `world-core/tests/`）⇒ 按**可指认**判、不按同目录判，口径与判据③ 一致 |
+| **A-3 契约字段齐** | `intent`／`input`／`output` 见下文各模块节的「关键结构」与「不变量」；`side_effects` 的模块级落点是 `WC-MODREG-001` §2 的 `side_effects` 列 |
+| **A-4 `deps == import` 且无环** | 上表 `deps == import` 列（判据② 逐模块逐边相等；环按强连通分量逐条打印） |
+| **A-5 生成物不许手编** | **本文件不是生成物**；上表「生成物」列对十个模块**一律为"无"**。本仓由判据⑪⑫⑬ 管的生成物是 `openspec/BRIDGE.md`／`openspec/specmap.json`／`openspec/BOOK/节对齐.md` 那一族 |
+| **A-6 UTF-8 无 BOM** | 本文件自身（`python world-core/tools/plain_text_audit.py <本文件>`） |
+
+> **覆盖口径（如实登记）**：上表**十行＝`M01`–`M10`**，与 `WC-MODREG-001` §2 的十行**同行数**。
+> 本文件正文的逐模块细节节**只写 `M01`–`M09`**（`M10` 的实现细节在 `src/carrier/` 各文件头注与
+> `WC-IC-001` §5.10）——那是**正文覆盖面**的既知状态，不是"`M10` 已在此详述"。
+
+---
+
 ## 一、`M01` 本体（法律·形状）—— `src/ontology.rs` / `ontology.json`
 
 | 项 | 细节 |

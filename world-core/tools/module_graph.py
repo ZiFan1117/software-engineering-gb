@@ -9,17 +9,24 @@ r"""module_graph.py —— 机核层的守卫：把 `WC-ATOM-001` §四 机核�
 
 | # | 断言 | 落点 |
 |---|---|---|
-| 1 | 每个原子有且只有一句 `intent` | **未建** |
-| 2 | 每原子的实现／测试／契约三件齐备 | 部分（测试在 `tests/*.rs`，与 src 不同夹） |
-| 3 | `deps == import` 且无环 | **未建**（`tools/module_graph.py --check`） |
-| 4 | 生成物与源一致（`WC-MODREG-001`） | 未建闸 |
+| 1 | 每个原子有且只有一句 `intent` | 本脚本判据① |
+| 2 | 每原子的实现／测试／契约三件齐备 | 本脚本判据③ |
+| 3 | `deps == import` 且无环 | 本脚本判据② |
+| 4 | 原子档字段齐备且取值真（登记表每一行的原子化栏位） | 本脚本判据④ |
+| 5 | 生成物与源一致（`WC-MODREG-001`） | **仍未建闸**——本脚**不**声称它在管这条 |
 
 **一个从不失败的检查不是装饰，是假证**——本项目既有口径（`tools/spec_bridge.py` 文件头）。
-本脚本就是 §四 第 1–3 条（原子侧）的**执行者**：任一条不成立即非零退出，
+本脚本是 §四 第 1–3 条（原子侧）的**执行者**：任一条不成立即非零退出，
 且 `--self-test` 为**每条判据各造一个反例**，反例不变红即判该守卫是装饰、拒绝合入。
 
-四条判据（与 `WC-ATOM-001` §二 六条约定的 A-1/A-2/A-4 逐条对应）
------------------------------------------------------------------
+⚠️ **上表第 5 条的如实口径**：`WC-ATOM-001` §二 A-5 要求「生成物不许手编」，而它自己 §三
+把 `WC-MODREG-001` 写作「生成物，勿手编」。**本仓到今天为止没有任何生成器产出该表**——
+那份登记表是**手编**的。故本脚本**不**把 A-5 列入自己的判据（把它写成已建闸就是假证）；
+`WC-ATOM-001` §五 与 `WC-MODREG-001` §3.1 按「无生成器即不称生成物」在本轮就地更正，
+**A-5 的真实落点仍只有 `openspec/BRIDGE.md` 那一族生成物**（判据⑪⑫⑬ 管它）。
+
+判据（与 `WC-ATOM-001` §二 六条约定的 A-1/A-2/A-3/A-4 逐条对应）
+------------------------------------------------------------------
 ① **A-1 单意图原子性**（`WC-ATOM-001` §二 A-1）
    每个模块**有且只有一句** `intent`，且 ≤30 字；出现并列两事（`与`/`和`/`及`）⇒ 报为可疑并列出。
    **数据源**：`WC-MODREG-001` §2 模块登记表（`M01`–`M10`）。
@@ -86,7 +93,33 @@ r"""module_graph.py —— 机核层的守卫：把 `WC-ATOM-001` §四 机核�
      另有**覆盖面**一项：`src/**/*.rs` 里**没有任何模块号认领**的文件（`WC-MODREG-001` §4.3 #1
        自己登记的缺口就是 `src/error.rs`）逐条列出。
 
-④ **自己也要自证**（`--self-test`）
+④ **A-3 契约字段齐 · 原子档栏位**（`WC-ATOM-001` §二 A-3 的**模块级**落点，**与 `WC-ATOM-001` §五 互为落点**）
+   A-3 要求 `intent / input / output / side_effects` 必写。**模块这一级的载体是 `WC-MODREG-001` §2**：
+   登记表**为每一行**给出下列栏位，本判据**逐行查、逐栏查**——缺一栏即指名报红。
+   **为什么要有它**：A-3 原文只钉在"`design.md` 的原子表"上（那是 change 件，**归档后就不在树里**），
+   于是"四个字段必写"这件事在**常驻文档**里没有任何人管；这条判据就是补上那个常驻落点。
+
+   | 栏位（表头逐字） | 查什么 |
+   |---|---|
+   | `intent（一句话）` | 列**在**、取值**非占位**、一句话（同一套口径：剥强调与空白后 ≤%d 字）、**无并列两事** |
+   | `deps 机核` | 列在、取值非空（登记表在这一格里自述"声明的依赖集必须与真实 import 集逐条相等"，且**点名本工具**） |
+   | `契约锚点（WC-IC-001）` | 列在、取值非空；**逐个 `IF-0xx` 必须在 `WC-IC-001` 里真出现**（数字不得凭空写） |
+   | `四件同夹证据` | 列在、取值非空；**每个 `tests/…::fn` token 必须是真存在的 `#[test]` 函数**（复用判据③的锚点面）；**至少要有一个**——一个都没有就是"只有声明、没有测试落点" |
+   | `side_effects` | 列在、取值非空（A-3：**不写副作用＝声明无副作用**，但不许留空） |
+
+   **取值真不真，不只查"非空"**：`契约锚点` 的 `IF-0xx` 与 `四件同夹证据` 的测试 token 都**回源核对**——
+   否则"填一格看着像"的假话照样过关（本项目对"搜字样 ≠ 认结构"有既有血泪口径）。
+   **⚠ 本判据的边界（如实说，不许含糊）**：它**不**判 `side_effects` 那句**内容对不对**
+   （机器读不出"这个模块有没有没写出来的副作用"⇒ **那一条只有人核**），
+   也不判 `契约锚点` 指的**那一节写得好不好**。它判的是"这一格填了、且填的号码/测试**真存在**"。
+
+   **语义口径**：`intent` 与表内既有的**「职责（一句话）」列同义**（那一列就是 A-1 的 `intent`，见判据①）。
+   本判据**要求两处都在、且逐字相同**——两处不一致即报红（同一件事两个说法，正是 A-1 要消灭的形态）。
+   **列序不得动**：本判据要求的栏位**一律加在表末**（`依赖模块` 之后）。
+   理由：`deps == import` 的取格是**按下标**（`cells[4]`）走的，`tools/ic_books_check.py` 同款——
+   在它前面插列会让两个门禁**读错列**，那种红是"改坏了门禁"，会被读成"世界坏了"。
+
+⑤ **自己也要自证**（`--self-test`）
    照 `tools/spec_bridge.py --self-test` 的结构与输出风格：搭一个**完好沙盒**做正控（四条应全绿），
    再**为每条判据各造一个反例**，反例不变红即判该守卫是装饰 ⇒ rc=1。
    正控与反例都打印逐字结果，并带"恢复后回到绿"的第二正控。
@@ -130,6 +163,25 @@ PLACEHOLDERS = ("", "—", "-", "–", "待补", "待定", "n/a", "N/A", "<待�
 
 #: 模块号形态（判定面唯一编号口径，`WC-MODREG-001` §3：「`M` + 两位数字，左补零」）。
 M_RE = re.compile(r"M\d{2}")
+
+#: 判据④ 要求的**原子档栏位**：{内部键: (报告名, 可接受的表头写法…)}。
+#: 取值按**表头**认列（不按下标）——表头被改名/漏字 ⇒ 报"列缺失"，不静默。
+#: ⚠️ 后缀 `（…）` 是**可选**的：表头写 `intent` 或 `intent（一句话）` 都认。
+ATOM_FIELDS = {
+    "a_intent":     ("intent（一句话）",     ("intent", "意图")),
+    "a_deps":       ("deps 机核",            ("deps 机核", "依赖机核")),
+    "a_anchor":     ("契约锚点",             ("契约锚点",)),
+    "a_evidence":   ("四件同夹证据",         ("四件同夹证据", "同夹证据")),
+    "a_side":       ("side_effects",         ("side_effects", "副作用")),
+    "a_machine":    ("机核读数",             ("机核读数",)),
+}
+#: ⚠️ 认列是**前缀＋边界**匹配（见 `_atom_col_map`），故别名之间**不许互为前缀**：
+#: 早先 `deps` 能匹配到 `deps 机核`，但它同时也能匹配到……任何以 `deps ` 开头的格；
+#: 真正的坑在反向——别名越短越容易被隔壁那格撞上。别名的形态与**真表表头逐字**一致最稳。
+#: 依赖栏位必须点名的工具（"本列由谁判"不许含糊）。
+ATOM_DEPS_TOOL = "module_graph.py"
+#: 机器读数列必须点名的判据（本工具自己那一条）。
+ATOM_MACHINE_MARK = "deps == import"
 
 
 # 非 UTF-8 控制台（Windows GBK/cp936）下，中文与记号会让 print 抛 UnicodeEncodeError
@@ -194,16 +246,61 @@ def visual_len(s):
 
 
 # ────────────────────────── 登记表解析 ──────────────────────────
+def _atom_col_map(text):
+    """`WC-MODREG-001` 全文里**每个原子档表块**的表头 → `{内部键: 下标}`。
+
+    为什么按表头认列而**不写死下标**：判据④（A-3 原子档栏位）要求的那几栏是**加在表末**的，
+    而 `deps == import` 的取格是按下标走的（本文件 `cells[4]`、`tools/ic_books_check.py` 同款）。
+    按表头认列 ⇒ 栏位顺序可以变、栏位可以增删，判据**只认名字**；
+    名字被改掉时它报"列缺失"，而不是悄悄取到隔壁那一格的文字
+    （本项目既有血泪口径：**搜字样 ≠ 认结构**、**判据不许取文件里第一处字样**）。
+
+    只认**表头行**（第一格逐字等于 `模块号`）。同一份文档里有多个表块（§2 主表、§2.1、附录 A 旧表…）
+    时逐块记一次；数据行按"最近一次见到的表头"归属。这样 §2 主表与附录 A 的旧表各按各的表头算。
+
+    ★ **下标必须与 `read_registry` 的数据行同口径**（血泪，本轮踩了）：
+    数据行走的是 `re.match(r"^\\|\\s*\\*{0,2}(M\\d{2})\\*{0,2}\\s*\\|(.*)$")` ＋ `m.group(2).split("|")`，
+    而 `(M\\d{2})` 后面那个 `\\s*` 会**吃掉模块号格与其后管道之间的空格**，`group(2)` 于是**不再**
+    以空格开头 ⇒ 它的 `cells[0]` 就是「模块名」，**比表头的 `line.split("|")[1:-1]` 少一格**。
+    表头按自身下标给出 `a_intent→6`，数据行同一栏却在 `cells[5]` ⇒ **每条原子判据都去读隔壁那一格**，
+    而输出看起来像"判据抓到了错"。故表头下标一律**减 1**（`i - 1`），与数据行对齐；
+    对齐关系写死在 `_atom_col_map` 的返回值里，由 `j_a0_atom_fields` 的回源核对兜底。
+    """
+    out, cur = [], None
+    for line in (text or "").split("\n"):
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [norm_cell(c) for c in line.split("|")[1:-1]]
+        if not cells or cells[0] != "模块号":
+            continue
+        cur = {}
+        for key, (_label, aliases) in ATOM_FIELDS.items():
+            for i, c in enumerate(cells):
+                # 认列口径：**别名 ＋ 边界**。边界＝行尾／`（`／空格。
+                # 为什么要有边界：`deps` 必须认到 `deps 机核`（别名后跟空格），
+                # 但一旦有人另加一列叫「证据」，无边界的 `startswith` 会把它和
+                # `四件同夹证据` 之外的名字混起来——认列必须按**边界**取，不按"像"取。
+                if any((c == a) or c.startswith(a + "（") or c.startswith(a + " ") for a in aliases):
+                    cur[key] = i - 1          # ← 与数据行的 `cells` 口径对齐（见 docstring ★）
+                    break
+        out.append(cur)
+    return out
+
+
 def read_registry(wc):
-    """返回 (path, text, {模块号: {line, name, intent, src_cell, ifs, deps, deps_cell}})。
+    """返回 (path, text, {模块号: {line, name, intent, src_cell, ifs, deps, deps_cell, atom}})。
 
     只在 `## §2 模块登记表` 这一节内取表（附录 A 是**旧表**、口径不同，
     混取会让判据失去意义——同 `tools/ic_books_check.py:80-91` 的口径）。
+
+    `atom` ＝ 该行**原子档栏位**的取值（键见 `ATOM_FIELDS`）。取不到的键**不出现**在 `atom` 里
+    ——判据④ 就是靠"键在不在"来判"列缺失"，而不是靠"取到了空串"。
     """
     p = os.path.join(wc, MODREG_REL)
     if not os.path.isfile(p):
         return p, "", {}
     text = read_text(p)
+    atom_cols = _atom_col_map(text)
     sec = re.search(r"(?ms)^##\s*§2\s*模块登记表(.*?)(?=^##\s|\Z)", text)
     rows = {}
     if not sec:
@@ -211,7 +308,16 @@ def read_registry(wc):
     lines = sec.group(1).split("\n")
     # 该节的绝对行号偏移（报错必须给**文件里的真行号**）
     off = text[: sec.start(1)].count("\n")
+    cur_atom = {}
     for i, line in enumerate(lines):
+        if line.lstrip().startswith("|"):
+            cells_h = [norm_cell(c) for c in line.split("|")[1:-1]]
+            if cells_h and cells_h[0] == "模块号":
+                cur_atom = next((a for a in atom_cols if all(
+                    a.get(k) is not None for k in ("a_intent", "a_deps", "a_anchor",
+                                                   "a_evidence", "a_side", "a_machine"))), {})
+                if not cur_atom:
+                    cur_atom = next((a for a in atom_cols), {})
         m = re.match(r"^\|\s*\*{0,2}(M\d{2})\*{0,2}\s*\|(.*)$", line)
         if not m:
             continue
@@ -229,6 +335,11 @@ def read_registry(wc):
                 raw = raw + "/"                           # 原格写的是目录 ⇒ 还原目录形态
             if raw not in src_all:
                 src_all.append(raw)
+        # 原子档栏位：按**表头下标**取值；下标越界 ⇒ 该键不出现（判据④ 报"列缺失"）
+        atom = {}
+        for key, idx in cur_atom.items():
+            if 0 <= idx < len(cells):
+                atom[key] = (cells[idx] or "").strip()
         rows[mid] = {
             "line": off + i + 1,
             "name": norm_cell(re.sub(r"（[^）]*）\s*$", "", cells[0])),
@@ -241,6 +352,8 @@ def read_registry(wc):
             "ifs": sorted(set(re.findall(r"IF-\d{3}", "|".join(cells[3:-1])))),
             "deps_cell": norm_cell(cells[4]),
             "deps": set(M_RE.findall(cells[4])),
+            "atom": atom,
+            "atom_cols_seen": bool(cur_atom),
         }
         # 「计划路径」的判据：登记表在这一行里自己声明了"尚未落成 / 计划"（M10 行的字面口径）。
         rows[mid]["planned"] = ("计划" in src_cell) or ("尚未落成" in src_cell)
@@ -961,6 +1074,129 @@ def test_anchor(wc, rows, source, spec_idx, real_tokens=None):
     return out
 
 
+# ────────────────────────── 判据④：原子档栏位（A-3 的模块级落点） ──────────────────────────
+def j_a0_atom_fields(wc, rows, reg_path, anchors=None, real_tokens=None):
+    """④ A-3 契约字段齐：登记表每一行的**原子档栏位**都在，且取值**回源为真**。
+
+    「在」＝按表头认到了这一列（见 `_atom_col_map`）；「真」＝逐项回源核对：
+      · `契约锚点` 里的每个 `IF-0xx` 必须在 `WC-IC-001` 里真出现（数字不得凭空写）；
+      · `四件同夹证据` 里的每个 `tests/…::fn` 必须是真存在的 `#[test]` 函数，且**至少一个**；
+      · `intent` 必须与「职责（一句话）」列**逐字相同**（同一件事两个说法 ⇒ 报红）。
+
+    **本判据不判的事（如实说）**：`side_effects` 的**内容对不对**机器读不出 ⇒ **那一档只有人核**。
+    本判据只判它"填了"。凡把它写成"已机核"的地方都是假证。
+    """
+    bad = []
+    if not rows:
+        return ["%s —— §2 模块登记表取不到行，原子档栏位**无从判定**" % rel(wc, reg_path)]
+    anchors = anchors or {}
+    real_tokens = real_tokens or set()
+    book = os.path.join(wc, IC_BOOK_REL)
+    book_text = read_text(book) if os.path.isfile(book) else ""
+    # `WC-IC-001` 里**真出现**的接口号（回源面；为空即整套锚点判据无判定面）
+    ic_ids = set(re.findall(r"IF-\d{3}", book_text))
+    for mid, row in sorted(rows.items()):
+        loc = "%s:%d" % (rel(wc, reg_path), row["line"])
+        atom = row.get("atom") or {}
+
+        def cell(key):
+            return norm_cell(atom.get(key, ""))
+
+        def miss(label, why):
+            bad.append("%s —— %s 的原子档栏位 `%s` %s" % (loc, mid, label, why))
+
+        # ① 六列都在（表头认得到）
+        if not row.get("atom_cols_seen"):
+            bad.append("%s —— %s 的**原子档栏位整组缺失**：§2 表的表头里一个原子列都认不到"
+                       "（表头被改名/被删/换成了别的表）——不得因取不到而静默通过" % (loc, mid))
+            continue
+        for key, (label, _aliases) in ATOM_FIELDS.items():
+            if key not in atom:
+                miss(label, "**整列不存在**（表头里没有这一栏）——A-3 要求它必写")
+        if any(k not in atom for k in ATOM_FIELDS):
+            continue
+
+        # ② intent：非占位／≤30 字／无并列两事／与「职责」列逐字相同
+        val = cell("a_intent")
+        if is_placeholder(val):
+            miss(ATOM_FIELDS["a_intent"][0], "取值=%r，属占位符/空" % val)
+        else:
+            n = visual_len(val)
+            if n > INTENT_MAX_CHARS:
+                miss(ATOM_FIELDS["a_intent"][0], "不是一句话：%d 字 > 上限 %d 字；逐字=%r"
+                     % (n, INTENT_MAX_CHARS, val))
+            hits = [mk for mk in PARALLEL_MARKERS if mk in val]
+            if hits:
+                miss(ATOM_FIELDS["a_intent"][0], "出现**并列两事**（连接词 %s）⇒ 拆；逐字=%r"
+                     % ("/".join("`%s`" % h for h in hits), val))
+            # ⚠️ 比较的两边必须**同口径**：`row["intent"]` 是剥过强调与反引号的，
+            #    故这边也走 `norm_cell`。踩过的坑：拿**原样格**去比 ⇒ 格里凡是带
+            #    `**` 强调的都被判"不一致"——**误红**（判据比事实更严，同"判据不许取第一处字样"）。
+            if norm_cell(val) != row["intent"]:
+                miss(ATOM_FIELDS["a_intent"][0],
+                     "与「职责（一句话）」列**不一致**（两处=%r / %r）：同一件事只能有一个说法"
+                     "（那一列就是 A-1 的 `intent`，见判据①）" % (norm_cell(val), row["intent"]))
+
+        # ③ deps 机核：非空且点名了判它的工具
+        val = cell("a_deps")
+        if is_placeholder(val):
+            miss(ATOM_FIELDS["a_deps"][0], "取值=%r，属占位符/空" % val)
+        elif ATOM_DEPS_TOOL not in val:
+            miss(ATOM_FIELDS["a_deps"][0], "没有点名判它的工具（须含 `%s`）；逐字=%r"
+                 % (ATOM_DEPS_TOOL, val))
+
+        # ④ 契约锚点：非空，且每个 IF-0xx **在 `WC-IC-001` 里真出现**
+        val = cell("a_anchor")
+        ids = re.findall(r"IF-\d{3}", val)
+        if is_placeholder(val):
+            miss(ATOM_FIELDS["a_anchor"][0], "取值=%r，属占位符/空" % val)
+        elif not ids:
+            miss(ATOM_FIELDS["a_anchor"][0], "一个 `IF-0xx` 都没有；逐字=%r" % val)
+        elif not book_text:
+            miss(ATOM_FIELDS["a_anchor"][0], "**判定面缺失**：`%s` 读不到 ⇒ 接口号无从回源核对"
+                 % rel(wc, book))
+        else:
+            for iid in sorted(set(ids)):
+                if iid not in ic_ids:
+                    miss(ATOM_FIELDS["a_anchor"][0],
+                         "写了 `%s`，但 `%s` 里**找不到这个号**（凭空写的号不算契约锚点）"
+                         % (iid, rel(wc, book)))
+
+        # ⑤ 四件同夹证据：非空，且每个 tests/…::fn **是真存在的 #[test]**
+        val = cell("a_evidence")
+        toks = re.findall(r"`([^`]*?tests/[^`]*?)`", atom.get("a_evidence", "") or "")
+        toks = [t.strip() for t in toks if "::" in t]
+        if is_placeholder(val):
+            miss(ATOM_FIELDS["a_evidence"][0], "取值=%r，属占位符/空" % val)
+        elif not toks:
+            miss(ATOM_FIELDS["a_evidence"][0],
+                 "没有一个 `tests/…::fn` token（A-2 的「测试」件在这一行没有落点）；逐字=%r" % val)
+        elif not real_tokens:
+            miss(ATOM_FIELDS["a_evidence"][0],
+                 "**判定面缺失**：`%s/` 下取不到任何 `#[test]` ⇒ token 无从回源核对" % TESTS_REL)
+        else:
+            for t in sorted(set(toks)):
+                if t not in real_tokens:
+                    miss(ATOM_FIELDS["a_evidence"][0],
+                         "写了 `%s`，但**这个用例不存在**（`%s/` 里没有该 `#[test]`）"
+                         "——形态上等于声称存在" % (t, TESTS_REL))
+
+        # ⑥ side_effects：非空（**只判填没填**；内容对不对机器读不出 ⇒ 只有人核，见 docstring）
+        val = cell("a_side")
+        if is_placeholder(val):
+            miss(ATOM_FIELDS["a_side"][0],
+                 "取值=%r，属占位符/空（A-3：不写副作用＝声明「无副作用」，但不许留空）" % val)
+
+        # ⑦ 机核读数：非空且点名了本工具管的那一条判据
+        val = cell("a_machine")
+        if is_placeholder(val):
+            miss(ATOM_FIELDS["a_machine"][0], "取值=%r，属占位符/空" % val)
+        elif ATOM_MACHINE_MARK not in val:
+            miss(ATOM_FIELDS["a_machine"][0],
+                 "没有点名本工具管的那条判据（须含 `%s`）；逐字=%r" % (ATOM_MACHINE_MARK, val))
+    return bad
+
+
 # ────────────────────────── 四条判据 ──────────────────────────
 def j_a1_intent(wc, rows, reg_path, reg_text):
     """① A-1 单意图原子性：每个模块有且只有一句 `intent`（≤30 字），并列两事即报可疑。"""
@@ -1204,6 +1440,9 @@ def check(wc, intent_column="职责", base=None):
     # 见 `j_a4_dag_deps` docstring（"报告说已核对、判据其实跳过了"是实测踩过的假绿）。
     a4_judged = set()
     judgments = [
+        ("④ A-3 契约字段齐 · 原子档栏位（登记表每行的 intent／deps 机核／契约锚点／"
+         "四件同夹证据／side_effects／机核读数 逐栏齐备且取值回源为真）",
+         "a0_atom_fields", j_a0_atom_fields(wc, rows, reg_path, anchors, real_tokens)),
         ("① A-1 单意图原子性（每模块有且只有一句 intent，≤%d 字，无并列两事）" % INTENT_MAX_CHARS,
          "a1_intent", j_a1_intent(wc, rows, reg_path, reg_text)),
         ("② A-4 依赖单向 DAG 且 deps == import（逐模块逐边相等）",
@@ -1239,6 +1478,10 @@ def check(wc, intent_column="职责", base=None):
             "deps_judged": mid in a4_judged,
             "deps_import_tests_only": sorted(test_edges.get(mid, set()) - prod_edges.get(mid, set())),
             "test_anchors": anchors.get(mid, []),
+            # 原子档栏位（判据④ 的取值面）：**逐栏原样带上**，便于"报告说齐了、其实缺一栏"被当场看见
+            "atom_cells": dict(row.get("atom") or {}),
+            "atom_cols_present": sorted(row.get("atom") or {}),
+            "atom_cols_required": sorted(ATOM_FIELDS),
         })
     unclaimed = []
     for f in source["files"]:
@@ -1270,37 +1513,95 @@ def check(wc, intent_column="职责", base=None):
 
 
 # ────────────────────────── 自证：每条判据各造一个反例 ──────────────────────────
-#: 沙盒登记表（6 列，与 `WC-MODREG-001` §2 表结构一致：
-#: 模块号 | 模块名 | 职责（一句话） | 源码路径 | 提供接口 | 依赖模块）。
-#: ⚠️ 沙盒必须**自洽**：依赖列 == 真实 import 边集（生产面）——否则正控自己就红，
-#: 反例也就无从证明"红是反例造成的"。
-SANDBOX_MODREG = """# WC-MODREG-001 模块清单与模块号登记表
+#: 沙盒登记表的**取值行**：每行 6 格，格序与 `WC-MODREG-001` §2 表同结构：
+#: 模块名 | 职责（一句话） | 源码路径 | 提供接口 | 依赖模块 | 原子档（后 6 格拼在它里面）。
+#: ★ **格位由构造决定，不由手写决定**（血泪）：`read_registry` 按 `|` 切格，
+#:   格位＝管道符个数。仓内既有写法**行首不带管道**（`| a | b |` ⇒ 切成 [a, b]），
+#:   而手写 "| a | b | c |" 会多出首尾两个空格 ⇒ deps 落到 cells[3]、intent 落到 cells[5]，
+#:   于是**每条原子判据都在读隔壁那一格**，输出看起来却像"判据抓到了错"。
+#:   故这里一律用 `" | ".join(...)`，表头与体行同一函数产出。
+SANDBOX_COLS = ("模块名", "职责（一句话）", "源码路径", "提供接口", "依赖模块",
+                "intent（一句话）", "deps 机核", "契约锚点（WC-IC-001）",
+                "四件同夹证据", "side_effects", "机核读数")
 
-## §1 目的与范围
 
-沙盒用最小登记表，只为验证守卫会红。
+def _sandbox_row(mid, name, duty, src, iface, deps,
+                 anchor, ev, side, machine=None):
+    """一行的 11 格（**不含**模块号格；`read_registry` 从行首正则吃掉的正是它）。"""
+    return [name, duty, src, iface, deps,
+            duty,                                        # intent ＝「职责」列逐字
+            "由 `module_graph.py` 判 deps == import",
+            anchor, ev, side,
+            machine or "以判据② 现场读数为准（判 deps == import）"]
 
-## §2 模块登记表
 
-| 模块号 | 模块名 | 职责（一句话） | 源码路径 | 提供接口 | 依赖模块 |
-|---|---|---|---|---|---|
-| **M01** | 本体 | 词表身份的唯一出处 | `src/ontology.rs` | **IF-005** | 无 |
-| **M02** | 门禁 | 现在能不能做的裁决 | `src/gate.rs`、`src/guard.rs` | **IF-002** | `M01` |
-| **M03** | 读模型 | 状态由账本折叠而来 | `src/readmodel.rs` | **IF-009** | `M02` |
-| **M04** | 运行时 | 运行时的组装入口 | `src/lib.rs`、`src/main.rs` | **IF-008** | `M02`、`M03`、`M05` |
-| **M05** | 投影 | 出口只有一种说法 | `src/project/visual.rs` | **IF-004** | `M01` |
-| **M06** | 载体 | 只执行不裁决 | `src/carrier/` | **IF-011** | `M01` |
+def _table_row(cells):
+    """按仓内既有写法拼一行：`| ` ＋ 各格 ＋ ` |`。
 
-### §2.1 共同模块、未登记文件与模块号边界
+    ⇒ `row.split("|")` 得到 `["", c0, c1, …, ""]`，`read_registry` 用
+    `m.group(2).split("|")` 拿到的正是 `[c0, c1, …]`（**格位与逐个下标对齐**）。
+    """
+    return "| " + " | ".join(cells) + " |"
 
-| 共同模块 | 占号 | 归属 | 依据 |
-|---|---|---|---|
-| `src/project/mod.rs` | **不占号** | 属 `M01` 的机制面（沙盒用；名义归属故意挑一个 M04 **没有** import 的号） | 用来验"共同模块不作边目标"这条口径 |
 
-## §3 模块编号规则
+SANDBOX_ROWS = [
+    ("**M01**", _sandbox_row("**M01**", "本体", "词表身份的唯一出处", "`src/ontology.rs`",
+                             "**IF-005**", "无",
+                             "`WC-IC-001` §5.1 的 `IF-005` 一节",
+                             "`tests/contract.rs::c02_ontology_loads`", "只读不写盘")),
+    ("**M02**", _sandbox_row("**M02**", "门禁", "现在能不能做的裁决",
+                             "`src/gate.rs`、`src/guard.rs`", "**IF-002**", "`M01`",
+                             "`WC-IC-001` §5.2 的 `IF-002` 一节",
+                             "`tests/contract.rs::c01_gate_refuses`",
+                             "拒绝必留痕，经 `M04` 请求")),
+    ("**M03**", _sandbox_row("**M03**", "读模型", "状态由账本折叠而来", "`src/readmodel.rs`",
+                             "**IF-009**", "`M02`",
+                             "`WC-IC-001` §5.3 的 `IF-009` 一节",
+                             "`tests/contract.rs::c03_readmodel_folds`",
+                             "无（生产代码不写盘）")),
+    ("**M04**", _sandbox_row("**M04**", "运行时", "运行时的组装入口",
+                             "`src/lib.rs`、`src/main.rs`", "**IF-008**", "`M02`、`M03`、`M05`",
+                             "`WC-IC-001` §5.4 的 `IF-008` 一节",
+                             "`tests/cli.rs::cli01_entry_smoke`",
+                             "经唯一写入口写账本")),
+    ("**M05**", _sandbox_row("**M05**", "投影", "出口只有一种说法",
+                             "`src/project/visual.rs`", "**IF-004**", "`M01`",
+                             "`WC-IC-001` §5.5 的 `IF-004` 一节",
+                             "`tests/contract.rs::c04_visual_renders`",
+                             "只读，不写任何东西")),
+    ("**M06**", _sandbox_row("**M06**", "载体", "只执行不裁决", "`src/carrier/`",
+                             "**IF-011**", "`M01`",
+                             "`WC-IC-001` §5.6 的 `IF-011` 一节",
+                             "`tests/contract.rs::c05_carrier_runs`",
+                             "动载体，对账本零写权限")),
+]
 
-沙盒不展开。
-"""
+
+def _sandbox_modreg(extra_rows=()):
+    """沙盒登记表：表头与体行**同一套格位构造**（见 `_table_row` 的血泪注）。
+
+    `extra_rows`：额外的 `(模块号, 格列表)` 行（各反例自备，见反例④b）。
+    """
+    lines = [_table_row(["模块号"] + list(SANDBOX_COLS)),
+             "|" + "---|" * (len(SANDBOX_COLS) + 1)]
+    for mid, cells in list(SANDBOX_ROWS) + list(extra_rows):
+        assert len(cells) == len(SANDBOX_COLS), (
+            "%s 的格数 %d ≠ 表头 %d（格位错位会让判据读隔壁那一格）"
+            % (mid, len(cells), len(SANDBOX_COLS)))
+        lines.append(_table_row([mid] + cells))
+    return ("# WC-MODREG-001 模块清单与模块号登记表\n"
+            "\n## §1 目的与范围\n\n沙盒用最小登记表，只为验证守卫会红。\n"
+            "\n## §2 模块登记表\n\n" + "\n".join(lines) + "\n"
+            "\n### §2.1 共同模块、未登记文件与模块号边界\n\n"
+            "| 共同模块 | 占号 | 归属 | 依据 |\n|---|---|---|---|\n"
+            "| `src/project/mod.rs` | **不占号** | 属 `M01` 的机制面"
+            "（沙盒用；名义归属故意挑一个 M04 **没有** import 的号）"
+            " | 用来验共同模块不作边目标这条口径 |\n"
+            "\n## §3 模块编号规则\n\n沙盒不展开。\n")
+
+
+SANDBOX_MODREG = _sandbox_modreg()
+
 
 SANDBOX_SRC = {
     # ⚠️ `lib.rs` 必须写成**根级裸名 use**（`use gate::{…};`）——这是 `src/lib.rs:23-26` 的
@@ -1405,6 +1706,19 @@ SANDBOX_BOOK = """# `WC-IC-001-v0.1` · 模块接口契约（沙盒）
 ## §5 模块接口契约（一模块一节）
 
 %(sections)s
+
+## §一 接口清单（沙盒）
+
+沙盒接口号总账（判据④ 的 `契约锚点` 回源核对**就查这份清单**）：
+
+| 接口编号 | 名称 | 提供模块 |
+|---|---|---|
+| `IF-002` | 门禁裁决 | `M02` |
+| `IF-004` | 视觉投影出口 | `M05` |
+| `IF-005` | 词表身份 | `M01` |
+| `IF-008` | 运行时入口（CLI） | `M04` |
+| `IF-009` | 状态折叠与重建 | `M03` |
+| `IF-011` | 载体动作执行 | `M06` |
 """
 
 SANDBOX_BOOK_SECTION = """### §5.%(k)d `%(mid)s` 沙盒模块 %(mid)s —— 模块接口契约
@@ -1739,10 +2053,16 @@ def self_test():
         # ── 反例④b：A-2 一整行"只有身份、没有落点"（登记表新增 M07，实现/测试/契约都缺）──
         # 这一条正对本项目的今天：`WC-MODREG-001` 登记了 `M10` 而 `src/carrier/` 曾不存在。
         # （号取 M07：沙盒里 M05 已占给投影、M06 已占给目录型载体模块。）
-        _write(reg, SANDBOX_MODREG.replace(
-            "\n## §3 模块编号规则",
-            "| **M07** | 通道 | 一个套接字一个身份 | `src/channel.rs` | **IF-006** | 无 |\n"
-            "\n## §3 模块编号规则", 1))
+        #
+        # ★ 这一行由**登记表构造器**拼，不靠 `.replace()` 插进沙盒全文——
+        #   12 列的表行用字符串替换插进去，一旦分隔符数错，红的是**别的判据**，
+        #   而那种红会被读成"判据坏了"。原子档栏位**填齐**：本反例要证明的是
+        #   「三件落点缺 ⇒ 判据③ 红」，不是「判据④ 红」，两件事不许混。
+        _write(reg, _sandbox_modreg(extra_rows=[
+            ("**M07**", _sandbox_row("**M07**", "通道", "一个套接字一个身份",
+                                     "`src/channel.rs`", "**IF-006**", "无",
+                                     "`WC-IC-001` §5.7 的 `IF-006` 一节",
+                                     "`tests/contract.rs::c01_gate_refuses`", "不写盘"))]))
         red, off = is_red(run(), "a2_four_in_one")
         hit_impl = any("M07" in x and "实现缺" in x for x in off)
         hit_test = any("M07" in x and "测试缺" in x for x in off)
@@ -1882,6 +2202,97 @@ def self_test():
             failures.append("反例⑧未变红或未报未认领文件")
         os.remove(orphan)
 
+        # ══════════ 判据④（A-3 原子档栏位）的反例：**逐条"改坏⇒必红"** ══════════
+        # 为什么每条都要单独造：判据④ 查六栏，只造一条反例证明不了另外五栏也在被看
+        #（本项目既有口径：**一判据一反例**，自证通过 ≠ 判据有效）。
+        # 每条都用 `_reg_edit` 做**字面**替换，改不动即报"自证材料脱节"，不静默跳过。
+
+        # 反例⑯：**整组列缺失** —— 把原子档那 6 列表头整块删掉。
+        # 期望：不是"静默通过"，而是指名"原子档栏位整组缺失"。
+        _write(reg, "\n".join(
+            (ln.split("| 职责（一句话） |")[0] + " |"
+             if ln.lstrip().startswith("| 模块号 ") else ln)
+            for ln in SANDBOX_MODREG.split("\n")))
+        red, off = is_red(run(), "a0_atom_fields")
+        hit = any("M01" in x and "整组缺失" in x for x in off)
+        print("  反例⑯（把原子档 6 列表头整块删掉 ⇒ 判据④ 应红，且**不得静默通过**）：%s"
+              % ("已红 OK" if (red and hit) else "*没红"))
+        if not (red and hit):
+            failures.append("反例⑯未变红：原子档栏位整组缺失时未报（判据④ 是装饰）")
+        _write(reg, SANDBOX_MODREG)
+
+        # 反例⑰：**intent 与「职责」列不一致** —— 同一件事两个说法（A-1 要消灭的形态）。
+        # ⚠️ 两处坑，都在本反例上踩过：
+        #   ① 这两格的字面**恰好相同** ⇒ 替换串必须带前后文，只动 intent 那一格
+        #      （短串 `| 词表身份的唯一出处 |` 会先命中「职责」列 ⇒ 反例根本没造出来）；
+        #   ② 改的必须是**字词**，不能只加 `**` 强调 —— 判据两边都走 `norm_cell`
+        #      （强调与反引号不算字），加个 `**` 不构成"两个说法"，反例于是永远不红。
+        if _reg_edit(reg,
+                     "| 无 | 词表身份的唯一出处 | 由 `module_graph.py` 判 deps == import |",
+                     "| 无 | 词表身份的唯一来处 | 由 `module_graph.py` 判 deps == import |",
+                     "反例⑰", failures):
+            red, off = is_red(run(), "a0_atom_fields")
+            hit = any("M01" in x and "不一致" in x for x in off)
+            print("  反例⑰（intent 与「职责（一句话）」列不一致 ⇒ 判据④ 应红）：%s"
+                  % ("已红 OK" if (red and hit) else "*没红"))
+            if not (red and hit):
+                failures.append("反例⑰未变红：两处 intent 不一致时未报（同一件事两个说法溜过去了）")
+        _write(reg, SANDBOX_MODREG)
+
+        # 反例⑱：**契约锚点写一个不存在的接口号** —— 凭空写的号不算契约锚点（回源核对）。
+        if _reg_edit(reg, "`WC-IC-001` §5.1 的 `IF-005` 一节",
+                     "`WC-IC-001` §5.1 的 `IF-099` 一节", "反例⑱", failures):
+            red, off = is_red(run(), "a0_atom_fields")
+            hit = any("M01" in x and "IF-099" in x and "找不到这个号" in x for x in off)
+            print("  反例⑱（契约锚点写不存在的 `IF-099` ⇒ 判据④ 应红）：%s"
+                  % ("已红 OK" if (red and hit) else "*没红"))
+            if not (red and hit):
+                failures.append("反例⑱未变红：凭空写的接口号被当成契约锚点（回源核对是装饰）")
+        _write(reg, SANDBOX_MODREG)
+
+        # 反例⑲：**四件同夹证据指向不存在的用例** —— 「形态上等于声称存在」正是要抓的。
+        if _reg_edit(reg, "`tests/contract.rs::c02_ontology_loads`",
+                     "`tests/contract.rs::c99_not_a_real_test`", "反例⑲", failures):
+            red, off = is_red(run(), "a0_atom_fields")
+            hit = any("M01" in x and "这个用例不存在" in x for x in off)
+            print("  反例⑲（同夹证据指向不存在的用例 ⇒ 判据④ 应红）：%s"
+                  % ("已红 OK" if (red and hit) else "*没红"))
+            if not (red and hit):
+                failures.append("反例⑲未变红：不存在的用例 token 被当成同夹证据")
+        _write(reg, SANDBOX_MODREG)
+
+        # 反例⑳：**side_effects 留空** —— A-3「不写副作用＝声明无副作用，但不许留空」。
+        if _reg_edit(reg, "| 只读不写盘 | 以判据②", "| — | 以判据②", "反例⑳", failures):
+            red, off = is_red(run(), "a0_atom_fields")
+            hit = any("M01" in x and "side_effects" in x for x in off)
+            print("  反例⑳（side_effects 填成占位符 `—` ⇒ 判据④ 应红）：%s"
+                  % ("已红 OK" if (red and hit) else "*没红"))
+            if not (red and hit):
+                failures.append("反例⑳未变红：副作用栏留空/占位时未报（A-3 那一栏没人看）")
+        _write(reg, SANDBOX_MODREG)
+
+        # 反例㉑：**机核读数不点判它的判据** —— 机器读数列必须说清"谁判的哪一条"。
+        if _reg_edit(reg, "以判据② 现场读数为准（判 deps == import）",
+                     "看着没问题", "反例㉑", failures):
+            red, off = is_red(run(), "a0_atom_fields")
+            hit = any("M01" in x and "机核读数" in x and "没有点名" in x for x in off)
+            print("  反例㉑（机核读数不点名判据 ⇒ 判据④ 应红）：%s"
+                  % ("已红 OK" if (red and hit) else "*没红"))
+            if not (red and hit):
+                failures.append("反例㉑未变红：机核读数写成一句无判据的感想也过关")
+        _write(reg, SANDBOX_MODREG)
+
+        # 反例㉒：**deps 机核栏不点名工具** —— "由谁判"不许含糊。
+        if _reg_edit(reg, "由 `module_graph.py` 判 deps == import",
+                     "依赖看起来是对的", "反例㉒", failures):
+            red, off = is_red(run(), "a0_atom_fields")
+            hit = any("M01" in x and "deps 机核" in x and "没有点名" in x for x in off)
+            print("  反例㉒（deps 机核栏不点名判它的工具 ⇒ 判据④ 应红）：%s"
+                  % ("已红 OK" if (red and hit) else "*没红"))
+            if not (red and hit):
+                failures.append("反例㉒未变红：依赖机核栏写成一句无工具的断言也过关")
+        _write(reg, SANDBOX_MODREG)
+
         # ── 第二正控：全部恢复后必须回到全绿 ─────────────────────────────
         back = run()
         bad2 = [r["judgment"] for r in back["judgments"] if not r["ok"]]
@@ -1896,7 +2307,7 @@ def self_test():
         print("  => 自证不通过：%s" % "；".join(failures))
         print("  => 按本项目口径：**这条守卫是装饰，拒绝合入**。")
         return 1
-    print("  => 自证通过：**三条判据**逐条在反例下变红、在正控下全绿"
+    print("  => 自证通过：**四条判据**逐条在反例下变红、在正控下全绿"
           "（正控 %d ＋ 正控附条 %d ＋ 反例 %d ＋ 恢复后复跑 %d——**数由上面打印的行现算**，不写死）。"
           % (tally["正控"], tally["正控附条"], tally["反例"], tally["恢复后复跑"]))
     return 0
