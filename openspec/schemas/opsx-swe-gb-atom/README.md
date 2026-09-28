@@ -2,7 +2,7 @@
 
 **它是谁**：一套 OpenSpec 1.13.2 工作流（schema）。产物链仍是 OpenSpec 的五件——
 `proposal → specs ∥ design → tasks → review`；它比既有的 `opsx-swe-gb` 多两样**可核的门禁面**：
-`WC-ATOM-001` §四 的**最小原子化**（原子表五栏 ＋ 机核读数）与**这一程踩过的经验**（每条给会红的执行者）。
+`WC-ATOM-001` §四 的**最小原子化**（原子表**逐栏非空**；**栏数以 `templates/design.md` 的表头为准**）与**这一程踩过的经验**（每条给会红的执行者）。
 
 **为什么这样定**：`opsx-swe-gb` 把流程侧要件收成了件内栏位，但它对"原子化"与"经验"只有**要求**、
 没有**落点**——要求写在件里而没有栏位承接，就会退化成口号（skill §五：**没有反例的判据是装饰**）。
@@ -93,7 +93,7 @@ npx --yes @fission-ai/openspec@1.13.2 status --change <name>
 | **R5 ＝ 前置闸／R4 ＝ 后置闸** | `schema.yaml` 的 `review.instruction` 与 `apply.instruction` | `review` 的 `requires: [tasks]`、`apply.requires: [tasks]` |
 | **签署（谁签、AI 不得代签）** | `templates/review.md` 的签署栏与执行者／批准者分离声明 | `spec_bridge.py` **判据⑥**（结论 ∈ 批准／通过／有条件通过 ∪ 驳回，且**批准人非空**）；**判据①**（归档目录必须有 `review.md`） |
 | **基线（需求／框架／产品）** | 本档**不立基线**（不新增册子）；`templates/design.md` 的 Open Questions 要求把"只能由作者落笔"的事（签字／裁定／追认）明写谁做什么、落点指向登记者 | 无机器判据；基线三律的出处是 `附件五-配置与版本.md` |
-| **配置管理与变更控制（CR／R5）** | `templates/proposal.md`：变更号**独占文档头的 `CR:` 一行**（标题之下第一行；**不是**一张属性表）；一个 change 目录＝一份 CR | `spec_bridge.py` 编号桥；`world-core/docs/S0-立项/WC-SCMP-001-v0.1.md` |
+| **配置管理与变更控制（CR／R5）** | `templates/proposal.md`：变更号**独占文档头的 `CR:` 一行**（**标题之下第 3 行**——第 2 行是空行；**不是**一张属性表）；一个 change 目录＝一份 CR | `spec_bridge.py` 编号桥；`world-core/docs/S0-立项/WC-SCMP-001-v0.1.md` |
 | **追溯 RTM** | `templates/spec.md`：编号从流程侧取，取不到写「无号·待增补」 | `world-core/docs/S1-需求/WC-RTM-001.csv`（现取 **14 列**，第 14 列「备注」是附录等价物）；`world-core/tools/trace_matrix.py` |
 | **编号桥（互相指、不互相抄）** | `templates/spec.md` 的编号条 ＋ `openspec/BRIDGE.md` | `spec_bridge.py` **判据④**（`BRIDGE.md` 必须覆盖规格树下**每一条** Requirement） |
 | ★ **precedence**：流程按 06-swe-gb；**机制／形式这一面的争执让给 OpenSpec** | `schema.yaml` 的 `fusion` 第 2 条（`source: international-process`）的 `evidence` 段内（含让路三要素） | 三要素齐；登记处 `openspec/BOOK/冲突总账.md` 的同名新节（标题含`让路三要素`） |
@@ -226,7 +226,7 @@ validate <name> --strict（无 delta）    ⇒ rc=1  Change must have at least o
 **第 3 格 · 融合判据的**权威文本自己在版本控制之外**
 - **事实（现取）**：本档引用的判据现口径原件是**.agents/skills/openspec-swe-gb-fusion/SKILL.md**，
   而它在 `1b58dc0` 的 git 里**不存在**（`git cat-file -e 1b58dc0:.agents/skills/openspec-swe-gb-fusion/SKILL.md` ⇒ rc=128）；
-  本仓 `.agents/skills/` 下 git 只跟踪 `worldcore-sdd` ＋ 七个 `openspec-*` 技能。主本在**设备上** `C:\Users\DIY\.agents\skills\`。
+  本仓 `.agents/skills/` 下 git 只跟踪 `worldcore-sdd` ＋ **6 个** `openspec-*` 技能（`apply-change`／`archive-change`／`explore`／`propose`／`sync-specs`／`update-change`）。主本在**设备上** `C:\Users\DIY\.agents\skills\`。
   可用的**仓内可达**替代是 `openspec/changes/fc-2026-001-openspec-into-cm/boundary.md`（`git ls-tree 1b58dc0` 可见）。
   ⇒ 与 skill §九 逐字「**闸在版本控制之外等于没有闸**」同形：**判据的文本在一个没有版本控制的面上**。
 - 选项甲：**只引仓内可达件**（`boundary.md`）＋把本格登记为"引用面在版本控制外"（**本档取的形态**）。**代价**：`boundary.md` 与 skill 全文是否等价，**无机器判据**。
@@ -252,6 +252,8 @@ validate <name> --strict（无 delta）    ⇒ rc=1  Change must have at least o
    **以你手上那棵树的命令输出为准**（`python world-core/tools/spec_bridge.py`；`openspec validate --all --strict`）。
    本档自己的三条是稳的：`openspec schema validate opsx-swe-gb-atom` ✓、七件 `table_width_audit.py` 0 红、UTF-8 无 BOM／LF。
 2. **模板里的栏位只保证"它出现在材料里"，不保证"填对了"。**
-   机器能判形态（证据行有没有 token、结论栏签没签），**判不了"断言是否与声明相符"**——那归评审（H-21 反面清单 #5／#9）。
+   机器能判形态（证据行有没有 token、结论栏签没签），**判不了"断言是否与声明相符"**——
+   那归评审：**流程侧有现成的反面清单 12 条**（`06-swe-gb/docs/02-评审与门禁/评审门禁与检查单.md` 的
+   「**反面清单（"格式对但内容是空的"12 种典型形态）**」；本处对应它第 5 条「把"未落实"写成"已落实"」与第 9 条「能力声明给不出检查／测试位置」）。
 3. **本档没有增加任何新的机器判据**。它复用既有守卫（`spec_bridge.py`／`module_graph.py`／`plain_text_audit.py`）。
    ⇒ 「原子化」那一列的"会红"是**那些脚本会红**，不是**本 schema 会红**——schema 本身不含校验器逻辑。
