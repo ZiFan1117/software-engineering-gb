@@ -32,7 +32,7 @@
 | 2 | 归档目录必须有非空 `review.md`；**归档件的结论栏必须已签**（结论 ∈ 批准／通过／有条件通过）**且批准人非空**，代签或占位一律判红 | 守卫判据①（在场）＋ **判据⑥（已签）**；`schema.yaml` 的 R5/R4 硬约定 |
 | 3 | `openspec/config.yaml` 的 `schema:` 必须为 `opsx-swe-gb`（**别让它被改回默认档**——那会让每个新 change 静默退回 4 产物原生链，评审与证据守卫全部消失） | 守卫判据③ |
 | 4 | 承载覆盖缺口的 `cover-*` change **必须存在且未归档**，其 `tasks.md` 保留未勾项（＝未实现的东西在册、可见、不装成已成立） | 守卫判据⑤ |
-| 5 | 融合档 schema 的**主本与副本对账**：主本 `D:\Code\10-openspec-swe-gb\schemas\` ↔ 本仓 `openspec/schemas/`，**七件逐文件 sha256 一致**；主本缺任何一件即为断链 | `openspec/schemas/README.md` §五 |
+| 5 | **本仓 `openspec/schemas/` 是源**；受控面＝本仓 README ＋ `opsx-swe-gb/` 六件（**共七件**；`opsx-swe-gb-atom/` **另计、只在本仓**）。镜像 `D:\Code\10-openspec-swe-gb\schemas\` **无 `.git`、不进受控面**；**若要动它，先备份并记 sha256、把回退办法写进台账**（循 `冲突总账.md` §7.10 先例） | `openspec/schemas/README.md` §五（口径改动与让路三要素已记在该节） |
 | 6 | 跑守卫：`python3 world-core/tools/spec_bridge.py`；它自己也要能自证会红：`--self-test`（**每条判据各造反例**＋正控＋"不应红"对照；**反例不变红即判该守卫是装饰**。**判据条数与逐条结论以 `--json` 的 `passed`/`failed` 为准，本件不复述条数**——实测该数本轮之内从 9 涨到 11） | 守卫 `--self-test` |
 | 7 | **任何一次"不按书来"的处置，必须写全让路三要素**：让的是哪一条／为什么要让／谁批的。**半写＝不写**（书自己的纪律：「冲突时要说明谁让」） | **守卫判据⑦**（按**件整体**判：三要素可分布在 proposal／design／tasks 里） |
 | 8 | **原子化编程**是本项目的强制约定：单意图原子性／一个原子一个文件夹（契约＋实现＋测试同夹）／`deps == import` 且无环／生成物不许手编／编码 UTF-8 无 BOM | `world-core/docs/S0-立项/WC-ATOM-001-v0.1.md`；机核工具 `world-core/tools/module_graph.py`（在建） |
