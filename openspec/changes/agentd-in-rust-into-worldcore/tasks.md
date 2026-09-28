@@ -13,7 +13,7 @@
 >
 > | 项 | 状态 |
 > |---|---|
-> | 第 1.4 件（`agent_undo.rs` 的 `u01`–`u04`） | **不落库**——断言清单已写在 `design.md`／本件（见 1.4），但**代码不进 `tests/`**，等 R5／追认 |
+> | 第 1.4 件（`agent_undo.rs` 的 `u01`–`u04`） | **已落库**——R5 批准到手之后落地（作者 2026-09-28 裁定「第 4 件起必须」先批准后实施「」 ⇒ 本件是在批准之后落的） |
 > | 文档口径改写（第 2 组） | **可以继续**（它不属"实施"） |
 > | 仓根 Go 退场备料（第 3 组） | **可以继续**（备料，不落） |
 >
@@ -78,15 +78,20 @@
       登记簿要回答的"哪些活还没干完"，由**账本折叠**回答」。
       **验收**：VM 上 `cargo test --locked --test agent_completion` ⇒ `ok. 4 passed; 0 failed`；本机守卫 16/0。
 
-- [ ] 1.4 **动手前的载体撤销点：可观察断言**：落 `world-core/tests/agent_undo.rs`（`u01`–`u04`），并改回该条 4 行证据。
-      **★ 本条按 2026-09-28 裁定【不落库】**（未获 R5 批准 ⇒ 实施面停手，见本件抬头）。
+- [x] 1.4 **动手前的载体撤销点：可观察断言**：落 `world-core/tests/agent_undo.rs`（`u01`–`u04`），并改回该条 4 行证据。
+      **★ 本条已落库**（R5／追认到手之后落的）。**实测读数（VM）**：`cargo test --locked --test agent_undo` ⇒ `test result: ok. 4 passed; 0 failed`；`cargo fmt --all -- --check` CLEAN；`cargo clippy --all-targets -- -D warnings` 无告警。
       **已完成的部分（可以做的：设计＋断言清单）**：断言清单与判据已写进 `design.md` 的原子表
       与本条下方「断言在哪」；**断言文件本身已在本机工作区写好但未入库**（`git status` 里是 `??`），
       **等 R5 批准或 H-14 追认之后再落**。
       **原子**：`design.md` 原子表第 5 行。**本件不改** `src/carrier/providers.rs`（行为已在，差的是断言）。
-      **断言在哪**（待落）：`world-core/tests/agent_undo.rs` 的 `u01_undo_happens_once_and_after_the_confirmation`／`u02_undo_failure_blocks_the_action`／`u03_no_undo_policy_means_zero_undo_calls`／`u04_carrier_undo_is_not_world_rollback`。
-      **变异怎么变红**（设计已定）：把 `src/carrier/providers.rs::execute` 里"需要撤销点则先做、做不成即拒绝"那一段**整段删掉**（只在本地做变异、验完**立刻恢复**，不许提交）⇒ `u01`／`u02` 必须红。
-      **正控**：`u03` 在变异下**仍应绿**（不需要撤销的策略本来就不该调）。
+      **断言在哪**：`world-core/tests/agent_undo.rs` 的 `u01_undo_happens_once_and_after_the_confirmation`／`u02_undo_failure_blocks_the_action`／`u03_no_undo_policy_means_zero_undo_calls`／`u04_carrier_undo_is_not_world_rollback`。
+      **变异怎么变红**（**已实测**）：把 `src/carrier/providers.rs::execute` 里「需要撤销点则先做、
+      做不成即拒绝」那一段**整段删掉**（只在 VM 上做变异、验完**立刻恢复**，**不许提交**）⇒
+      **实测 `u01`／`u02`／`u04` 三条一起红**（`test result: FAILED. 1 passed; 3 failed`），
+      **`u03` 仍绿** ✓（正控成立）。
+      ⚠ **我原先写「只有 `u01`／`u02` 会红」——那是错的**：删掉那一整段会连带让 `undo_ref` 恒为 `None`，
+      而 `u04` 正面断言「撤销点确实做了（`undo_ref.is_some()`）」⇒ 它**也该红、也真的红了**。
+      **这条按实测改**；恢复后 `test result: ok. 4 passed; 0 failed`。
 
 - [x] 1.5 把 `world-core/src/agent/mod.rs`（头注 ＋ `pub mod`）与 `world-core/src/lib.rs` 的一行 `pub mod agent;` 落在**第 1.1 笔**里（不要让它们单独成一笔：单独落会让 `cargo` 找不到模块源文件）。
 

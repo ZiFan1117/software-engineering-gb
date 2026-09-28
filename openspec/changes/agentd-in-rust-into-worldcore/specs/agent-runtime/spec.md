@@ -136,19 +136,19 @@ SHALL NOT 静默。
 - **WHEN** 一项高风险、撤销策略为动手前的能力被调用，而人确认通过
 - **THEN** 撤销编排 SHALL 被调用**恰好一次**，且该次调用 SHALL 发生在人确认**之后**；
   交给调用方的撤销点位置 SHALL 非空
-- **证据（待补）**：`world-core/tests/agent_undo.rs::u01_undo_happens_once_and_after_the_confirmation`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_undo.rs::u01_undo_happens_once_and_after_the_confirmation`
 
 #### Scenario: 撤销点失败 ⇒ 不执行
 
 - **WHEN** 撤销编排返回失败
 - **THEN** 执行 SHALL 不发生（可观察的副作用为零），且失败被如实报出（不是静默跳过）
-- **证据（待补）**：`world-core/tests/agent_undo.rs::u02_undo_failure_blocks_the_action`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_undo.rs::u02_undo_failure_blocks_the_action`
 
 #### Scenario: 不需要撤销的策略不编排
 
 - **WHEN** 能力的撤销策略不是"动手前"，或风险不是高风险
 - **THEN** 撤销编排 SHALL NOT 被调用（调用次数为零）
-- **证据（待补）**：`world-core/tests/agent_undo.rs::u03_no_undo_policy_means_zero_undo_calls`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_undo.rs::u03_no_undo_policy_means_zero_undo_calls`
 
 #### Scenario: 载体撤销点不是"世界可回滚"的证据
 
@@ -156,7 +156,7 @@ SHALL NOT 静默。
 - **THEN** 世界的账本 SHALL NOT 因此多出一条"回滚"记录，
   且读模型里该对象的字段 SHALL 仍反映**已经被做过的那次动作**——
   **撤销点不是补偿事件**
-- **证据（待补）**：`world-core/tests/agent_undo.rs::u04_carrier_undo_is_not_world_rollback`（落点：该测试文件与本条用例尚未落地）
+- **证据**：`world-core/tests/agent_undo.rs::u04_carrier_undo_is_not_world_rollback`
 
 ## 与既有能力的边界（**本件不重复认领，逐条给出既有落点**）
 
