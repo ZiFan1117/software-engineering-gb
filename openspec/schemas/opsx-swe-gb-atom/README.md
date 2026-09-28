@@ -72,48 +72,57 @@ npx --yes @fission-ai/openspec@1.13.2 status --change <name>
 | 落在哪一条 | 文件 ＋ 字段 | 复算命令 |
 |---|---|---|
 | 五件产物链与依赖（specs／design 由 proposal 阻塞；tasks 由 specs＋design 阻塞；review 由 tasks 阻塞） | `schema.yaml` 的 `artifacts:` 五条 `id`／`generates`／`requires` | `openspec status --change <name>` ⇒ 应见 `0/5 artifacts complete` 与逐条 `blocked by:` |
-| 模板真的被解析到（不是写着好看） | `artifacts[].template` | `openspec instructions <id> --change <name> --json` ⇒ `template` 长度**非空**（现取 1704／2153／2795／1128／5856） |
+| 模板真的被解析到（不是写着好看） | `artifacts[].template` | `openspec instructions <id> --change <name> --json` ⇒ `template` **非空**（**长度不写死**——它随模板逐次变化；现取五个非空即可） |
 | 形态门禁（delta 四个操作头、每 Requirement ≥1 个 `#### Scenario`） | `templates/spec.md` ＋ `schema.yaml` 的 `specs.instruction` | `openspec validate <name> --strict` |
 | **默认档由 `config.yaml` 决定**（不是由 schema 存放位置的优先级） | `openspec/config.yaml` 的 `schema:` | `spec_bridge.py` **判据③** 盯这一格 |
-| 归档门禁＝**tasks 全勾** | `schema.yaml` 的 `tasks.instruction` 末段 ＋ `templates/tasks.md` 头注 | `openspec validate --archived` ⇒ 未勾件报 `N incomplete tasks (x/y completed)` 并 rc=1 |
-| **`archive` 自己不拦**（不许拿它当门禁） | `schema.yaml` 的 `review.instruction` 明写 | 实测：tasks `0/2` 未勾时 `archive --yes` 仍 rc=0 并**已把 delta 合并进主规格** |
+| **归档时没有任何东西会拦你**——`archive` 不是门禁 | `schema.yaml` 的 `tasks.instruction`／`review.instruction`／`apply.instruction` 三处都写明 | 实测：tasks 未全勾时 `archive --yes` 仍 `rc=0`，**且已把 delta 合并进主规格** |
+| tasks 全勾这一条由**事后 lint** 复查（不是门禁） | `templates/tasks.md` 头注 ＋ `tasks.instruction` | `openspec validate --archived` ⇒ 未勾件报 `N incomplete tasks (x/y completed)` 并 rc=1，**红了要回退** |
 | **`--skip-specs` 的边界**：纯文档／工具类 change 无 delta 时，须在 `.openspec.yaml` 写 `skip_specs: true` | `.openspec.yaml`（CLI 生成，**不手改**） | 不写 ⇒ `validate --strict` 报 `Change must have at least one delta` rc=1；写了 ⇒ rc=0 |
+| ★ **precedence**：形式／机制按 OpenSpec；与流程冲突时**让给 OpenSpec** | `schema.yaml` 的 `fusion` 第 1 条（`source: openspec`）的 `evidence` 段内（含让路三要素） | 三要素齐；登记处 `openspec/BOOK/冲突总账.md` 的同名新节（标题含`让路三要素`） |
 
 ### 2.2 第 2 样 · **国际软件开发流程（06-swe-gb 那套）**
 
-判据以 `.agents/skills/openspec-swe-gb-fusion/SKILL.md` 的现行口径为准
-（⚠ 旧版那句「同址双读／流程侧只留一行指针／每条 Requirement 标题带 REQ 号」**已作废**）。
+判据现口径的**仓内可达**载体：`openspec/changes/fc-2026-001-openspec-into-cm/boundary.md`
+（⚠ 融合 skill 的 `SKILL.md` 本身**不在版本控制内**——本仓 `.agents/skills/` 下 git 只跟踪 `worldcore-sdd` 与七个 `openspec-*` 技能；这一格已登记进 §六第 3 格）。
+⚠ 旧版那句「同址双读／流程侧只留一行指针／每条 Requirement 标题带 REQ 号」**已作废**。
 
 | 落在哪一条 | 文件 ＋ 字段 | 出处／复算命令 |
 |---|---|---|
 | **阶段与产物 S0–S7** | 不在本档内；本档只消费其**交付物编号** | `world-core/docs/S0-立项/WC-SDP-001-v0.1.md` |
-| **评审 R0–R8** | `templates/review.md` §一 档位栏 ＋ §八 结论栏；`schema.yaml` 的 `review.instruction` | `world-core/docs/S0-立项/WC-SQAP-001-v0.1.md`；结论形式出处 `附件三-评审与门禁.md:96-97`（R4 三种／R5 两种） |
+| **评审 R0–R8** | `templates/review.md` §一 档位栏 ＋ §八 结论栏；`schema.yaml` 的 `review.instruction` | `world-core/docs/S0-立项/WC-SQAP-001-v0.1.md`；结论形式出处 `附件三-评审与门禁.md` 的「结论形式」列（**不引行号**：R4 三种／R5 两种） |
 | **R5 ＝ 前置闸／R4 ＝ 后置闸** | `schema.yaml` 的 `review.instruction` 与 `apply.instruction` | `review` 的 `requires: [tasks]`、`apply.requires: [tasks]` |
 | **签署（谁签、AI 不得代签）** | `templates/review.md` 的签署栏与执行者／批准者分离声明 | `spec_bridge.py` **判据⑥**（结论 ∈ 批准／通过／有条件通过 ∪ 驳回，且**批准人非空**）；**判据①**（归档目录必须有 `review.md`） |
-| **基线（需求／框架／产品）** | 不新增册子；`templates/design.md` 的 Open Questions 要求把"只能由作者落笔"的事明写落点 | 判据⑯ 的"四件已被撤回的说法"；基线三律出处 `附件五-配置与版本.md` |
-| **配置管理与变更控制（CR／R5）** | `templates/proposal.md`：变更号写在**文档头属性表**（不是首行）；一个 change 目录＝一份 CR | `spec_bridge.py` 编号桥；`world-core/docs/S0-立项/WC-SCMP-001-v0.1.md` |
+| **基线（需求／框架／产品）** | 本档**不立基线**（不新增册子）；`templates/design.md` 的 Open Questions 要求把"只能由作者落笔"的事（签字／裁定／追认）明写谁做什么、落点指向登记者 | 无机器判据；基线三律的出处是 `附件五-配置与版本.md` |
+| **配置管理与变更控制（CR／R5）** | `templates/proposal.md`：变更号**独占文档头的 `CR:` 一行**（标题之下第一行；**不是**一张属性表）；一个 change 目录＝一份 CR | `spec_bridge.py` 编号桥；`world-core/docs/S0-立项/WC-SCMP-001-v0.1.md` |
 | **追溯 RTM** | `templates/spec.md`：编号从流程侧取，取不到写「无号·待增补」 | `world-core/docs/S1-需求/WC-RTM-001.csv`（现取 **14 列**，第 14 列「备注」是附录等价物）；`world-core/tools/trace_matrix.py` |
 | **编号桥（互相指、不互相抄）** | `templates/spec.md` 的编号条 ＋ `openspec/BRIDGE.md` | `spec_bridge.py` **判据④**（`BRIDGE.md` 必须覆盖规格树下**每一条** Requirement） |
+| ★ **precedence**：流程按 06-swe-gb；**机制／形式这一面的争执让给 OpenSpec** | `schema.yaml` 的 `fusion` 第 2 条（`source: international-process`）的 `evidence` 段内（含让路三要素） | 三要素齐；登记处 `openspec/BOOK/冲突总账.md` 的同名新节（标题含`让路三要素`） |
 
 > ⚠ **仓层面一处必须先说的实测**：`.openspec.yaml` 的 `skip_specs` **不改变** `review` 那条闸。
-> `openspec archive --yes` 在任何情况下都不读 `review.md`——**真正的归档闸是 `spec_bridge.py` 判据①⑥**。
+> `openspec archive --yes` 在任何情况下都不读 `review.md`。**唯一会拦的两条是 `spec_bridge.py` 判据①（归档目录必须有 `review.md`）与判据⑥（已签）**，
+> 而它们**必须由人在归档前跑一次**才起拦阻作用；`archive` 动作本身**不带闸**。
 
 ### 2.3 第 3 样 · **最小原子化**（`WC-ATOM-001` §四，**落成可核的门禁项**）
 
-出处：`world-core/docs/S0-立项/WC-ATOM-001-v0.1.md` §四 机核清单。
+按 `WC-ATOM-001` §四（A-1…A-6）**逐条落进原子表的一栏**。**栏数以 `templates/design.md` 的表头为准**
+（原子／intent／四件同夹／deps == import／生成物／**机核读数**）：
 
-| 约定 | 落在哪一条（栏位） | 执行者（会红的那个） |
+| 约定 | 落在原子表的哪一栏 | 谁执行（**逐条人工执行并把读数贴进第 6 栏**） |
 |---|---|---|
-| **A-1 单意图原子性** | `templates/design.md` 原子表第 2 栏 `intent`（出现「与／和／及」并列两事即拆） | `python world-core/tools/module_graph.py` ⇒ 现取 `通过 3 / 失败 0` |
-| **A-2 一个原子一个文件夹（契约＋实现＋测试同夹）** | 原子表第 3 栏「四件同夹」——三件都要写**真实路径或用例名** | 同上（`module_graph.py` 判据②） |
-| **A-3 契约字段齐** | 原子表第 3 栏的"契约"格（规格条目／`WC-IC-001`） | `module_graph.py`（接口契约锚点） |
-| **A-4 `deps == import` 且无环** | 原子表第 4 栏 `deps == import` | `python world-core/tools/module_graph.py`；自证 `--self-test`（现取逐条"已红 OK"） |
-| **A-5 生成物不许手编** | 原子表第 5 栏「生成物（重跑命令 / 无）」 | `spec_bridge.py` **判据⑪⑫⑬**（`BRIDGE.md`／`specmap.json`／`节对齐.md` 逐字节一致） |
-| **A-6 UTF-8 无 BOM** | 原子表末栏「机核读数」 | `python world-core/tools/plain_text_audit.py --self-test` ⇒ 现取**含 BOM 反例判红 OK** |
+| **A-1 单意图原子性** | 第 2 栏 `intent`（一句话；出现「与／和／及」并列两事即拆） | 人工判；旁证 `WC-MODREG-001` 登记表的 `intent` 由 `python world-core/tools/module_graph.py` 核（现取 `通过 3 / 失败 0`），但它**不看本表** |
+| **A-2 一个原子一个文件夹（契约＋实现＋测试同夹）** | 第 3 栏「四件同夹」——三件都要写**真实路径或用例名** | 人工判；旁证同上（`module_graph.py` 判据②核的是 `src/` 登记面） |
+| **A-3 契约字段齐** | 第 3 栏的"契约"格（规格条目／`WC-IC-001`） | 人工判 |
+| **A-4 `deps == import` 且无环** | 第 4 栏 `deps == import` | `python world-core/tools/module_graph.py`（现取 `通过 3 / 失败 0`，`--self-test` 逐条"已红 OK"）＋人工贴读数 |
+| **A-5 生成物不许手编** | 第 5 栏「生成物（重跑命令 / 无）」 | `spec_bridge.py` **判据⑪⑫⑬**（`BRIDGE.md`／`specmap.json`／`节对齐.md` 逐字节一致） |
+| **A-6 UTF-8 无 BOM** | **第 6 栏「机核读数」**（编码这一个读数就写在这里） | `python world-core/tools/plain_text_audit.py --self-test` ⇒ 现取**含 BOM 反例判红 OK**；也可对单件跑同一条命令 |
 
-**★ 关键**：原子表**不是宣言**。第 6 栏「机核读数」要求把**命令与原始输出**贴上；
-写「无环」而没跑过那个命令 ＝ 把没做到写成做到了（skill §七）。
-`world-core/tools/module_graph.py` **已在版本控制内**（`git ls-files` 可见）——skill §九「闸在版本控制之外等于没有闸」。
+**★ 两件必须说清的事（免得把这条读成"已落成自动门禁"）**：
+1. **本档没有新增任何机器判据。** `module_graph.py` 读的是 **`WC-MODREG-001` 登记表**，
+   **与 `design.md` 的原子表没有自动连接** ⇒ 原子表各栏是**人工执行 ＋ 贴读数**，
+   不是一条会红的自动闸。会红的那些是**既有脚本**（`module_graph.py`／`plain_text_audit.py`／`spec_bridge.py`）会红。
+2. **原子表不是宣言。** 第 6 栏要求把**命令与原始输出**贴上；写「无环」而没跑过那个命令
+   ＝ 把没做到写成做到了（skill §七）。
+   `world-core/tools/module_graph.py` **已在版本控制内**（`git ls-files` 可见）——skill §九「闸在版本控制之外等于没有闸」。
 
 ### 2.4 第 4 样 · **我们的经验**（逐条变约束）
 
@@ -142,7 +151,7 @@ npx --yes @fission-ai/openspec@1.13.2 status --change <name>
 | 文档集封闭（不许新增／拆册，要加先经作者） | `templates/design.md` Open Questions ＋ 排除清单的出处栏 | 评审席按 skill §二 逐件核 |
 | 不做「探针」这类额外件（检查并进既有门禁） | `templates/tasks.md` 头注（检查写进既有脚本，不另立件） | 评审席核「有没有为了检查另造第三个对象」 |
 | 引用写「命令＋步骤名」不写行号；标「逐字」就一字不差 | `templates/review.md` 的引用纪律栏 | 评审席逐条核 |
-| 中文串里用「」不用 ASCII 双引号 | 全模板示范（本件与模板即示例） | 评审席；`world-core/tools/table_width_audit.py` 管表宽 |
+| 中文串里用「」不用 ASCII 双引号 | 全模板沿用既有 `opsx-swe-gb` 的形态 | **本条无机器判据、至今未生效**——实测本档七件里与中日韩字符相邻的 ASCII `"` 仍有 200 余处，既有 `opsx-swe-gb` 七件同样如此（不是本档新引入的退步）；`world-core/tools/table_width_audit.py` 只管表宽，不管引号 |
 | 件看方向、态只要留账；改一件要连带改别处并回读核 | `templates/proposal.md` Impact 栏 ＋ `design.md` 影响分析 | 评审席核 `git status --porcelain` 逐字交件 |
 | 条目数取 `test result:` 的 totals 行、不按 token 数 | `templates/tasks.md` 验证与取证组 | 评审席核读数出处 |
 | 先取 sha 再读件（`git show <sha>:<path>`） | `templates/review.md` 环境指纹栏 | 评审席 |
@@ -195,13 +204,13 @@ validate <name> --strict（无 delta）    ⇒ rc=1  Change must have at least o
 
 ---
 
-## 六、待人裁的两格（**登记，不代选**）
+## 六、待人裁的三格（**登记，不代选**）
 
-> 两格都是"**规则条文／口径该放哪**"的裁定，按 skill §十四 与 H-13（AI 不代裁）：**只登记、不动手**。
+> 三格都是"**规则条文／口径该放哪**"的裁定，按 skill §十四 与 H-13（AI 不代裁）：**只登记、不动手**。
 > 本档只把**选项与代价**写清——**半写＝不写**，故三要素（让哪一条／为什么／谁批的）留待裁定人补。
 
 **第 1 格 · 「七件」清单随新档变化**（选项已在 `openspec/schemas/README.md` §五 与 `MAINTENANCE.md` 规则 5）
-- 选项甲：主本与本仓**都放**本档，把"七件"改成**十二件**（本档 root ＋ 六件）。
+- 选项甲：主本与本仓**都放**本档，把"七件"改成**十四件**（本档 root ＋ 六件，**两处各 7 件 ⇒ 2×7**）。
   **代价**：主本那一层**没有 `.git`**（现取：`D:\Code\10-openspec-swe-gb\` 下无 `.git`）⇒ 本档在主本那边**没有任何历史**。
 - 选项乙：**只放本仓** `openspec/schemas/`，主本不动。**代价**：打破"两处逐文件 sha256 一致"这条现行判据，§五 必须同步写明本档是仓内独有。
 - 选项丙：**先只放本仓**，另立一件把主本纳入版本控制后再同步。**代价**：多出一件待办，期间本档仍是仓内独有。
@@ -214,16 +223,28 @@ validate <name> --strict（无 delta）    ⇒ rc=1  Change must have at least o
 - 选项丙：**只登记事实**，条文落点等人定（本档取的形态）。**代价**：洞被点明但没有强制力。
 - **§7.10 的先例**：同类动作（改仓外的件）已由评审席升为规矩——**先备份、再写、并把回退办法写进台账**。这一格可循同一条路升格。
 
+**第 3 格 · 融合判据的**权威文本自己在版本控制之外**
+- **事实（现取）**：本档引用的判据现口径原件是**.agents/skills/openspec-swe-gb-fusion/SKILL.md**，
+  而它在 `1b58dc0` 的 git 里**不存在**（`git cat-file -e 1b58dc0:.agents/skills/openspec-swe-gb-fusion/SKILL.md` ⇒ rc=128）；
+  本仓 `.agents/skills/` 下 git 只跟踪 `worldcore-sdd` ＋ 七个 `openspec-*` 技能。主本在**设备上** `C:\Users\DIY\.agents\skills\`。
+  可用的**仓内可达**替代是 `openspec/changes/fc-2026-001-openspec-into-cm/boundary.md`（`git ls-tree 1b58dc0` 可见）。
+  ⇒ 与 skill §九 逐字「**闸在版本控制之外等于没有闸**」同形：**判据的文本在一个没有版本控制的面上**。
+- 选项甲：**只引仓内可达件**（`boundary.md`）＋把本格登记为"引用面在版本控制外"（**本档取的形态**）。**代价**：`boundary.md` 与 skill 全文是否等价，**无机器判据**。
+- 选项乙：把融合 skill **纳入本仓版本控制**（或反过来，让它的主本进一个受控面）。**代价**：改规则面／文档集口径，要走完整「改 → 评审 → 签」，且要作者定"哪一处是权威"。
+- 选项丙：维持现状、**不登记**（**不取**——那正是"闸在版本控制之外"被继续放大的形态）。
+
 ---
 
 ## 七、本件自己不能证明的事（**别把它读成万能背书**）
 
-1. **它在仓里 `validate --all --strict` 的总读数取决于别人的在飞件。**
-   现取实测：本档自身 `schema validate` ✓、沙盒全链 ✓；但仓根 `validate --all --strict` 报
-   `Totals: 12 passed, 1 failed`，**那一件是另一条线的 `agentd-in-rust-into-worldcore`**
-   （只有 `proposal.md`，缺 delta ⇒ `Change must have at least one delta`），**与本档无关**。
-   同理 `spec_bridge.py` 现取 **14/2**，两条失败分别是该件的证据锚点与 `BRIDGE.md`／生成器不一致
-   ——**都是那条线的在飞状态**。⇒ **读本档的门禁时，先看那两个红是不是本档造成的。**
+1. **仓根两条门禁的读数取决于整棵仓的件，不只是本档。**
+   **钉在提交上看**（`1b58dc0` 的 pristine 全树，现取）：`openspec validate --all --strict` ⇒ **`12 passed, 0 failed`**、
+   `openspec validate --archived` ⇒ **`4 passed, 0 failed`**。
+   ⚠ **但它会随别人的在飞件变**：我在改造期间的工作区里就见过 `12 passed, 1 failed`（另一条线的
+   `agentd-in-rust-into-worldcore` 当时只有 `proposal.md`、缺 delta）与 `spec_bridge.py` 非全绿
+   （同一件的证据锚点与 `BRIDGE.md`／生成器不一致）。⇒ **别引用任何写死的门禁读数**；
+   **以你手上那棵树的命令输出为准**（`python world-core/tools/spec_bridge.py`；`openspec validate --all --strict`）。
+   本档自己的三条是稳的：`openspec schema validate opsx-swe-gb-atom` ✓、七件 `table_width_audit.py` 0 红、UTF-8 无 BOM／LF。
 2. **模板里的栏位只保证"它出现在材料里"，不保证"填对了"。**
    机器能判形态（证据行有没有 token、结论栏签没签），**判不了"断言是否与声明相符"**——那归评审（H-21 反面清单 #5／#9）。
 3. **本档没有增加任何新的机器判据**。它复用既有守卫（`spec_bridge.py`／`module_graph.py`／`plain_text_audit.py`）。

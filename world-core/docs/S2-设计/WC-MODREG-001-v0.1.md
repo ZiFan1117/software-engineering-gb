@@ -25,18 +25,18 @@
 
 ## §2 模块登记表
 
-| 模块号 | 模块名 | 职责（一句话） | 源码路径 | 提供接口 | 依赖模块 |
-|---|---|---|---|---|---|
-| **M01** | 本体（Ontology） | 世界的**法律**：事件形状、合法变更的判据。 | `src/ontology.rs`（`ontology.json` 为其入参） | **IF-005** 词表身份 | `M05`（静态墙，仅校验不写） |
-| **M02** | 账本（Ledger） | 世界的**事实**：只追加的语义事件日志，分配 `seq`，处理崩溃尾迹。 | `src/ledger.rs` | **IF-001** 账本读写 | `M05`（静态墙） |
-| **M03** | 读模型（Read Model） | **状态 = fold(账本)**：纯派生物，可随时删掉重算。 | `src/readmodel.rs` | **IF-009** 状态折叠与重建 | **无**（生产代码零出边） |
-| **M04** | 运行时（Runtime） | 装配启动，持有**唯一写入口** `World::commit`。 | `src/lib.rs`、`src/main.rs`（CLI 入口见 `src/main.rs:7-9`） | **IF-008** 运行时入口（CLI） | `M01`、`M02`、`M03`、`M05`、`M06`、`M07`、**`M08`**（`src/main.rs:506 use world_core::checkpoint::…`）、**`M09`**（`:622 use world_core::channel::…`）、**`M10`**（`:752-754 use world_core::carrier::…`） |
-| **M05** | 门禁（Gate） | 一件事**现在能不能做**：默认拒绝，按不可逆性加摩擦。 | `src/gate.rs`、`src/guard.rs`（`policy.json` 为能力表数据） | **IF-002** 门禁裁决 | **`M10`**（`src/gate.rs:32 use crate::carrier::capd::{Manifest as CarrierManifest, Risk as CarrierRisk};`） |
-| **M06** | 语言投影（Language Projection） | 结构化出口：逐行 JSON，给程序读。 | `src/project/language.rs` | **IF-003** 语言投影出口 | `M03` |
-| **M07** | 视觉投影（Visual Projection） | 渲染出口：终端可读，**排版仍可被审计**。 | `src/project/visual.rs` | **IF-004** 视觉投影出口 | `M03` |
-| **M08** | 检查点（Checkpoint） | **带 `base_seq` 的缓存**，非真相；删掉后重算结果必须相同。 | `src/checkpoint.rs` | **IF-010** 检查点读写与核验 | `M03`、`M05` |
-| **M09** | 通道（Channel） | 跨进程入口：**一个套接字一个身份**，权限即身份。 | `src/channel.rs`（`channel.json` 为其入参；**本仓 `world-core/` 根目录无此文件**，实测仅有 `ontology.json`、`policy.json`） | **IF-006** 跨进程通道 | `M05` |
-| **M10** | 载体适配器（Carrier Adapter） | **载体侧的手**：按清单调载体，只执行不裁决。 | `src/carrier/`（计划：`mod.rs`、清单解析、`device.rs`、`package.rs`、`job.rs`、`undo.rs`、`confirm.rs`）；执行清单 `cap.d/*.yaml` 为其入参，**与门禁策略同名对齐** | **IF-011** 载体动作执行 | **无**（源码 import 面没有兄弟模块引用——三条"设计意图"见本表下的说明） |
+| 模块号 | 模块名 | 职责（一句话） | 源码路径 | 提供接口 | 依赖模块 | intent（一句话） | deps 机核 | 契约锚点（WC-IC-001） | 四件同夹证据 | side_effects | 机核读数 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **M01** | 本体（Ontology） | 世界的**法律**：事件形状、合法变更的判据。 | `src/ontology.rs`（`ontology.json` 为其入参） | **IF-005** 词表身份 | `M05`（静态墙，仅校验不写） |世界的**法律**：事件形状、合法变更的判据。|本列由 `module_graph.py` 判 deps == import|`WC-IC-001` §5.1（`M01` 节）＋ §3.5 的 `IF-005`|实现 `src/ontology.rs`；用例 `tests/contract.rs::c04_ontology_load_rejects_missing_file_and_empty_families`、`tests/acceptance.rs::t6_bad_ontology_refuses_to_start`|只读入参与只读校验，不写盘；不改世界的状态|以判据②（deps == import）现场读数为准|
+| **M02** | 账本（Ledger） | 世界的**事实**：只追加的语义事件日志，分配 `seq`，处理崩溃尾迹。 | `src/ledger.rs` | **IF-001** 账本读写 | `M05`（静态墙） |世界的**事实**：只追加的语义事件日志，分配 `seq`，处理崩溃尾迹。|本列由 `module_graph.py` 判 deps == import|`WC-IC-001` §5.2（`M02` 节）＋ §3.1 的 `IF-001`|实现 `src/ledger.rs`；用例 `tests/contract.rs::c22_file_always_ends_on_a_line_boundary`、`tests/acceptance.rs::t2_events_survive_restart`|追加写账本文件（唯一非追加动作是启动期截掉末尾半行）；建/删单写者锁文件|以判据②（deps == import）现场读数为准|
+| **M03** | 读模型（Read Model） | **状态 = fold(账本)**：纯派生物，可随时删掉重算。 | `src/readmodel.rs` | **IF-009** 状态折叠与重建 | **无**（生产代码零出边） |**状态 = fold(账本)**：纯派生物，可随时删掉重算。|本列由 `module_graph.py` 判 deps == import|`WC-IC-001` §5.3（`M03` 节）＋ §3.9 的 `IF-009`|实现 `src/readmodel.rs`；用例 `tests/contract.rs::c06_incremental_apply_equals_full_fold`、`tests/acceptance.rs::t8_read_model_refuses_broken_ledger`|生产代码零写盘、零出边；状态只活在内存里|以判据②（deps == import）现场读数为准|
+| **M04** | 运行时（Runtime） | 装配启动，持有**唯一写入口** `World::commit`。 | `src/lib.rs`、`src/main.rs`（CLI 入口见 `src/main.rs:7-9`） | **IF-008** 运行时入口（CLI） | `M01`、`M02`、`M03`、`M05`、`M06`、`M07`、**`M08`**（`src/main.rs:506 use world_core::checkpoint::…`）、**`M09`**（`:622 use world_core::channel::…`）、**`M10`**（`:752-754 use world_core::carrier::…`） |装配启动，持有**唯一写入口** `World::commit`。|本列由 `module_graph.py` 判 deps == import|`WC-IC-001` §5.4（`M04` 节）＋ §3.8 的 `IF-008`|实现 `src/lib.rs`、`src/main.rs`；用例 `tests/contract.rs::c15_errors_carry_machine_readable_codes`、`tests/atom_declared_only.rs::b05_cli_append_of_an_undeclared_entity_is_refused`|经唯一写入口往账本落笔；CLI 往 stdout/stderr 分流打印|以判据②（deps == import）现场读数为准|
+| **M05** | 门禁（Gate） | 一件事**现在能不能做**：默认拒绝，按不可逆性加摩擦。 | `src/gate.rs`、`src/guard.rs`（`policy.json` 为能力表数据） | **IF-002** 门禁裁决 | **`M10`**（`src/gate.rs:32 use crate::carrier::capd::{Manifest as CarrierManifest, Risk as CarrierRisk};`） |一件事**现在能不能做**：默认拒绝，按不可逆性加摩擦。|本列由 `module_graph.py` 判 deps == import|`WC-IC-001` §5.5（`M05` 节）＋ §3.2 的 `IF-002`|实现 `src/gate.rs`、`src/guard.rs`；用例 `tests/contract.rs::c11_irreversible_is_owner_only_and_the_refusal_does_not_lie`、`tests/atom_reversibility.rs::a06_risk_sets_friction_weight_but_not_the_verdict`|自身不写盘；**拒绝必留痕**——留痕是经 `M04` 落的 `notice` 事件，不是它自己写账本|以判据②（deps == import）现场读数为准|
+| **M06** | 语言投影（Language Projection） | 结构化出口：逐行 JSON，给程序读。 | `src/project/language.rs` | **IF-003** 语言投影出口 | `M03` |结构化出口：逐行 JSON，给程序读。|本列由 `module_graph.py` 判 deps == import|`WC-IC-001` §5.6（`M06` 节）＋ §3.3 的 `IF-003`|实现 `src/project/language.rs`；用例 `tests/acceptance.rs::t14_language_projection_matches_read_model`、`tests/projection_leaf.rs::p01_language_alone_is_complete_and_the_other_reading_never_runs`|往 stdout 输出逐行 JSON；不持状态、不写任何东西|以判据②（deps == import）现场读数为准|
+| **M07** | 视觉投影（Visual Projection） | 渲染出口：终端可读，**排版仍可被审计**。 | `src/project/visual.rs` | **IF-004** 视觉投影出口 | `M03` |渲染出口：终端可读，**排版仍可被审计**。|本列由 `module_graph.py` 判 deps == import|`WC-IC-001` §5.7（`M07` 节）＋ §3.4 的 `IF-004`|实现 `src/project/visual.rs`；用例 `tests/acceptance.rs::t15_visual_projection_is_human_readable_yet_auditable`、`tests/projection_leaf.rs::p02_visual_alone_is_complete_and_the_other_reading_never_runs`|往 stdout 输出可审计排版；不持状态、不写任何东西|以判据②（deps == import）现场读数为准|
+| **M08** | 检查点（Checkpoint） | **带 `base_seq` 的缓存**，非真相；删掉后重算结果必须相同。 | `src/checkpoint.rs` | **IF-010** 检查点读写与核验 | `M03`、`M05` |**带 `base_seq` 的缓存**，非真相；删掉后重算结果必须相同。|本列由 `module_graph.py` 判 deps == import|`WC-IC-001` §5.8（`M08` 节）＋ §3.10 的 `IF-010`|实现 `src/checkpoint.rs`；用例 `tests/cli.rs::cli15_usage_lists_three_checkpoint_subcommands`、`tests/cli.rs::cli17_checkpoint_resume_falls_back_to_post_hoc_comparison`|写/读检查点快照文件——**纯缓存**，删掉无后果；不写账本|以判据②（deps == import）现场读数为准|
+| **M09** | 通道（Channel） | 跨进程入口：**一个套接字一个身份**，权限即身份。 | `src/channel.rs`（`channel.json` 为其入参；**本仓 `world-core/` 根目录无此文件**，实测仅有 `ontology.json`、`policy.json`） | **IF-006** 跨进程通道 | `M05` |跨进程入口：**一个套接字一个身份**，权限即身份。|本列由 `module_graph.py` 判 deps == import|`WC-IC-001` §5.9（`M09` 节）＋ §3.6 的 `IF-006`|实现 `src/channel.rs`；用例 `tests/contract.rs::c14_channel_takes_identity_from_kernel_not_from_request`、`tests/channel_bounds.rs::l02_the_second_simultaneous_connection_is_refused`|建套接字文件并 `chmod 0600` ＋ `chown` 到目标 uid；自己不写账本（经 `M04` 请求）|以判据②（deps == import）现场读数为准|
+| **M10** | 载体适配器（Carrier Adapter） | **载体侧的手**：按清单调载体，只执行不裁决。 | `src/carrier/`（计划：`mod.rs`、清单解析、`device.rs`、`package.rs`、`job.rs`、`undo.rs`、`confirm.rs`）；执行清单 `cap.d/*.yaml` 为其入参，**与门禁策略同名对齐** | **IF-011** 载体动作执行 | **无**（源码 import 面没有兄弟模块引用——三条"设计意图"见本表下的说明） |**载体侧的手**：按清单调载体，只执行不裁决。|本列由 `module_graph.py` 判 deps == import|`WC-IC-001` §5.10（`M10` 节）的 `IF-011`|实现 `src/carrier/`（10 个 `.rs`）；用例 `tests/atom_reversibility.rs::a07_carrier_undo_is_neither_cross_checked_nor_a_proof_of_world_reversibility`|动载体（设备/包管理/进程、载体级撤销）并写被管路径——**对账本零写权限**|以判据②（deps == import）现场读数为准|
 
 > **「职责」列就是 A-1 的 `intent`**（登记表没有单独的 `intent` 列）：**一句话、≤30 字、不许并列两事**
 > （`WC-ATOM-001` §二 A-1）。**展开描述不在这里**——每个模块的完整职责、接口、不变量、依赖见
@@ -77,6 +77,12 @@
 | `src/delivery.rs` | **不占号** | 横跨 `M04`（`World::commit_requested`：经它把 `to` 写进信封）与 `M06`/`M07`/`M09`（三个出口读同一个判据）：**一条记录给谁**——带 `to` 只送该收件人、无 `to`（或空）＝广播。**只读派生**，不给 `World` 加字段、不写盘 | 本体 `ontology.json:18`（`"to": "string  # 目的地；空 = 广播"`）；书 §4.6；`openspec/changes/cover-unimplemented-capabilities/specs/delivery-and-resources/spec.md:11` |
 | `src/pairing.rs` | **不占号** | 属 `M02` 的机制面（**账本里的事后核对**），并由 `M10` 复用其中"什么算一次 `act` 的结果"这一条判据：**请求与应答的配对**——配对键 `request_id` ＋因果 `trace`。`M10` 因此对 `M02` 有一条真实依赖边（登记见 §2 `M10` 行） | 本体 `ontology.json:33`（`act` 必填 `request_id`）、`:19`（`trace`）；书 §4.6；`openspec/changes/cover-unimplemented-capabilities/specs/delivery-and-resources/spec.md:11` |
 | `src/error.rs` | **不占号** | **横跨全部模块**：错误码契约（`pub const PREFIX`、`pub fn code_of`、`pub fn has_code`）。它不属任何单个模块——每个模块都`s use` 它，**它是共同模块，不是缺口** | 附录 A §二「共同模块（不占模块号）」；**2026-09-28 由"登记缺口"改判为共同模块**：判据③ 与依赖抽取告警都点过它，处置是**规范登记**而不是继续挂着 |
+| `src/agent/` （`mod.rs`／`audit.rs`／`protocol.rs`／`completion.rs` **逐个占一行登记**，见下四行） | **不占号** | Agent 原动时（作者裁定三：Rust 实现＋属 world-core＋归入相应代码位置）。**无单一归属**：它今天**不是既有 M01–M10 任何模块的实现面**——是**新的一层**（执行侧的留痕与长活儿）；而 `M04` 的 CLI **尚未接它**（本件只落库，不接 CLI）⇒ 声明为**不占号的共同模块**，**不作任何模块的边目标** | 册 `openspec/BOOK/冲突总账.md` §7.15 的作者裁定（逐字三句）；`openspec/changes/agentd-in-rust-into-worldcore/specs/agent-runtime/spec.md` 的「与既有能力的边界」节；`WC-ATOM-001` §二 A-1 |
+| `src/agent/mod.rs` | **不占号** | 同上（Agent 原动时的模块面声明）；`pub mod audit/completion/protocol` 的出边是**模块内部**引用 | 同上 |
+| `src/agent/audit.rs` | **不占号** | 同上（结构化审计留痕） | 同上；会红断言 `tests/agent_audit.rs::g01`–`g04` |
+| `src/agent/protocol.rs` | **不占号** | 同上（行分隔结构化请求／应答） | 同上；会红断言 `tests/agent_protocol.rs::p01`–`p03` |
+| `src/agent/completion.rs` | **不占号** | 同上（完工通告、**不另立登记簿**）；它 `use crate::event`，而 `src/event.rs` 是不占号的共同模块 ⇒ **不产生模块号之间的边** | 同上；会红断言 `tests/agent_completion.rs::j01`–`j04` |
+| **可选：把 `src/agent/` 立为新模块号（`M11`）** | **待人裁** | 本行**不是登记**，是**如实登记的开口**：立 `M11` 属**配置项变更**（同 `M10` 的先例，见 §2 表下 `M10` 行注逐字「新增模块号属配置项变更（§四），**须走变更控制并随框架基线追认**」）。它牵动 `WC-IC-001` 的接口契约册（要新增一节）与 `WC-IRS-001` 的接口号（`IF-012`）⇒ **agent 不代选**，登记于此 | 册 §7.15「★ 仍待人裁的一格」；`WC-MODREG-001` §四 |
 | `src/project/language.rs`、`src/project/visual.rs` | 各占一（`M06`/`M07`） | 各自契约在文件头 | 附录 A §一 决定理由第 1 条 |
 | 注册表列出的 `ontology.json` / `policy.json` | 数据文件，不占号 | 实存（`world-core/ontology.json` 1928 字节、`world-core/policy.json` 2385 字节） | `Get-ChildItem world-core -File` 实测 |
 | **九个模块之间无循环依赖** | — | 判定面与证据见 §4.2 | — |
@@ -149,6 +155,56 @@
 | 变更 | 新增/合并/拆分模块号属配置项变更，须走变更控制；触及契约者走 R5（口径见附录 A §四） |
 | 校验 | 追溯矩阵里出现的每个模块号都必须能在 §2 找到；**本文件正文不得出现非本项目的模块号** |
 | 层 | 层由 §2.2 表达，**不编码进模块号** |
+
+---
+
+## §3.1 原子化设计在本表里的落点（**本表自己怎么承担 A-1…A-6**）
+
+> **口径**：A-1…A-6 是**原子化设计**的六条约定（出处 `WC-ATOM-001` §二）。
+> 本节写清**本表**承担其中哪几条、**在哪一列/哪条判据**里承担、**哪几条本表承担不了**——
+> 不写"本表遵循原子化"这种没有落点的话。
+
+| 约定 | 本表怎么承担 | 判据（谁判、判什么） | 判定面 |
+|---|---|---|---|
+| **A-1 单意图** | §2「**职责（一句话）**」列**就是**本模块的 `intent`；§2「`intent（一句话）`」列与它**逐字相同** | `python world-core/tools/module_graph.py` 判据①：每模块有且只有一句 `intent`、≤30 字、无并列两事（`与`/`和`/`及`）；判据④：两列**逐字一致** | **机核** |
+| **A-2 四件同夹** | §2「**源码路径**」列＝实现件；「**四件同夹证据**」列＝该模块的原子级用例（`tests/…::fn`）；「**契约锚点（WC-IC-001）**」列＝契约件 | 判据③：实现文件在盘上存在、`tests/` 里有用例能指到它、`WC-IC-001` 里有含该模块号的标题；判据④：证据列每个 token **必须是真存在的 `#[test]`**、锚点列每个 `IF-0xx` **必须在 `WC-IC-001` 里真出现** | **机核** |
+| **A-3 契约字段齐** | §2 末六列即本模块的 `intent`／`deps`／契约锚点／四件同夹证据／`side_effects`／机核读数 | 判据④：**逐行逐栏**非空；`intent` 非占位、无并列；`side_effects` 允许写"无"但**不许留空** | **机核**（**但 `side_effects` 那句内容对不对，机器读不出 ⇒ 只有人核**） |
+| **A-4 `deps == import` 且无环** | §2「**依赖模块**」列＝声明的出边集；「**deps 机核**」列点名判它的工具 | 判据②：**声明集 ≡ 代码里真实 import 的兄弟模块集**（逐模块逐边相等），且真实边与「声明∪真实」两条线**各自无环**（按强连通分量逐条打印环路径） | **机核** |
+| **A-5 生成物不许手编** | **本表不是生成物**——详见本节下方那条口径更正 | 本表**没有** A-5 的判据；A-5 的判据在 `openspec/BRIDGE.md` 那一族生成物上（`world-core/tools/spec_bridge.py` 判据⑪⑫⑬） | **本表不适用** |
+| **A-6 UTF-8 无 BOM** | 本文件自身 | `python world-core/tools/plain_text_audit.py <本文件>`（BOM／非法 UTF-8／NUL 判红，`--self-test` 含 BOM 反例） | **机核** |
+
+**本表承担不了的三件事（如实登记，不许读成"已覆盖"）**：
+
+1. **`side_effects` 的内容对不对**——判据④ 只能判它"填了"。一个模块有没有**没写出来**的副作用，
+   机器读不出：那要读源码、要问"这个模块还动了什么"。**这一条只有人核**，落在 R4 逐模块准出。
+2. **附录 A 的旧表不在判定面内**——§2 的表**每一行都被判到**；而附录 A 是历史全文、列数不同，
+   判据④ 只认 §2 的表头，**附录 A 里那些行不会被核**。
+3. **"一句话"是不是真的只说了一件事**——判据按字面查（≤30 字、无 `与`/`和`/`及`）。
+   用别的措辞把两件事塞进一句话，字面判据抓不到 ⇒ **词面判据的边界就在这里**，超出部分只有人核。
+
+> **⚠ A-5「生成物不许手编」的口径更正（本表此前被写成生成物）**
+>
+> `WC-ATOM-001` §三 的一张对照表里，本表被列为参照仓 `detail.json` 的对应物，并注了「**生成物，勿手编**」。
+> **该写法与事实不符，现就地更正**：本仓**没有任何生成器**产出 `WC-MODREG-001`——
+> 它是**人写的、机核回读的**登记表。
+>
+> **正确的分工是**：本表是**机器回读的输入**、不是生成物——
+> `module_graph.py` 判据①②③④ 与 `ic_books_check.py` 都**读本表**；
+> 而**该由生成器产出、且「改了输入必须重跑生成器」由判据管着**的那一族是
+> `openspec/BRIDGE.md`、`openspec/specmap.json`、`openspec/BOOK/节对齐.md`（判据⑪⑫⑬）。
+>
+> **为什么这条更正重要**：若继续把本表当"生成物"，
+> 读者会以为"改本表＝改生成物＝违规"，于是**没人敢改它**——
+> 而它是模块号、依赖、契约锚点的**唯一出处**。**一条说反了的分工，会把唯一的数据源锁死。**
+>
+> **让路三要素**（`WC-ATOM-001` §三 那一行是本项目自己的对照表，不是上位件；此处仍按同一格式写全）：
+> - **让的是哪一条**：`world-core/docs/S0-立项/WC-ATOM-001-v0.1.md` §三 对照表里
+>   「`detail.json`（生成物边车） | `WC-MODREG-001` 模块注册表（**生成物，勿手编**）」这一格。
+> - **为什么要让**：**本仓不存在产出该表的生成器**（全仓无任何脚本写该路径），
+>   故「生成物」是**空指**；而「勿手编」这句空指会把唯一数据源锁成不可维护。
+> - **谁批的**：**待作者裁**——本条是**执行者按事实就地更正**，**未获批准前不构成生效裁定**。
+>   若作者裁定"该表应当改为生成物"，则正确处置是**先建生成器**（并给"改输入必须重跑"的会红判据），
+>   再撤掉本节这段更正。**签字与裁定权不在执行者。**
 
 ---
 

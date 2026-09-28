@@ -11,18 +11,30 @@ description: "项目级 OpenSpec 工作流（原子档）：在 opsx-swe-gb 之�
 fusion:
   - source: openspec
     what: "OpenSpec 1.13.2 的整个体系：五件产物链、delta 四个操作头、`### Requirement` ＋ `#### Scenario`、`validate`／`archive`／`--skip-specs`／`config.yaml` 的 `schema:` 选择、归档门禁"
-    landing: "本文件的 artifacts（五件）与 apply；模板 `templates/*.md`；`openspec/schemas/README.md` §1.1"
-    evidence: "npx --yes @fission-ai/openspec@1.13.2 schema validate opsx-swe-gb-atom；以及用它跑一个真 change 的 validate／status／archive"
+    landing: "本文件的 artifacts（五件）与 apply；模板 `templates/*.md`；`openspec/schemas/README.md` §二（产物：一份产物、两侧各读它需要的那半）与 §五（同步规则·受控面）"
+    evidence: "npx --yes @fission-ai/openspec@1.13.2 schema validate opsx-swe-gb-atom；以及用它跑一个真 change 的 validate／status／archive。
+      ★ **precedence（作者 2026-09-28 裁定）**：**形式／机制按 OpenSpec；流程按 06-swe-gb；两者冲突处 OpenSpec 赢。**
+      这是一次**让路登记**，三要素齐：**让的是哪一条**＝`openspec/schemas/README.md` §一 的第 3 条
+      「两边都有的 → 形态随 OpenSpec、**内容随流程**」在被读成「内容也可以压过机制」时那一读法；
+      **为什么要让**＝作者裁定「这两个东西有冲突的呢，就按人家 openspec 来做这么个流程」——
+      冲突只发生在**工作流层内部**（OpenSpec 的形式/机制 ↔ 06-swe-gb 的流程），**书仍是最高上位**；
+      **谁批的**＝**作者**（原话逐字与四条读法登记在 `openspec/BOOK/冲突总账.md` 的新节）。"
   - source: international-process
     what: "06-swe-gb 那套国际／国标软件开发流程：S0–S7 阶段与交付物、R0–R8 评审（含 R4 三种／R5 两种结论）、签署与基线、配置管理与变更控制、RTM 追溯、H-01…H-26 硬条款"
     landing: "本文件的 review instruction（五栏签署、R4/R5 分档、环境指纹、『本档不能证明的事』）与 design instruction（影响分析、≥2 方案含不改案、回归范围 R-A…R-D、排除清单、L5 覆盖边界）；`proposal.md` 的变更号与档位节"
-    evidence: "`world-core/docs/S0-立项/WC-SCMP-001-v0.1.md`（R0–R8 与变更控制）、`WC-SQAP-001`（质量保证与评审）、`WC-SDP-001`（阶段与产物）、`WC-RTM-001`（追溯）；判据现口径见 `.agents/skills/openspec-swe-gb-fusion/` 的 §1／§5 与 `boundary.md`"
+    evidence: "`world-core/docs/S0-立项/WC-SCMP-001-v0.1.md`（R0–R8 与变更控制）、`WC-SQAP-001`（质量保证与评审）、`WC-SDP-001`（阶段与产物）；追溯面的实体是 `world-core/docs/S1-需求/WC-RTM-001.csv`。判据现口径的**仓内可达**载体是 `openspec/changes/fc-2026-001-openspec-into-cm/boundary.md`（⚠ 融合 skill 的 `SKILL.md` 本身**不在版本控制内**——本仓 `.agents/skills/` 下只跟踪 `worldcore-sdd` 与七个 openspec-* 技能；这一格已登记进 `README.md` §六第 3 格，等作者裁）。
+      ★ **precedence（作者 2026-09-28 裁定）**：**形式／机制按 OpenSpec；流程按 06-swe-gb；两者冲突处 OpenSpec 赢。**
+      这是一次**让路登记**，三要素齐：**让的是哪一条**＝流程侧「归档门禁＝tasks 全勾」（读成「归档动作自带闸」）那一读法，
+      以及 06-swe-gb 里任何**与 OpenSpec 机制直接对撞**的流程要求；**为什么要让**＝作者裁定（冲突时按 OpenSpec 做）；
+      **谁批的**＝**作者**。⇒ **内容归属不变**（R0–R8、签署、基线、变更控制、追溯仍按 06-swe-gb），
+      **只有机制/形式这一面的争执让给 OpenSpec**；**书仍是最高上位，本条不与书冲突时照 OpenSpec ✗**。
+      登记处：`openspec/BOOK/冲突总账.md` 的**同名新节（标题含`让路三要素`）**。"
   - source: minimal-atom
     what: "WC-ATOM-001 §四 的最小原子化：A-1 单意图原子性／A-2 一个原子一个文件夹（契约＋实现＋测试同夹）／A-3 契约字段齐／A-4 deps == import 且无环／A-5 生成物不许手编／A-6 UTF-8 无 BOM"
-    landing: "本文件的 design instruction『原子表』节（每原子四栏：intent／四件同夹／deps == import／生成物）与 tasks instruction 的原子勾选纪律；模板 `templates/design.md` 的原子表小节"
-    evidence: "机核工具 `world-core/tools/module_graph.py`（A-1／A-4／A-2）；编码闸 `world-core/tools/plain_text_audit.py`（A-6，含 BOM 反例）；契约册 `world-core/docs/S0-立项/WC-ATOM-001-v0.1.md`"
+    landing: "本文件的 design instruction『原子表』节（**栏数以 `templates/design.md` 的表头为准**：原子／intent／四件同夹／deps == import／生成物／机核读数）与 tasks instruction 的原子勾选纪律；模板 `templates/design.md` 的原子表小节"
+    evidence: "机核工具 `world-core/tools/module_graph.py`（A-1／A-4／A-2；**已在版本控制内**）；编码闸 `world-core/tools/plain_text_audit.py`（A-6，含 BOM 反例）；契约册 `world-core/docs/S0-立项/WC-ATOM-001-v0.1.md`。⚠ **落点边界（不许读成「已落成门禁项」）**：`module_graph.py` 读的是 `WC-MODREG-001` 登记表里的 `intent`，**与 `design.md` 的原子表没有自动连接** ⇒ 原子表各栏的机核是**逐条人工执行 ＋ 贴读数**，不是一条会红的自动闸；本档**没有新增任何机器判据**（详见 `README.md` §七第 3 条）"
   - source: project-experience
-    what: "这一程踩过的坑（`.agents/skills/worldcore-sdd/SKILL.md` §一–§十四、`openspec/MAINTENANCE.md` 16 条、`openspec/BOOK/冲突总账.md` §7.8–§7.16）"
+    what: "这一程踩过的坑（`world-core/docs/S0-立项/WC-ATOM-001-v0.1.md`；`.agents/skills/worldcore-sdd/SKILL.md` §一–§十四；`openspec/MAINTENANCE.md` 16 条；`openspec/BOOK/冲突总账.md` §7.8–§7.16）"
     landing: "本文件的 experience 表（每行带会红的执行者）；proposal 的『不改的后果』与让路三要素节；review 的『本档不能证明的事』与执行者／批准者分离声明；tasks 的变异证明栏"
     evidence: "experience 表逐行的 `enforcer` 列（仓内脚本／守卫判据号／人工项）"
 
@@ -67,7 +79,7 @@ artifacts:
       本件＝本次改动的**变更请求**，**就是这一份**：不另写一张申请单，也不在别处留指针。
       字段集参照流程侧变更申请单的要素（为什么改／改什么／档位／影响面），要素落在本件里。
 
-      **变更号写在文档头的属性表里**（标题之下的第一张表，见 `templates/proposal.md`；**不是「首行」**——首行是标题），形如 `CR: WC-CR-007`（框架变更写 `FC: WC-FC-2026-003`）。
+      **变更号独占文档头的 `CR:` 一行**（`templates/proposal.md` 标题之下的第一行；**不是「首行」**——首行是标题；也**不是**一张属性表），形如 `CR: WC-CR-007`（框架变更写 `CR: WC-FC-2026-003`）。
       这个号要与 change 目录名一致（`cr-007-<slug>`）。**号由人给，agent 不自己编号。**
 
       必填节：
@@ -161,7 +173,7 @@ artifacts:
       - **方案对比（≥2 个，必须含「不改」或「最小改」案）**：
         这是 R5 的★准出项，缺一个就驳回。每案写：做什么／代价／为什么选或不选。
       - **原子表**（**最小原子化落地处**，`WC-ATOM-001` §四；**本档与 `opsx-swe-gb` 的主要差别之一**）：
-        **每个新增或改动的原子一行**，四栏**逐栏非空**：
+        **每个新增或改动的原子一行**，**栏数以 `templates/design.md` 的表头为准**（原子／intent／四件同夹／deps == import／生成物／机核读数），**逐栏非空**：
 
         | 原子（真实路径） | intent（一句话，出现「与／和／及」并列两事即拆） | 四件同夹（契约／实现／测试各在哪） | deps == import（声明依赖 ≡ 代码里真实 use） | 生成物（有则写重跑命令；无则写「无」） |
 
@@ -221,8 +233,10 @@ artifacts:
       **原子类任务额外给两样**：① `python world-core/tools/module_graph.py` 的读数
       （deps == import 且无环）② 该原子的测试用例名（四件同夹的第三件）。
 
-      **归档门禁要求 tasks 全勾。** 若某条本来就做不完（常设维护项），
-      不要留在本件里：它在 `tasks.md` 里会永久挡住 `openspec validate --archived`。
+      **归档**要求 tasks 全勾——⚠ **但归档那一刻没有任何东西会拦你**：实测 `archive --yes`
+      在 tasks 未全勾时仍 `rc=0` 并**已把 delta 合并进主规格**。全勾这一条由**事后**的
+      `openspec validate --archived` 复查（它只查勾，是 lint）。**若某条本来就做不完（常设维护项），
+      不要留在本件里**——它会让那份事后 lint 永久报 `N incomplete tasks`，红了要回退。
       常设项写进项目自己的维护清单。
 
       任务写在实施前，状态随实施更新。规格说做什么，design 说怎么做，本件说分几步。
@@ -249,12 +263,14 @@ artifacts:
         详细设计说明中该模块章节已更新」——**代码没写完就没什么可审的**。
         所以本件的 R4 节在 apply 之后、**归档之前**填、签字。
 
-      因此：**本件是归档的硬前置**，由两处共同承担：`openspec validate --archived`（tasks 全勾）
-      ＋ `spec_bridge.py` 判据①（归档目录必须有本件）。
-      ⚠ **`openspec archive` 命令本身不拦**（实测：缺本件、甚至 0/1 tasks 未勾时，`archive --yes` 仍 `rc=0`）
-      ⇒ 二选一：**归档前先跑 `python3 world-core/tools/spec_bridge.py`**，或**归档后立即跑它、红了就回退**。
+      因此：**归档时没有任何东西会拦你**（`openspec archive` 不读本件、也不读 tasks 的勾）。
+      真能拦的是 `spec_bridge.py` 判据①（归档目录必须有本件）与判据⑥（本件已签：结论栏已填、批准人非空），
+      而**它必须由人在归档前跑一次**才起拦阻作用。
+      实测（tasks 未全勾、本件未签时）：`openspec archive --yes` 仍 `rc=0`，且**已把 delta 合并进主规格**。
+      ⇒ 口径只有一条：**`archive` 不是门禁**；`spec_bridge.py` 与 `validate --archived`
+      是**归档前必须跑一次／归档后复查**的两处，**红了就回退**，别当成「归档动作自带闸」。
+      跑法：`python world-core/tools/spec_bridge.py`（本机命令名是 `python`，不是 `python3`）。
       另：**未签的本件不算已归档**——判据⑥ 读结论栏与批准人栏，未签／占位一律判红。
-
       必填：
       - **变更号与档位**：CR/FC 号，R4 还是 R5；
       - **提出人 / 影响分析人 / 批准人 / 结论 / 日期**——**五栏**都要有真实标识；
@@ -296,13 +312,17 @@ apply:
 
     **原子化在实施中的两条纪律**（`WC-ATOM-001` §四）：
     - 一个原子一个夹：契约（规格条目／接口契约册）＋实现（`src/**`）＋测试（`tests/**`）
-      三者都要有落点，且 `design.md` 原子表里的 `deps` 必须**逐边等于**代码里真实的 `use`
-      （`python world-core/tools/module_graph.py`）；**有环即停**，不许先合入再修。
+      三者都要有落点；`deps` 必须**逐边等于**代码里真实的 `use`。
+      ⚠ **说清边界**：`python world-core/tools/module_graph.py` 读的是 `WC-MODREG-001` 登记表，
+      **它不看 `design.md` 的原子表** ⇒ 原子表与那个机核之间是**人工对号**，不是自动连接；
+      **有环即停**，不许先合入再修。
     - 生成物**一律重跑生成器**，不许手编；改了源而没重跑，`spec_bridge.py` 判据⑪／⑫／⑬ 会红。
 
     **实施完成后、归档之前**，补 `review.md` 的 R4 节并取得签字
-    （代码走查人 + 批准人，执行者不得为唯一批准者）——缺本件不许归档。
+    （代码走查人 + 批准人，执行者不得为唯一批准者）——缺本件，判据①／⑥ 会红。
 
-    **收口顺序（不许跳步）**：跑齐三条门禁 ⇒ 请独立评审 ⇒ **由作者签** ⇒ 归档 ⇒
-    复跑 `openspec validate --archived` 与 `python world-core/tools/spec_bridge.py`。
+    **收口顺序（不许跳步）**：跑齐三条门禁 ⇒ 请独立评审 ⇒ **由作者签** ⇒
+    **归档前**跑一次 `python world-core/tools/spec_bridge.py`（判据①⑥ 是这里唯一会拦的两条）⇒ 归档 ⇒
+    归档后复查 `openspec validate --archived` 与 `python world-core/tools/spec_bridge.py`，红了回退。
+    **别把 `openspec archive` 当闸**——它不拦。
     遇到阻塞停下来问，不要绕过。

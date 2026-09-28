@@ -1,6 +1,6 @@
 # Proposal
 
-CR: <!-- 必填，形如 WC-CR-007；框架变更写 FC: WC-FC-2026-003。
+CR: <!-- 必填，**本行独占**、就在标题之下（**不是一张表**），形如 WC-CR-007；框架变更写 FC: WC-FC-2026-003。
      此号须与 change 目录名、.scope-declaration.json 的 change_request 三处一致。号由人给，agent 不自造。 -->
 
 ## Why
