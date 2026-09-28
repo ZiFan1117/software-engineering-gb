@@ -313,11 +313,15 @@ def read_registry(wc):
         if line.lstrip().startswith("|"):
             cells_h = [norm_cell(c) for c in line.split("|")[1:-1]]
             if cells_h and cells_h[0] == "模块号":
+                # ★ 本轮修（E8）：**删掉"回落到第一个表块"那条静默兜底**。
+                #   旧实现在表头没有全部原子列时，`next((a for a in atom_cols), {})`
+                #   会把**文档里第一个表块**当成 §2 的表头 —— 于是判据④ 可能拿着一份
+                #   **别的表**的列名去判本表的行，而它看起来像"判据在正常工作"。
+                #   现在取不到「全六列」的表头就**留空** ⇒ 每行的 `atom` 为空 ⇒
+                #   `j_a0_atom_fields` 以「**原子档栏位整组缺失**」逐行报红（**不静默**）。
                 cur_atom = next((a for a in atom_cols if all(
                     a.get(k) is not None for k in ("a_intent", "a_deps", "a_anchor",
                                                    "a_evidence", "a_side", "a_machine"))), {})
-                if not cur_atom:
-                    cur_atom = next((a for a in atom_cols), {})
         m = re.match(r"^\|\s*\*{0,2}(M\d{2})\*{0,2}\s*\|(.*)$", line)
         if not m:
             continue
@@ -2209,6 +2213,14 @@ def self_test():
 
         # 反例⑯：**整组列缺失** —— 把原子档那 6 列表头整块删掉。
         # 期望：不是"静默通过"，而是指名"原子档栏位整组缺失"。
+        #
+        # ★ 本轮修（E8）：这条反例**同时也是"删掉那条静默兜底"的反向验证**。
+        #   旧实现里，表头取不到「全六列」时会回落到 **`atom_cols[0]`＝文档里第一个表块**；
+        #   而本沙盒里只有 §2 一个原子表块 ⇒ 两种实现**都**会红 ⇒ 那条反例**当时根本区分不出**
+        #   "兜底还在不在"（**自证通过 ≠ 判据有效**）。现在删除该兜底后，本反例红的原因
+        #   明确是「`cur_atom` 留空 ⇒ 每行 atom 为空 ⇒ 整组缺失」，故它与「改对⇒绿／改回⇒红」的
+        #   对照一起钉住了那条兜底。**真诱饵**（文档里 §2 之前还有一个"表头首格也是 模块号"的表块）
+        #   在真登记表里存在（`WC-HLD-001:156`），在沙盒里不存在 ⇒ **沙盒测不到那一形态**，如实记在评审面上。
         _write(reg, "\n".join(
             (ln.split("| 职责（一句话） |")[0] + " |"
              if ln.lstrip().startswith("| 模块号 ") else ln)
@@ -2219,6 +2231,26 @@ def self_test():
               % ("已红 OK" if (red and hit) else "*没红"))
         if not (red and hit):
             failures.append("反例⑯未变红：原子档栏位整组缺失时未报（判据④ 是装饰）")
+        _write(reg, SANDBOX_MODREG)
+
+        # ── 正控附条⑥：**E8 的"删兜底"必须真的删掉了** ─────────────────────
+        # 做法：往沙盒登记表**前面**插一个"表头首格也是 `模块号`、但只有前 6 列"的表块（**诱饵**）。
+        #   · 若"回落到第一个表块"的兜底**还在** ⇒ `atom_cols[0]`＝这个诱饵 ⇒ 六列全取不到 ⇒ 仍红；
+        #   · 若兜底**已删**（本轮修）⇒ 取表头时逐块找"全六列"的那块 ＝ §2 真表头 ⇒ **不红**。
+        # 故「不红」正是"兜底已删"的读数；本条与反例⑯（删真表头 ⇒ 红）互为反向验证。
+        decoy = ("| 模块号 | 模块名 | 职责（一句话） | 源码路径 | 提供接口 | 依赖模块 |\n"
+                 "|---|---|---|---|---|---|\n"
+                 "| **M99** | 诱饵 | 诱饵行 | `src/ontology.rs` | **IF-005** | 无 |\n\n")
+        _write(reg, decoy + SANDBOX_MODREG)
+        rep_d = run()
+        red_d, off_d = is_red(rep_d, "a0_atom_fields")
+        m01_d = [m for m in rep_d["modules"] if m["id"] == "M01"]
+        atom_ok = bool(m01_d) and len(m01_d[0]["atom_cols_present"]) == len(ATOM_FIELDS)
+        print("  正控附条⑥（§2 之前插一个「首格也是 模块号、但无原子列」的表块 ⇒ 判据④ **不应红**；"
+              "这证明「回落到第一个表块」的兜底已删）：%s（不红=%s／M01 原子列取全=%s）"
+              % ("OK" if (not red_d and atom_ok) else "*失败", not red_d, atom_ok))
+        if red_d or not atom_ok:
+            failures.append("正控附条⑥失败：表头识别仍会回落到别的表块（E8 的兜底没删干净）")
         _write(reg, SANDBOX_MODREG)
 
         # 反例⑰：**intent 与「职责」列不一致** —— 同一件事两个说法（A-1 要消灭的形态）。
