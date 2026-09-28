@@ -2343,6 +2343,41 @@
    "t15_visual_projection_is_human_readable_yet_auditable",
    "t16_two_projections_are_same_source_and_vocab_change_is_detected"
   ],
+  "tests/agent_audit.rs": [
+   "tmpdir",
+   "record",
+   "g01_newline_in_value_does_not_split_the_frame",
+   "g02_file_fallback_is_jsonl_with_timestamp",
+   "g03_multi_sink_isolates_failures",
+   "g04_field_names_come_from_the_fixed_set"
+  ],
+  "tests/agent_completion.rs": [
+   "tmpdir",
+   "ontology",
+   "policy",
+   "j01_completion_is_a_ledger_notice",
+   "j02_start_failure_still_leaves_a_notice",
+   "j03_pending_comes_from_the_ledger_not_a_registry",
+   "j04_reading_completion_is_idempotent"
+  ],
+  "tests/agent_protocol.rs": [
+   "handler",
+   "p01_one_request_one_response_in_order",
+   "p02_bad_bytes_do_not_swallow_the_next_request",
+   "p03_refusals_are_structured_not_prose"
+  ],
+  "tests/agent_undo.rs": [
+   "name",
+   "capabilities",
+   "call",
+   "manifest",
+   "inv",
+   "tmpdir",
+   "u01_undo_happens_once_and_after_the_confirmation",
+   "u02_undo_failure_blocks_the_action",
+   "u03_no_undo_policy_means_zero_undo_calls",
+   "u04_carrier_undo_is_not_world_rollback"
+  ],
   "tests/atom_declared_only.rs": [
    "tmpdir",
    "manifest_dir",
