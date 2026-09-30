@@ -1,32 +1,36 @@
-> ⚠️ **本仓已于 2026-09-28 改为「三者融合版」的公开面。**
+> ⚠️ **2026-09-28：原「国标化软件开发流程落地包」仓已并入本项目**
+>
+> **事情是什么**：原先**单独一份**的 `github.com/ZiFan1117/software-engineering-gb`
+> （仓根 README 曾以 `# worldcore` 开头，内容＝worldcore 的 S0–S7 流程物）**已由作者指示废止**：
+> 它的流程侧原文**搬进本仓受控面** → `openspec/process-source/06-swe-gb/`；
+> 标准原文因版权/密级**留在仓外不进 git** → `D:\Code\05-swe-gb-standards\standards\`；
+> 其余（`.git`／`tools`／`.venv-ocr` 等）**全量归档** → `D:\Code\heavy-archive\06-swe-gb-retired-2026-09-28\`。
+> **旧仓的公开面（`software-engineering-gb` 的 `main`）已被覆盖为"三者融合版"**，
+> 它**自己的 5 笔历史**（`1efefde`，2026-09-17）完整保留在该仓分支
+> `legacy/international-process-2026-09-17`——**那是它唯一的回退点**。
 >
 > **融合的是什么**：① **OpenSpec 整个体系**（change 五件产物链 proposal → specs ∥ design → tasks → review）
 > ＋ ② **国际／国标软件开发流程**（S0–S7 阶段与交付物、R0–R8 评审、三类基线、RTM 追溯、H-01…H-26 硬条款）
 > ＋ ③ **最小原子化**（单意图／一个原子一个夹／`deps == import` 且无环／生成物不手编／UTF-8 无 BOM）。
-> 落点为 `openspec/schemas/opsx-swe-gb-atom/`，它是本仓**默认档**（由 `openspec/config.yaml` 的 `schema:` 决定，守卫判据③ 盯这一格）。
+> 落点为 `openspec/schemas/opsx-swe-gb-atom/`，它是本仓**默认档**
+> （由 `openspec/config.yaml` 的 `schema:` 决定，守卫判据③ 盯这一格）。
 >
-> **仓名与内容已不同名**：仓名仍是 `software-engineering-gb`（旧名），内容已是上述融合版。
-> **没改名**是刻意的——改名会断掉既有 URL 与引用；改不改留给作者裁。
+> **两个公开仓现在的关系**：`worldcore` 与 `software-engineering-gb` 内容**同源同笔**（都由本仓 `main` 推出）。
+> **没给旧仓改名**是刻意的——改名会断掉既有 URL 与引用；改不改留给作者裁。
 >
-> **旧内容去哪了**：本次是**覆盖式推送**。旧的 `main`（`1efefde`，2026-09-17，
-> 「国标化软件开发流程落地包」5 笔历史）已从 `main` 移出，**完整保留在分支
-> `legacy/international-process-2026-09-17`**。
-> ⚠ 服务端 reflog 不保证可得 ⇒ **那个分支是旧 `main` 唯一的回退点**，请勿删除。
->
-> **流程侧原文已在本仓内**：`openspec/process-source/06-swe-gb/`
-> （`docs/` ＋ `templates/` ＋ 一份 `README.md` 说明；2026-09-28 从原 `D:\Code\06-swe-gb` 搬入受控面）。
-> 搬迁的完整性判据、改了什么与没改什么、**回退命令**都在
-> `openspec/BOOK/06-swe-gb废止与三者融合收敛.md`。
+> **搬迁的完整记录**（完整性判据、改了什么与没改什么、**回退命令**）在
+> `openspec/BOOK/06-swe-gb废止与三者融合收敛.md`；
+> 搬迁件自己的说明在 `openspec/process-source/06-swe-gb/README.md`。
 >
 > **标准原文不在本仓**：`standards/`（17 份 PDF ＋ 16 份转好的 MD，共 230.73 MB）
-> 因**版权与密级**原因**不进任何 git**（原仓 `.gitignore` 即有 `standards/**` 规则）。
-> 现有落点是**仓外** `D:\Code\05-swe-gb-standards\standards\`，该处也有一份说明件。
-> ⚠ 本仓**没有** `.gitignore` 规则挡住标准原文 —— 若要在本仓重新放置，请先加规则。
+> 因**版权与密级**原因**不进任何 git**。仓根 `.gitignore` 已补 `standards/*` 与 `*.pdf` 兜底规则
+> （2026-09-28 实测：应挡 7/7、应放行 5/5、已跟踪件零误伤）。
 >
 > **门禁现状（本说明写下时的读数，以命令输出为准）**：
 > `python world-core/tools/spec_bridge.py` ⇒ 通过 16 / 失败 0；
 > `python world-core/tools/spec_bridge.py --self-test` ⇒ 16/16 条判据各有 ≥1 个反例；
-> `openspec validate --all --strict` ⇒ 12 passed, 0 failed；
+> `python world-core/tools/module_graph.py` ⇒ 通过 4 / 失败 0；
+> `openspec validate --all --strict` ⇒ 13 passed, 0 failed；
 > `openspec validate --archived` ⇒ 5 passed, 0 failed。
 >
 > ---

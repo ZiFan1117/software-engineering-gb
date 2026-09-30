@@ -22,3 +22,31 @@ _*.md
 _*.json
 _*.log
 _*.b64
+
+# ── 标准原文：**一律不入库**（版权 / 密级）────────────────────────────────
+# 为什么：国标 / ISO / GJB 正文均有**版权**（GJB 另有**密级**）；本仓
+#   `github.com/ZiFan1117/worldcore` 与 `…/software-engineering-gb` 均为 **PUBLIC** ⇒
+#   把它们放进来＝再分发。原 `06-swe-gb` 仓的 `.gitignore` 即有同类规则，
+#   本条把它带过来——**2026-09-28 搬仓时漏了，本规则补上那次漏项**。
+# 现有落点：**仓外** `D:\Code\05-swe-gb-standards\standards\`（该处也有说明件）。
+# ⚠ 这不是"当前有文件被挡"，而是**兜底**：防以后有人把标准原文拷进来又被 `git add` 进去。
+#
+# ★ 写法按 git 的**排除机制**来（血泪，本条第一版写错过）：
+#   git 的规矩是「**父目录被排除时，不会重新包含其下的文件**」⇒ 若写 `standards/**`，
+#   它连 `standards` 自己与各层父目录一起匹配，于是 `!standards/README.md` 变成**死规则**
+#   （实测：`git check-ignore -v standards/README.md` 仍判被挡）。
+#   正确写法＝只匹配**直接子项**（`standards/*`）＋ 用 `!` 把 `standards` 目录本身放行回来，
+#   这样 git 才肯下潜去读更深层的规则。
+standards/*
+!standards/README.md
+
+# 扫描件一律不进（无论放哪）：它是"标准正文"的最主要载体
+*.pdf
+# …但官方免费预览之类若确有需要入库的，逐个用 `!` 放行（**默认挡、例外逐个开**）
+!docs/**/official-preview.pdf
+
+# OCR 工作产物（页图、时序、临时比对件）——机器转化物，不是交付物
+**/_md_reocr/
+**/_pages/
+*_reocr.md
+*_reocr.timing.json
