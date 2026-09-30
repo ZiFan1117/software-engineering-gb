@@ -49,7 +49,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-SCHEMA_NAME = "opsx-swe-gb"
+SCHEMA_NAME = "opsx-swe-gb-atom"
 EVIDENCE_RE = re.compile(r"-\s*\*\*证据\*\*：(.+)$")
 REQ_RE = re.compile(r"^###\s+Requirement:\s*(.+?)\s*$")
 

@@ -313,7 +313,7 @@ for rel in ['world-core/docs/S0-立项/WC-SDP-001-v0.1.md', 'world-core/docs/S0-
 | REF-09 | 开发工作流（linux.ps1 / check.sh / 五条纪律） | `4-计划/02` | 同上 |
 | REF-10 | GB/T 8567-2006 计算机软件文档编制规范 | 现行 | 国家标准全文公开系统 |
 | REF-11 | GB/T 8566-2022 软件生存周期过程 | 现行 | 同上 |
-| REF-12 | `06-swe-gb` 国标化流程落地包（含 21 模板与门禁工具） | 本地仓库 | `D:\Code\06-swe-gb` |
+| REF-12 | `06-swe-gb` 国标化流程落地包（含模板与门禁工具） | 本地仓库 | **`openspec/process-source/06-swe-gb/`（本仓内，2026-09-28 搬入受控面）**；`D:\Code\06-swe-gb` 已废止为法源仓，仅留历史 |
 
 ---
 
@@ -1037,12 +1037,12 @@ for rel in ['world-core/docs/S0-立项/WC-SDP-001-v0.1.md', 'world-core/docs/S0-
 
 ### 0.1 引用锚点（附件二 H-08：文档之间用「节号 + 锚点原文」）
 
-| 简写 | 绝对路径 | 本回合核对的提交 |
+| 简写 | 路径（**本仓内**，相对仓根） | 本回合核对的提交 |
 |---|---|---|
-| **附件二** | `D:\Code\06-swe-gb\docs\附件\附件二-阶段流程与交付物.md` | 见 §0.4 |
-| **附件三** | `D:\Code\06-swe-gb\docs\附件\附件三-评审与门禁.md` | 见 §0.4 |
-| **附件七** | `D:\Code\06-swe-gb\docs\附件\附件七-模板清单.md` | 见 §0.4 |
-| **模板 RV** | `D:\Code\06-swe-gb\templates\06-评审类\01-阶段评审记录.md` | 见 §0.4 |
+| **附件二** | `openspec/process-source/06-swe-gb/docs/附件/附件二-阶段流程与交付物.md` | 见 §0.4 |
+| **附件三** | `openspec/process-source/06-swe-gb/docs/附件/附件三-评审与门禁.md` | 见 §0.4 |
+| **附件七** | `openspec/process-source/06-swe-gb/docs/附件/附件七-模板清单.md` | 见 §0.4 |
+| **模板 RV** | `openspec/process-source/06-swe-gb/templates/06-评审类/01-阶段评审记录.md` | 见 §0.4 |
 | **SDP** | `D:\Code\07-agent-native-os\world-core\docs\S0-立项\WC-SDP-001-v0.1.md` | 见 §0.4 |
 | **SCMP** | `D:\Code\07-agent-native-os\world-core\docs\S0-立项\WC-SCMP-001-v0.1.md` | 见 §0.4 |
 
@@ -1068,6 +1068,12 @@ for rel in ['world-core/docs/S0-立项/WC-SDP-001-v0.1.md', 'world-core/docs/S0-
 > **行数口径**：本文所有行号均按 **LF 计数**（读工具的行号亦按 LF 切分）。**不要用 `Get-Content` 的 `.Count` 核行数**——本回合实测：`Get-Content` 对附件二给出 **1847**，而 `LF` 计数与 `[System.IO.File]::ReadAllLines` 均给出 **2452**（两者相差 605，`Get-Content` 的计数不可作为行号基准）。**核行数一律用**：`([System.IO.File]::ReadAllBytes(<路径>) | Where-Object { $_ -eq 10 }).Count`。
 
 **流程库侧（`06-swe-gb`）**：
+
+> ⚠️ **2026-09-28 补记（旧读数不追改，只记它已过期）**：下表 `HEAD` 行记的是 **`1efefde`（2026-09-17）**，
+> 而搬迁时点实测 `git -C D:\Code\06-swe-gb rev-parse HEAD` ＝ **`6242fe9`**（`1efefde` 是它的**上一笔**）
+> ⇒ **该行是一个历史的 HEAD，不是现值**。另：附件二/三/七与流程正文**已搬入本仓**
+> `openspec/process-source/06-swe-gb/`，下表的 `D:\Code\06-swe-gb\...` 命令**已不再是现行路径**。
+> **要现值请跑本仓内的复算命令**（路径换成 `openspec/process-source/06-swe-gb/`）。
 
 | 对象 | 核验命令 | 本回合实测值 |
 |---|---|---|
