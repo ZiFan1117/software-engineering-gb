@@ -153,13 +153,23 @@ IC_DIR_REL = os.path.join("docs", "S2-设计")
 IC_BOOK_REL = os.path.join("docs", "S2-设计", "WC-IC-001-v0.1.md")
 SPECS_REL = os.path.join("openspec", "specs")
 
-#: A-1 的字数上限（`WC-ATOM-001` §二 A-1：「必须有且只有一句 `intent`（≤30 字）」）。
+#: A-1 的字数上限。出处＝`WC-ATOM-001` **§二 A-1 的对照表**；⚠ **但「≤30 字」是本项目自定的阈值**——
+#: 该件 `:24` 逐字声明「（"≤30 字"是本项目的自定阈值，参照仓无此数……不许把它说成参照仓的要求）」，
+#: 而 §二 A-1 格内、§四 机核清单第 1 行**都没有**这五个字。
+#: ⇒ 本常量是**项目自定判据**，不许在输出或文档里写成外部标准的要求。
 #: 口径：**计 Unicode 字符数**，不计字节；判定前剥掉 Markdown 强调与空白（`**`／空白不算字）。
 INTENT_MAX_CHARS = 30
 #: 并列两事的连接词（A-1：「出现并列两事 ⇒ 拆」）。只取这三个字面，不猜别的词。
 PARALLEL_MARKERS = ("与", "和", "及")
 #: 取值单元格里的占位符：等于这些值即视为"没写"。
 PLACEHOLDERS = ("", "—", "-", "–", "待补", "待定", "n/a", "N/A", "<待人工>", "待人工指派")
+#: ★ 2026-09-28 加：「**指针式**填法」不算读数。
+#: 为什么：`WC-MODREG-001` §2 的「机核读数」列**十二行逐字相同**——
+#:   「以判据②（deps == import）现场读数为准」。它**点了名、也含 `deps == import`**，
+#:   于是过了原来的第⑦步，可是**一个读数都没有**（评审席判"已经 10/10 空转"）。
+#: 这一栏要的是**命令与原始输出**（`WC-ATOM-001` §四：机核读数＝贴命令与原始输出），
+#: 不是"去哪看"。⇒ 命中本表任一标记即判红，并要求该格**含反引号包起来的命令**。
+MACHINE_POINTER_MARKERS = ("以判据", "现场读数为准", "以…为准", "以命令输出为准", "见主规格")
 
 #: 模块号形态（判定面唯一编号口径，`WC-MODREG-001` §3：「`M` + 两位数字，左补零」）。
 M_RE = re.compile(r"M\d{2}")
@@ -182,6 +192,9 @@ ATOM_FIELDS = {
 ATOM_DEPS_TOOL = "module_graph.py"
 #: 机器读数列必须点名的判据（本工具自己那一条）。
 ATOM_MACHINE_MARK = "deps == import"
+#: 判据④ 第⑦步要求「机核读数」格里**含命令**。认三种形态（与仓内既有写法对齐）：
+#: 反引号包起来的、或含 `python`／`cargo`／`bash` 之类命令名。
+ATOM_MACHINE_CMD_RE = re.compile(r"`[^`]+`|\b(?:python3?|cargo|bash|sh|pwsh|npx|openspec)\b")
 
 
 # 非 UTF-8 控制台（Windows GBK/cp936）下，中文与记号会让 print 抛 UnicodeEncodeError
@@ -1191,10 +1204,24 @@ def j_a0_atom_fields(wc, rows, reg_path, anchors=None, real_tokens=None):
             miss(ATOM_FIELDS["a_side"][0],
                  "取值=%r，属占位符/空（A-3：不写副作用＝声明「无副作用」，但不许留空）" % val)
 
-        # ⑦ 机核读数：非空且点名了本工具管的那一条判据
+        # ⑦ 机核读数：**必须有命令**，且点名本工具管的那一条判据。
+        #   ★ 2026-09-28 收紧：原来只要求"非占位 ∧ 含 `deps == import`"，
+        #     于是「以判据②（deps == import）现场读数为准」这种**指针式**填法全过——
+        #     而那一格要的是**读数**（命令＋原始输出），不是"去哪看"。
+        #     现取实测：`WC-MODREG-001` §2 该列 12 行逐字相同，全是这种指针 ⇒ 本收紧会让它们变红，
+        #     而**它们红得对**（评审席判"那一列已经 10/10 空转"）。
         val = cell("a_machine")
+        ptr = [mk for mk in MACHINE_POINTER_MARKERS if mk in val]
         if is_placeholder(val):
             miss(ATOM_FIELDS["a_machine"][0], "取值=%r，属占位符/空" % val)
+        elif ptr:
+            miss(ATOM_FIELDS["a_machine"][0],
+                 "是**指针式**填法（命中 %s）：这一格要的是**读数**（命令＋原始输出），"
+                 "不是「去哪看」；逐字=%r" % ("／".join("「%s」" % p for p in ptr), val))
+        elif ATOM_MACHINE_CMD_RE.search(val) is None:
+            miss(ATOM_FIELDS["a_machine"][0],
+                 "**没有命令**：这一格要贴命令（反引号包起来的，或含 `python`／`cargo`／`bash`）；"
+                 "逐字=%r" % val)
         elif ATOM_MACHINE_MARK not in val:
             miss(ATOM_FIELDS["a_machine"][0],
                  "没有点名本工具管的那条判据（须含 `%s`）；逐字=%r" % (ATOM_MACHINE_MARK, val))
@@ -1536,7 +1563,9 @@ def _sandbox_row(mid, name, duty, src, iface, deps,
             duty,                                        # intent ＝「职责」列逐字
             "由 `module_graph.py` 判 deps == import",
             anchor, ev, side,
-            machine or "以判据② 现场读数为准（判 deps == import）"]
+            # ★ 2026-09-28 改：原夹具写「以判据② 现场读数为准（判 deps == import）」——
+            #   那是**指针式**填法（新规则要判红）。正控件的这一格必须是**真读数**（含命令）。
+            machine or "`python world-core/tools/module_graph.py` → 判据② deps == import：通过"]
 
 
 def _table_row(cells):
@@ -2294,7 +2323,11 @@ def self_test():
         _write(reg, SANDBOX_MODREG)
 
         # 反例⑳：**side_effects 留空** —— A-3「不写副作用＝声明无副作用，但不许留空」。
-        if _reg_edit(reg, "| 只读不写盘 | 以判据②", "| — | 以判据②", "反例⑳", failures):
+        #   ★ 2026-09-28 改夹具串：沙盒正控的「机核读数」格已换为真读数（含命令），
+        #     故本反例的锚点也要跟着换——**否则它会因"夹具串找不到"而变成假绿**（自证当场报出了这一条）。
+        if _reg_edit(reg, "| 只读不写盘 | `python world-core/tools/module_graph.py` → 判据② deps == import：通过",
+                     "| — | `python world-core/tools/module_graph.py` → 判据② deps == import：通过",
+                     "反例⑳", failures):
             red, off = is_red(run(), "a0_atom_fields")
             hit = any("M01" in x and "side_effects" in x for x in off)
             print("  反例⑳（side_effects 填成占位符 `—` ⇒ 判据④ 应红）：%s"
@@ -2304,8 +2337,11 @@ def self_test():
         _write(reg, SANDBOX_MODREG)
 
         # 反例㉑：**机核读数不点判它的判据** —— 机器读数列必须说清"谁判的哪一条"。
-        if _reg_edit(reg, "以判据② 现场读数为准（判 deps == import）",
-                     "看着没问题", "反例㉑", failures):
+        #   ★ 2026-09-28 改：原来把该格换成"看着没问题"。新增的**指针式**规则会先命中
+        #     任何含「以判据」的值，故此处改用一个**有命令、不指针、但缺 `deps == import`** 的值，
+        #     让它**只**触发第⑦步的最后一个分支（"没有点名本工具管的那条判据"）。
+        if _reg_edit(reg, "`python world-core/tools/module_graph.py` → 判据② deps == import：通过",
+                     "`python world-core/tools/module_graph.py` 跑过了，没问题", "反例㉑", failures):
             red, off = is_red(run(), "a0_atom_fields")
             hit = any("M01" in x and "机核读数" in x and "没有点名" in x for x in off)
             print("  反例㉑（机核读数不点名判据 ⇒ 判据④ 应红）：%s"
@@ -2314,15 +2350,31 @@ def self_test():
                 failures.append("反例㉑未变红：机核读数写成一句无判据的感想也过关")
         _write(reg, SANDBOX_MODREG)
 
-        # 反例㉒：**deps 机核栏不点名工具** —— "由谁判"不许含糊。
-        if _reg_edit(reg, "由 `module_graph.py` 判 deps == import",
-                     "依赖看起来是对的", "反例㉒", failures):
+        # 反例㉒：**指针式**填法（点了名、却没给读数）—— 2026-09-28 评审席判出的形态。
+        #   实盘就是 `WC-MODREG-001` §2 那一列：12 行逐字都是
+        #   「以判据②（deps == import）现场读数为准」，**点了名、含 `deps == import`、一个读数都没有**。
+        #   旧规则只查"非占位 ∧ 含 `deps == import`" ⇒ 它们全过。
+        #   本条即那次收紧的反例；**没有它，这次收紧就是没有反例的判据（＝装饰）**。
+        if _reg_edit(reg, "`python world-core/tools/module_graph.py` → 判据② deps == import：通过",
+                     "以判据② 现场读数为准（判 deps == import）", "反例㉒", failures):
             red, off = is_red(run(), "a0_atom_fields")
-            hit = any("M01" in x and "deps 机核" in x and "没有点名" in x for x in off)
-            print("  反例㉒（deps 机核栏不点名判它的工具 ⇒ 判据④ 应红）：%s"
+            hit = any("M01" in x and "机核读数" in x and "指针式" in x for x in off)
+            print("  反例㉒（机核读数写成指针式 ⇒ 判据④ 应红）：%s"
                   % ("已红 OK" if (red and hit) else "*没红"))
             if not (red and hit):
-                failures.append("反例㉒未变红：依赖机核栏写成一句无工具的断言也过关")
+                failures.append("反例㉒未变红：把这一格写成「以某判据为准」也能过关")
+        _write(reg, SANDBOX_MODREG)
+
+        # 反例㉓：**deps 机核栏不点名工具** —— "由谁判"不许含糊。
+        #   （编号原为㉒，与上一条重名；2026-09-28 改为㉓——同名会让输出看起来像"同一条跑了两遍"。）
+        if _reg_edit(reg, "由 `module_graph.py` 判 deps == import",
+                     "依赖看起来是对的", "反例㉓", failures):
+            red, off = is_red(run(), "a0_atom_fields")
+            hit = any("M01" in x and "deps 机核" in x and "没有点名" in x for x in off)
+            print("  反例㉓（deps 机核栏不点名判它的工具 ⇒ 判据④ 应红）：%s"
+                  % ("已红 OK" if (red and hit) else "*没红"))
+            if not (red and hit):
+                failures.append("反例㉓未变红：依赖机核栏写成一句无工具的断言也过关")
         _write(reg, SANDBOX_MODREG)
 
         # ── 第二正控：全部恢复后必须回到全绿 ─────────────────────────────

@@ -84,7 +84,22 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCOPE_JSON = os.path.join(ROOT, ".scope-declaration.json")
 
 # 必须存在的作业（少一个都意味着某道门禁没了）
-REQUIRED_JOBS = ("smoke", "unit-test", "gate-self-test", "traceability", "scope")
+# ★ 2026-09-28 补三个：本清单原为 5 项（`smoke/unit-test/gate-self-test/traceability/scope`），
+#   而 `world-core-gate.yml` 在 2026-09-27 另加了三个门禁作业
+#   （`openspec-validate` 形态门禁 / `spec-bridge` 规格层守卫 / `module-graph` 原子化机核）。
+#   ⇒ **原来的清单看不见它们**：`check_jobs` 的规则是"含必需作业的文件必须含全部必需作业"，
+#   于是**整个 `spec-bridge` 作业被删掉，本检查也不报错**（＝那三道门禁在 CI 层没有守卫）。
+#   补进清单后，删任何一个都会红。**本改动属"改门禁自身"，按本仓口径须走 R5 并说明理由。**
+REQUIRED_JOBS = (
+    "smoke",
+    "unit-test",
+    "gate-self-test",
+    "traceability",
+    "scope",
+    "openspec-validate",
+    "spec-bridge",
+    "module-graph",
+)
 
 # 允许用环境变量显式指定工作流（多个用 os.pathsep 分隔）——本地排查用
 ENV_WORKFLOW = "GATE_WORKFLOW"

@@ -50,7 +50,7 @@ import tempfile
 from pathlib import Path
 
 SCHEMA_NAME = "opsx-swe-gb-atom"
-EVIDENCE_RE = re.compile(r"-\s*\*\*证据\*\*：(.+)$")
+EVIDENCE_RE = re.compile(r"-\s*\*\*证据\*\*：\s*(.*)$")
 REQ_RE = re.compile(r"^###\s+Requirement:\s*(.+?)\s*$")
 
 # 非 UTF-8 控制台（Windows GBK/cp936）下，中文与记号会让 print 抛 UnicodeEncodeError
@@ -183,8 +183,25 @@ def j2_evidence(repo):
                 m = EVIDENCE_RE.search(line)
                 if not m:
                     continue
-                toks = re.findall(r"`([^`]+)`", m.group(1))
+                # ★ 2026-09-28 修（评审席判据② 缺陷）：本函数**声明**的判红规则是
+                #   「证据行里没有反引号 token ⇒ 判红」，但 `EVIDENCE_RE` 原来要求冒号后
+                #   **至少一个字符** ⇒ `- **证据**：` 后什么都不写这一档**正则不匹配、
+                #   直接 continue**，那条 offender **永不执行**（＝声明与实际不等价）。
+                #   现在：正则改为"零或多字符"，并**显式区分两种形态**——
+                #     · 冒号后**无任何内容** ⇒ 判红（这就是原来漏掉的那一档）；
+                #     · 有内容但**没有反引号 token** ⇒ 判红（原有那一档），
+                #       此时须是 `（待补）` 变身写法并在其后写明落点，否则仍红。
+                after = m.group(1).strip()
+                if not after:
+                    bad.append("%s:%d —— 证据行 `- **证据**：` 后面**什么都没有**（空 token）。"
+                               "尚无断言时请改用 `- **证据（待补）**：` 并写明落点——"
+                               "用「证据」这个标记而不给 token，形态上等于声称存在"
+                               % (rel(repo, spec), i))
+                    continue
+                toks = re.findall(r"`([^`]+)`", after)
                 if not toks:
+                    if "待补" in line:
+                        continue                            # 显式标了"待补"并写明落点：放行
                     bad.append("%s:%d —— 证据行里没有反引号包起来的 token。"
                                "**若本条尚无断言，请改用 `- **证据（待补）**：` 并写明落点**——"
                                "用「证据」这个标记而不给 token，形态上等于声称存在" % (rel(repo, spec), i))
@@ -257,23 +274,46 @@ def j5_coverage_change(repo):
 
 # 结论栏里"已签"的取值；其余（待签／退回／驳回／空缺）一律判未签
 SIGNED = ("批准", "通过", "有条件通过")
+#: 明确表示"未签"的取值。与 `SIGNED` **并集**用来把「结论格」与「模板里那格说明」区分开。
+REJECTED = ("退回", "驳回")
 
 
-def _verdict_of(review_text):
-    """从 review.md 里取「结论」栏的取值（支持表格式与 `**结论**：x` 两种写法）。"""
+def _verdict_cells(review_text):
+    """把 review.md 里**所有**「结论」格的取值取出来（表格式与 `**结论**：x` 两种写法）。
+
+    ★ 为什么返回**列表**而不是第一个值（2026-09-28 修，评审席判据② 同族缺陷）：
+      本函数此前是 `_verdict_of`，**遇到第一处就 return**。
+      而 `templates/review.md` 的结论栏有**两处**（§一 基本信息 与 §八 结论与后续）
+      ⇒ `§一=批准` ＋ `§八=退回` 会被判成"已签"。
+      更讽刺的是：**同一个病同文件里已经修过一次**——判据⑥ 的「批准人」栏
+      （`:308` 的 `re.findall`）就是 2026-09-28 从"取第一处字样"改成"按栏位形态全查"的。
+      「结论」这一格当时漏改了。本函数即那次修改的另一半。
+
+    **取值口径**（不改动任何真实件的前提下收紧）：
+      · 表格写法只认**下一个单元格**（与旧实现一致），非表格写法认 `结论：x`；
+      · 剥掉 Markdown 强调与空白后，**认"以某个已签／未签取值开头"的格**——
+        仓内真实结论带说明尾巴（如「**批准**（评审席第九轮逐字判定语：**通过 —— 记录可签**）」），
+        故不能要求整格精确等于某个值；
+      · 其余取值（含模板里那格 "R4 / R5" 的说明文字）**跳过**，不当作结论。
+    """
+    out = []
     for line in review_text.splitlines():
         if "结论" not in line:
             continue
+        cands = []
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         for idx, c in enumerate(cells):
             if "结论" in c and idx + 1 < len(cells):
-                v = cells[idx + 1].strip("* 　")
+                v = cells[idx + 1].strip("* \u3000")
                 if v:
-                    return v
+                    cands.append(v)
         m = re.search(r"结论\D{0,4}[:：]\s*(.+)$", line.strip())
         if m:
-            return m.group(1).strip("* 　")
-    return ""
+            cands.append(m.group(1).strip("* \u3000"))
+        for v in cands:
+            if any(v.startswith(k) for k in SIGNED + REJECTED):
+                out.append(v)
+    return out
 
 
 def j6_archived_review_signed(repo):
@@ -294,13 +334,21 @@ def j6_archived_review_signed(repo):
         if not rv.is_file():
             continue                                     # 在场与否归判据①
         text = read_text(rv)
-        verdict = _verdict_of(text)
-        if not verdict:
-            bad.append("%s —— review.md 里读不出「结论」栏（签字留人不等于可以没有结论栏）" % rel(repo, rv))
+        # ★ 2026-09-28 修（与「批准人」那半 2026-09-28 的修改同源）：
+        #   结论栏**有几处就查几处**，不取第一处。`§一=批准` ＋ `§八=退回` 必须判红。
+        verdicts = _verdict_cells(text)
+        if not verdicts:
+            bad.append("%s —— review.md 里读不出「结论」栏"
+                       "（签字留人不等于可以没有结论栏；已签取值应为 %s 之一）"
+                       % (rel(repo, rv), "/".join(SIGNED)))
             continue
-        if not any(verdict.startswith(k) for k in SIGNED):
-            bad.append("%s —— 结论 =「%s」：**未签**（已签应为 %s 之一）；"
-                       "归档前必须签，缺签一律回退补签" % (rel(repo, rv), verdict, "/".join(SIGNED)))
+        unsigned = [v for v in verdicts if not any(v.startswith(k) for k in SIGNED)]
+        if unsigned:
+            bad.append("%s —— 本件有 %d 处「结论」格，其中未签的是：%s（已签应为 %s 之一）。"
+                       "**一处签了、另一处未签/退回/驳回，正是这条要抓的形态**；"
+                       "归档前必须全部为已签取值，否则回退补签"
+                       % (rel(repo, rv), len(verdicts),
+                          " ／ ".join("「%s」" % u for u in unsigned), "/".join(SIGNED)))
             continue
         # ★ 2026-09-28 修：原来取**文件里第一处**「批准人」字样（不管它是不是**栏位**），
         #   于是正文里提一句"批准人"就会把它带到错误位置、捕到空 ⇒ **误判**。
@@ -1021,6 +1069,23 @@ def self_test():
         _red(1, "②b", "**delta** 证据行指向不存在的函数（② 的 delta 支必须自证）")
         dsp.write_text(backup2b, encoding="utf-8", newline="\n")
 
+        # 反例 2c：证据行**冒号后什么都不写**——2026-09-28 评审席判出的"不可达分支"那一档。
+        #   旧实现里 `EVIDENCE_RE` 要求冒号后至少一个字符 ⇒ 这一形态**正则不匹配、直接跳过**，
+        #   那条"没有反引号 token ⇒ 判红"的 offender **永不执行**。
+        #   本条即那次修改的反例；**没有它，这次修改就是没有反例的判据（＝装饰）**。
+        sp2 = Path(tmp) / "openspec/specs/cap-a/spec.md"
+        bak2c = sp2.read_text(encoding="utf-8")
+        sp2.write_text(bak2c.replace("- **证据**：`tests/t.rs::the_test`", "- **证据**："),
+                       encoding="utf-8", newline="\n")
+        _red(1, "②c", "证据行冒号后为空（空 token 档）")
+        # 正控 2d：**改成 `（待补）` 变身写法必须放行**——否则本判据会过紧，
+        #   把"尚无断言但已写明落点"这一合法形态也判红。
+        sp2.write_text(bak2c.replace("- **证据**：`tests/t.rs::the_test`",
+                                     "- **证据（待补）**：本条尚无断言，落点 `tests/t.rs`"),
+                       encoding="utf-8", newline="\n")
+        _green(1, "2d", "证据行显式标「（待补）」并写明落点（合法形态，不应红）")
+        sp2.write_text(bak2c, encoding="utf-8", newline="\n")
+
         # 反例 3：把默认档改回 spec-driven
         cf = Path(tmp) / "openspec/config.yaml"
         cf.write_text("schema: spec-driven\n", encoding="utf-8", newline="\n")
@@ -1052,6 +1117,18 @@ def self_test():
         rv2.write_text("# Review\n\n| 项 | 内容 |\n|---|---|\n| **结论** | 批准 |\n| **批准人** | 　**待签** |\n",
                        encoding="utf-8", newline="\n")
         _red(5, "⑥b", "结论已签但批准人占位")
+        # 反例 6c：**结论栏有两处且不一致**——§一 已签、§八 退回。
+        #   这是 2026-09-28 评审席指出的真实形态：`templates/review.md` 的结论栏本来就有两处
+        #   （§一 基本信息 与 §八 结论与后续），而旧实现**取第一处就 return**
+        #   ⇒ 押中 §一 即可让一份实际未通过的评审"看起来已签"。
+        #   本条即那次修改的反例；**没有它，这次修改就是没有反例的判据（＝装饰）**。
+        rv2.write_text(
+            "# Review\n\n"
+            "| 项 | 内容 |\n|---|---|\n| **结论** | 批准 |\n| **批准人** | 沙盒批准人 |\n\n"
+            "## 八、结论与后续\n\n"
+            "| 项 | 内容 |\n|---|---|\n| **结论** | 退回（附整改项） |\n",
+            encoding="utf-8", newline="\n")
+        _red(5, "⑥c", "结论栏两处不一致（§一=批准、§八=退回）")
         rv2.write_text(backup6, encoding="utf-8", newline="\n")
 
         # 反例 7：件里声明了「谁让」，但三要素缺一样（只写"谁让"两字、不写谁批的）
