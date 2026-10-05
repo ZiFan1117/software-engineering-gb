@@ -110,6 +110,18 @@ fn start_kernel(d: &Path, ledger: &Path, onto: &Path, pol: &Path, actor: &str, n
         .to_string(),
     )
     .unwrap();
+    // ★ T1／AC-1：受理路径按**法律**（`--policy` 的 `listeners`）判"渲染物每一条在不在册"。
+    //   夹具的口是**临时路径** ⇒ 夹具必须把它写进**自己的法律**里（否则世界**正确地**拒启）。
+    //   ⚠ 这不是"把判据改松"：**判据的会红条件一字未动**；变的是**夹具的法律**，不是判据。
+    //   用 append 而非覆盖：`start_kernel` 可能在同一个沙箱里被调用多次。
+    let mut polv: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(pol).unwrap()).unwrap();
+    let mut decl = polv["listeners"].as_array().cloned().unwrap_or_default();
+    decl.push(json!({"socket":sock.display().to_string(),
+                     "actor":actor,
+                     "owner":"fixture"}));
+    polv["listeners"] = serde_json::Value::Array(decl);
+    fs::write(pol, polv.to_string()).unwrap();
     let log = d.join("kernel.log");
     let out = fs::File::create(&log).unwrap();
     let child = Command::new(env!("CARGO_BIN_EXE_world-core"))
@@ -224,7 +236,7 @@ impl Declared for Book {
             Some(entity) => self
                 .0
                 .declared_fields(entity)
-                .map(|f| f.contains(path))
+                .map(|f| f.contains_key(path))
                 .unwrap_or(false),
             // 裸主体（`world://<名字>`）：它不是"某个对象"，写侧判**翻不出来**
             // （书 §4.5 要的是"某个对象的某个字段"）。这与本体侧那条**已登记的缺口**

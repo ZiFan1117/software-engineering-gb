@@ -72,6 +72,18 @@ echo
 cp ontology.json policy.json "$SB/" 2>/dev/null || true
 cp -r cap.d "$SB/cap.d"
 mkdir -p "$SB/run"
+# ★ AC-1：受理路径现在按**法律**（`--policy` 的 `listeners`）判"这个口在不在册"。
+#   夹具的口是**临时路径** ⇒ 夹具必须把它写进**自己的法律**里（否则世界**正确地**拒启）。
+#   ⚠ 这不是"把判据改松"：**判据的会红条件一字未动**；变的是**夹具的法律**，不是判据。
+#   依赖：python3（与仓内其余工具同口径）。
+python3 - "$SB/policy.json" "$SB/run/agent-1.sock" <<'PY'
+import json, sys
+p, sock = sys.argv[1], sys.argv[2]
+d = json.load(open(p, encoding="utf-8"))
+d.setdefault("listeners", []).append(
+    {"socket": sock, "actor": "world://agent/1", "owner": "fixture"})
+json.dump(d, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+PY
 cat > "$SB/channel.json" <<EOF
 {"channel":1,"listeners":[{"socket":"$SB/run/agent-1.sock","actor":"world://agent/1","uid":$(id -u)}]}
 EOF

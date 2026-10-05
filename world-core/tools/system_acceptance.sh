@@ -314,6 +314,16 @@ SOCKDIR="$(mktemp -d -p /root wc-ch.XXXXXX 2>/dev/null || true)"
 if [ -n "$SOCKDIR" ]; then
   printf '{"channel":1,"listeners":[{"socket":"%s","actor":"world://agent/tc041","uid":0}]}\n' "$SOCKDIR/ch.sock" >"$SOCKDIR/channel.json"
   chmod 600 "$SOCKDIR/channel.json"
+  # ★ T1／AC-1：受理路径按**法律**（`--policy` 的 `listeners`）判在不在册 ⇒
+  #   夹具必须把这条**临时口**写进**自己的法律**（判据的会红条件一字未动）。
+  python3 - "$SB/policy.json" "$SOCKDIR/ch.sock" <<'PY'
+import json, sys
+p, sock = sys.argv[1], sys.argv[2]
+d = json.load(open(p, encoding="utf-8"))
+d.setdefault("listeners", []).append(
+    {"socket": sock, "actor": "world://agent/tc041", "owner": "fixture"})
+json.dump(d, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+PY
   OUT="$(W --channel "$SOCKDIR/channel.json" channel bind "$SOCKDIR/ch.sock" 2>&1)"
   assert_rc "㉒ M09 bind 可调用（rc=0）" 0 "$?"
   MOD_UID="$(stat -c '%a %u' "$SOCKDIR/ch.sock" 2>/dev/null)"

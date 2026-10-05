@@ -36,6 +36,7 @@ use ledger::Ledger;
 use ontology::Ontology;
 use readmodel::State;
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::path::Path;
 
 /// **旗标的内核保留前缀**（`gate.`）：只许**内核依裁决结果**写。
@@ -131,6 +132,13 @@ pub struct World {
     ontology: Ontology,
     policy: Policy,
     ledger: Ledger,
+    /// ★ **写入侧核对用的折叠快照**（读模型的一次快照；**不是第二个真相**）。
+    ///
+    /// 只服务两道**写入侧**判据：[`World::check_before`]（旧值核对）与
+    /// [`World::check_presence_levels`]（在场者有没有申报）。**任何读出口都不用它**
+    /// ——`read_model()` 仍每次从账本全量重算 ⇒ "快照算错"只会让写入侧判错，
+    /// **不会**让世界读到假状态。它的建立与失效时机见 [`World::folded`]。
+    folded: Option<State>,
 }
 
 impl World {
@@ -166,6 +174,39 @@ impl World {
     ) -> Result<Self, String> {
         let ontology = Ontology::load(ontology_path)?;
         let policy = Policy::load(policy_path)?;
+        // **两处法律的一致性**（2026-09-28 补）：闸侧的 `capabilities`（能力层）与本体
+        // `_interfaces`（五要素之三）说的是同一批能力——**两处的名字集必须一致**。
+        // 若不许它们一致，就会出现"闸放行了一项本体里根本不存在的能力"，
+        // 而那正是"两个权威各说各话"的形状（本项目最贵的一类错）。
+        //
+        // ⚠️ 射程（如实声明）：只核**名字集**与**kind**；不核"本体声明了能力却没有任何动作
+        // 引用它"——那是 `Policy::load` 那一侧的判据（`CapabilityWithoutAction`），
+        // 两边各管各的一半，不许互相冒充。
+        {
+            let ont_names: std::collections::BTreeSet<&str> =
+                ontology.interfaces().map(|(k, _)| k).collect();
+            for (name, cap) in policy.capabilities() {
+                let Some((_, o)) = ontology.interfaces().find(|(k, _)| *k == name) else {
+                    return Err(format!(
+                        "ext.world.Gate.CapabilityNotInOntology: 门禁策略声明了能力 `{name}`，\
+                         而出厂本体的 `_interfaces` 里**没有它**。\n\
+                         \x20 已在本体声明的能力：{}\n\
+                         \x20 两处（闸侧 `policy.json` 与本体 `ontology.json`）必须同名同义——\
+                         否则闸会放行一项本体里根本不存在的能力。\n\
+                         \x20 处置：补齐一侧，或把名字对齐（改法律＝走评审）",
+                        ont_names.iter().copied().collect::<Vec<_>>().join(", ")
+                    ));
+                };
+                if o.kind != cap.kind {
+                    return Err(format!(
+                        "ext.world.Gate.CapabilityKindMismatch: 能力 `{name}` 的 `kind` 两处不一致：\
+                         本体 `_interfaces` 说 `{}`，闸侧 `policy.json` 说 `{}`。\n\
+                         \x20 处置：把两处改成同一个（改法律＝走评审）",
+                        o.kind, cap.kind
+                    ));
+                }
+            }
+        }
         let mut ledger = if readonly {
             Ledger::open_readonly(ledger_path)?
         } else {
@@ -205,6 +246,7 @@ impl World {
             ontology,
             policy,
             ledger,
+            folded: None,
         })
     }
 
@@ -339,6 +381,35 @@ impl World {
         }
         let act_body = ev.get("body").cloned().unwrap_or(Value::Null);
 
+        // ── ①b ★ **旧值核对**（本批新立：写入侧本该拦住的那一格）────────────────
+        //
+        // 为什么在**落笔之前**、且属**法律那一段**（不留门禁流水）：它判的不是
+        // "你有没有权限"，而是"**这条事件说的与世界的事实符不符**"——与
+        // `ontology.validate` 里的 `check_concepts`（声明以外不许落账）同一类。
+        //
+        // 依据（真账本里的原始红）：`seq=13` 声称 `before=null`，而折叠出的当前值是
+        // `false` ⇒ 那一笔 `rc=0` 落了账，**整本账本从此折不开**，只能靠 `seq=14`
+        // 一条撤回把它救回来。⇒ 能在写入侧拦住的事，不许留到读侧去兜底。
+        //
+        // 反例（必红）：把这一段短路 ⇒ `m20` 当场变红（它会拿到 `Ok`，而它断言必须 `Err`）。
+        // ⚠️ **撤回事实是唯一的例外**（本批实测逼出来的）：撤回**不写任何格子**
+        //    （读模型对它走 `advance_only`），故"事件声称的旧值"这件事在它身上**不成立**；
+        //    更要紧的是——撤回正是「账本已经折不开」时**唯一**还走得通的那条修法
+        //    （真账本 `seq=13` 就是靠 `seq=14` 一条撤回救回来的）⇒ 对它做旧值核对
+        //    会把唯一的修法也一并堵死（实测反例：`r01`／`r04` 的夹具当场红）。
+        //    「是不是撤回事实」取自**读模型自己的**认定函数（`retract_target_of`），
+        //    **不另立第二套**口径。
+        let refusal_is_retraction = matches!(readmodel::retract_target_of(&ev), Ok(Some(_)));
+        if kind == "change" && !refusal_is_retraction {
+            if let (Some(s), Some(p), Some(b)) = (
+                act_body.get("subject").and_then(Value::as_str),
+                act_body.get("path").and_then(Value::as_str),
+                act_body.get("before"),
+            ) {
+                self.check_before(s, p, b)?;
+            }
+        }
+
         // ── ② 的前半：**调用方给的旗标不许占用内核保留前缀**（2026-09-28 补，工区 F）──
         //
         // 为什么这条必须有：信封的 `flags` 里**混着两种作者**——
@@ -396,7 +467,178 @@ impl World {
             }
         }
 
-        self.ledger.append(ev)
+        let written = self.ledger.append(ev)?;
+        self.note_appended(&written);
+        Ok(written)
+    }
+
+    /// ★ **写入侧 `before` 核对**（本批新立）：事件声称的旧值必须等于账本折叠出的当前值。
+    ///
+    /// ## 为什么这条判据必须在**写入侧**（它是那条坏行的真源头）
+    ///
+    /// 读模型早就有这道墙（`State::apply_change` ⇒ `ext.world.ReadModel.BeforeMismatch`），
+    /// 但**写入侧不过它** ⇒ 一条「谎称旧值」的 `change` 照旧 `rc=0` 落笔，
+    /// 而它一出账本、**整本账本就折不开了**。
+    /// 实测（真账本 `seq=13`）：事件称 `before=null`，而折叠出的当前值是 `false`；
+    /// 那一笔落账之后，只能靠再写一条撤回（`seq=14`，`path=retract_seq`）把账本救回来。
+    /// ⇒ **能在写入侧拦住的事，不许留到读侧去兜底。**
+    ///
+    /// ## 口径（与读侧**同一口径**，不是第二套规矩）
+    ///
+    /// - **格子还不存在** ⇒ 没有可比对的旧值 ⇒ **放行**（读侧 `apply_change` 也只在
+    ///   **已有当前值**时比对 ⇒ 两处同一口径，"首写"这件事两侧读法一致）；
+    /// - **格子已有当前值** ⇒ `before` 必须与它**逐字相等**，否则拒
+    ///   （`ext.world.World.BeforeMismatch`），并**点名三样**：`subject#path`、
+    ///   事件声称的 `before`、账本折叠出的当前值。
+    ///
+    /// 反例（必红）：把本函数短路成恒 `Ok(())` ⇒ `m20` 变红（它断言这一笔必须 `Err`）。
+    fn check_before(&mut self, subject: &str, path: &str, before: &Value) -> Result<(), String> {
+        let current = self.folded()?.get(subject, path).cloned();
+        match current {
+            None => Ok(()),
+            Some(cur) if cur == *before => Ok(()),
+            Some(cur) => Err(format!(
+                "ext.world.World.BeforeMismatch: 旧值不符（{subject}#{path}）：\
+                 事件声称 before={before}，但账本折叠出的当前值是 {cur}。\n\
+                 \x20 为什么写入侧必须拦：这条事件与账本的事实不符——放过它，账本从此**折不开**\
+                 （读模型报 `ext.world.ReadModel.BeforeMismatch`），而「账本折不开」当时只有\
+                 靠**再写一条撤回**才救得回来（真账本 `seq=13` 就是这么来的）。\n\
+                 \x20 处置：先读当前值（`world-core state`），把它填进 `before` 再提交"
+            )),
+        }
+    }
+
+    /// ★ **在场者的两级分开**（本批新立）：① **申报**（依据）→ ② **授权**（许可）。
+    ///
+    /// ## 口径（逐字，作者定的设计；别处引用**不复述**）
+    ///
+    /// > **申报给的是“依据”，授权给的是“许可”。二者不许合并——一旦合并，等于在场者
+    /// > 自己给自己发许可证，世界就不再管着它。报得再全，也不自动拿到任何能力；
+    /// > 开放只由许可决定（`_permissions.grants` ＋ `default: deny`）。**
+    ///
+    /// ## 三级（顺序是死的，三条各判真假）
+    ///
+    /// | # | 情形 | 结局 |
+    /// |---|---|---|
+    /// | ① | **没申报**的在场者调用**任何**能力 | **拒**（`ext.world.World.PresenceNotDeclared`，点名「该在场者未在世界里申报」） |
+    /// | ② | **申报了但没被授予** | **拒**（`ext.world.Gate.CapabilityNotGranted`）——**声明存在 ≠ 你有许可**，**不许**做成「自报即通行」 |
+    /// | ③ | **申报了且被授予** | **通**（正控；交回既有门禁裁决，本函数**不**替它裁决） |
+    ///
+    /// ## 三个词的判据（都可判真假）
+    ///
+    /// - **在场者** ＝ `actor` 形如 `world://presence/<实例>`；
+    /// - **申报** ＝ 折叠出的世界里**这个主体有自己的格**（`presence` 的五格写在它名下）；
+    /// - **被授予** ＝ 本体 `_permissions.grants.<能力>.scope` 里有模式命中该主体
+    ///   （该能力不在 `grants` 里、或 scope 不命中 ⇒ **不授予**，即 `default: deny`）。
+    ///
+    /// ## 射程（如实声明，不许被读成"全体主体都要逐能力授权"）
+    ///
+    /// **只对在场者生效**。其余主体（`world://user`／`world://core`／`world://agent/*`）
+    /// 的口径**一字未动**——给它们逐能力判 `grants` 是**门禁强度变更**，须人裁，本批不扩。
+    ///
+    /// 反例（必红）：把本函数短路成恒 `Ok(())` ⇒ `m22` 的两条反例当场变红。
+    fn check_presence_levels(&mut self, actor: &str, body: &Value) -> Result<(), String> {
+        /// 在场者主体的前缀（本体声明的类型名是 `presence`，实例形态 `world://presence/<实例>`）。
+        const PRESENCE_PREFIX: &str = "world://presence/";
+        if !actor.starts_with(PRESENCE_PREFIX) || actor.len() == PRESENCE_PREFIX.len() {
+            return Ok(());
+        }
+
+        // ① 申报（依据）：这个世界里有没有它自己的格。
+        let declared = {
+            let st = self.folded()?;
+            st.entries().any(|(s, _, _)| s == actor)
+        };
+        if !declared {
+            return Err(self.gate_refusal(
+                "ext.world.World.PresenceNotDeclared",
+                "gate.presence-not-declared",
+                "门禁拒绝在场者的请求",
+                actor,
+                body,
+                &format!(
+                    "该在场者未在世界里申报：`{actor}` 名下一格都没有——\
+                     **没申报的在场者不许调用任何能力**。\n\
+                     \x20 两级是分开的、顺序是死的：**先申报（依据），再授权（许可）**。\n\
+                     \x20 申报给的是“依据”，授权给的是“许可”，二者不许合并——\
+                     一旦合并，等于在场者自己给自己发许可证，世界就不再管着它。\n\
+                     \x20 处置：先把它的格写进世界（一次完整申报＝逐格一条 `change`）"
+                ),
+            ));
+        }
+
+        // ② 授权（许可）：`_permissions.grants` 的 `scope` 有没有命中它；没有 ⇒ 默认拒绝。
+        let capability = body.get("capability").and_then(Value::as_str).unwrap_or("");
+        let granted = self
+            .ontology
+            .permissions()
+            .find(|(name, _)| *name == capability)
+            .map(|(_, p)| p.scope.iter().any(|pat| gate::pattern_matches(pat, actor)))
+            .unwrap_or(false);
+        if !granted {
+            return Err(self.gate_refusal(
+                "ext.world.Gate.CapabilityNotGranted",
+                "gate.capability-not-granted",
+                "门禁拒绝在场者的请求",
+                actor,
+                body,
+                &format!(
+                    "`{actor}` 已申报，但**没有**能力 `{capability}` 的许可——\
+                     **声明存在 ≠ 你有许可**。\n\
+                     \x20 开放只由许可决定（本体 `_permissions.grants` ＋ `default: deny`）：\
+                     `{capability}` 的 `scope` 里没有 `{actor}`。\n\
+                     \x20 报得再全，也不自动拿到任何能力。处置：由有资格者先把它授给这个在场者"
+                ),
+            ));
+        }
+        // ③ 两级都过 ⇒ 交回既有门禁（本函数**不**替它裁决）。
+        Ok(())
+    }
+
+    /// 取（必要时先建）**写入侧核对用的折叠快照**（见 `World::folded` 字段的文档）。
+    ///
+    /// ## 为什么需要它（而不是每次现折）
+    ///
+    /// 核对要求"账本折叠出的当前值"，而**每次写入都全量折叠一遍**是 O(n²)——
+    /// `World::commit` 的调用点里有 10 000 条量级的度量用例（`tests/perf.rs::qg01`）。
+    ///
+    /// ## 它**不**推翻纪律④「状态是算出来的」
+    ///
+    /// 读出口一个都不用它（`read_model()` 每次从账本全量重算）；建立是**懒的**
+    /// （第一次要用才折一次）；失效是**窄的**（只在撤回落笔与侧路写入两处整块作废，
+    /// 见 [`World::note_appended`] 与 [`World::record_gate_notice`]）。
+    fn folded(&mut self) -> Result<&State, String> {
+        if self.folded.is_none() {
+            let evs = self.ledger.read_all()?;
+            self.folded = Some(State::fold(&evs)?);
+        }
+        Ok(self.folded.as_ref().expect("上一行刚建好"))
+    }
+
+    /// 落笔之后的**快照维护**（唯一维护点：只由 [`World::commit_verbatim`] 调用）。
+    ///
+    /// 三条口径：
+    /// 1. **撤回事实 ⇒ 整块作废**：撤回说的是「某一条**已经算过的**事件不算数」，
+    ///    而增量施加会把那一条的效果留下 ⇒ 只能下次重新全折
+    ///    （`State::fold` 的**撤回预扫**正是为了这件事）；
+    /// 2. **还没有快照 ⇒ 什么都不做**（下次要用时自然从账本全量重建）；
+    /// 3. **增量施加失败 ⇒ 作废**（宁可下次重折，也不留一个说不清的快照）。
+    fn note_appended(&mut self, ev: &Value) {
+        let is_retraction = ev.get("kind").and_then(Value::as_str) == Some("change")
+            && ev
+                .get("body")
+                .and_then(|b| b.get("path"))
+                .and_then(Value::as_str)
+                == Some(readmodel::RETRACT_PATH);
+        if is_retraction || self.folded.is_none() {
+            self.folded = None;
+            return;
+        }
+        if let Some(st) = self.folded.as_mut() {
+            if st.apply(ev).is_err() {
+                self.folded = None;
+            }
+        }
     }
 
     /// 门禁裁决（`act` 与 `change` **都必须过闸**），拒绝时**留痕并返回点名错误码**。
@@ -414,6 +656,11 @@ impl World {
     ) -> Result<Option<gate::Friction>, String> {
         match kind {
             "act" => {
+                // ★ **在场者两级分开**（本批新立）：**先申报（依据）、再授权（许可）**。
+                //   排在这里（`policy.verdict` **之前**）是刻意的：没申报的在场者
+                //   连"为什么被拒"都该听到**它自己那一级的理由**，而不是被白名单那句
+                //   "不在门禁白名单内"顶掉（那样判据①点到名的就不是它该听的那句话了）。
+                self.check_presence_levels(actor, body)?;
                 let verdict = self.policy.verdict(actor, body);
                 match verdict.decision {
                     // 准了：把摩擦交回给落笔那一步（不可逆 ⇒ `Some`，可逆 ⇒ `None`）。
@@ -629,6 +876,10 @@ impl World {
         );
         self.ontology.validate(&ev).map_err(|e| e.to_string())?;
         self.ledger.append(ev)?;
+        // ★ **侧路写入 ⇒ 折叠快照整块作废**：门禁流水**不**走 `commit_verbatim`
+        //   （它要能记下"一条被拒的事件"，而那条事件过不了校验），故这里自己作废，
+        //   下次要用时从账本重折——宁可重折一次，也不留一个说不清的快照。
+        self.folded = None;
         Ok(())
     }
 
@@ -683,6 +934,23 @@ impl World {
         let cells = readmodel::DeclaredCells::new(
             self.ontology.envelope_required(),
             self.ontology.family_required(),
+        )
+        // **按类型的实例上限**（第三批的判据面）：`_objects.<类型>.instance_mode: "single"`
+        // ⇒ 上限 1。同样以**纯数据**递进去（理由逐字同上：读模型生产代码零出边），
+        // 判据落在**折叠之后**的实例计数上（`State::type_counts` 是那一面的读数）。
+        .with_instance_limits(self.ontology.instance_limits())
+        // ★ **每个实例必须指回定义面**（书 §5.3 的**读侧**那一半；写侧在 `Ontology::check_concepts`）。
+        //   同样以**纯数据**递进去（不新增模块边：`known_entities`／`nested_types` 与上面两处
+        //   同源，都是 `M01` 已有的只读出口）。判据也落在**折叠之后**——实例集是折叠的产物。
+        //   ⚠️ 这一行是**接线点**：不接 ⇒ 读侧不判（`DeclaredCells::declared_entities` 为 `None`），
+        //   于是"读法比写法宽"。⇒ `tests/ontology_instance.rs` 有一条端到端断言钉着它。
+        .with_declared_entities(
+            self.ontology
+                .known_entities()
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+            self.ontology.nested_types(),
         );
         State::fold_declared(&cells, &self.ledger.read_all()?)
     }
@@ -722,6 +990,75 @@ impl crate::carrier::translate::Declared for Ontology {
         // 主体 → 实体名（`world://notice/n-1` ⇒ `notice`）→ 该实体已声明的字段集。
         Ontology::entity_of(subject)
             .and_then(|e| self.declared_fields(e))
-            .is_some_and(|fields| fields.contains(path))
+            .is_some_and(|fields| fields.contains_key(path))
+    }
+}
+
+// ─────────────────────────── 声明面 → 实例面 ───────────────────────────
+//
+// **"声明了，就必须在实例面上看得见。"** 本批两条判据共用这一处实现：
+//   ① **实例位的可见形态**：`_permissions.grants.<能力>.instances` 里点名的在场者，
+//      **必须真的在世界里有格**（否则"授权授给了一个世界上不存在的在场者"）；
+//   ② **投影的可达性**：投影**声明面**里点名的每一份投影，**必须真的出得来**
+//      （否则"世界里有哪些投影"这句话是空的 —— 声明集 ≡ 可达集，恒真）。
+
+/// **判读结论：三态。** ★"未校验"是**一等状态**，不许被读成绿。
+///
+/// ## 为什么必须有第三态（G1 的落法，不是洁癖）
+/// **声明面为空／不存在**时，"声明集 ⊆ 可达集"这句话**恒真** —— 一条都没声明，当然一条都不缺。
+/// 那不是"通过了"，是"**这条判据无从成立**"。
+/// ⇒ 本项目最贵的一类错是"**因为什么也没读到而绿**"（且它不报错、不留痕）
+/// ⇒ 所以这里**在类型上**就不给绿的机会：判不了 ⇒ [`Coverage::NotVerified`]。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Coverage {
+    /// 声明集**非空**，且其中每一条在实例面上都有可见形态。
+    Green,
+    /// 有声明在实例面上**找不到**（点名它们）。
+    Red { missing: Vec<String> },
+    /// ★**判不了**：声明面不存在／为空 ⇒ 判据无从成立。**它不是绿。**
+    NotVerified { why: String },
+}
+
+/// **声明面 → 实例面：每一条声明都必须兑现**（本批两条判据的同一个形状）。
+///
+/// ## 两侧各是什么（调用方给纯数据，理由同 `DeclaredCells`：读模型不许反向依赖本体）
+/// | 用途 | `declared` | `covered` |
+/// |---|---|---|
+/// | **实例位的可见形态** | `_permissions.grants.<能力>.instances` 点名的在场者 | 世界里**真有格**的 `world://presence/*` |
+/// | **投影的可达性** | 投影**声明面**点名的投影名 | `project <名>` **真的出得来**的那些 |
+///
+/// ## 三态口径（逐条可判真假）
+/// 1. `declared == None`（**声明面不存在**）⇒ [`Coverage::NotVerified`]
+/// 2. `declared == Some(空集)`（**声明面为空**）⇒ [`Coverage::NotVerified`] ← ★**G1：空集不许判绿**
+/// 3. 否则：`declared − covered` **非空** ⇒ [`Coverage::Red`]（**点名**缺哪几条）；为空 ⇒ [`Coverage::Green`]
+///
+/// ## 只判**单向**（`声明 ⊆ 可达`），反向**不判**
+/// "世界上有、但没被声明"是**另一条判据**的事（写侧的 `UndeclaredEntity` 管"落账必须已声明"）。
+/// ⇒ **两半不许互相冒充**（同一体例：读模型的 `UnknownKind` 与 `MissingCell` 不许互相冒充）。
+///
+/// ## 今天它是"骨架"（如实声明，不许读成已生效）
+/// 两个 `declared` 侧今天**都还没有装配点**（投影声明面与 `instances` 字段在定义面，
+/// 归 `M01`）。⇒ 今天它跑起来必然走 `NotVerified`；**等定义面落地，接上装配点，它才真判。**
+/// ★**"没接"这件事由 `NotVerified` 显式表达**，不许由"绿"冒充。
+pub fn declaration_coverage(
+    declared: Option<&BTreeSet<String>>,
+    covered: &BTreeSet<String>,
+) -> Coverage {
+    let Some(declared) = declared else {
+        return Coverage::NotVerified {
+            why: "声明面不存在 —— 这条判据无从成立（\"一个都没声明\"与\"一个都不缺\"在读数上一样、在结论上相反）".to_string(),
+        };
+    };
+    if declared.is_empty() {
+        return Coverage::NotVerified {
+            why: "声明面为空 —— 这条判据无从成立（G1：空集不许判绿）".to_string(),
+        };
+    }
+    let mut missing: Vec<String> = declared.difference(covered).cloned().collect();
+    missing.sort();
+    if missing.is_empty() {
+        Coverage::Green
+    } else {
+        Coverage::Red { missing }
     }
 }

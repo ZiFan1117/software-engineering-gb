@@ -272,10 +272,24 @@ def j5_coverage_change(repo):
             "未实现的能力失去落点，等于把「未定」当「已定」"]
 
 
-# 结论栏里"已签"的取值；其余（待签／退回／驳回／空缺）一律判未签
+# 结论栏的取值口径（**与 `_verdict_cells` 的实现逐条一致**，不许各说各话）：
+#   · 已签 ＝ 以 `SIGNED` 开头；明确否决 ＝ 以 `REJECTED` 开头；**明确写着未签** ＝ 以 `UNSIGNED` 开头
+#     （且必须**是取值形态**，见 `UNSIGNED_SHAPE`）。
+#   · 其余取值（模板里那格 "R4 / R5" 的说明、正文里引用的「结论：…」）**跳过**，不当作结论。
+#   · **全件一个取值都取不到** ⇒ 判据⑥ 判红（"读不出「结论」栏"）——空缺不会因此静静通过。
 SIGNED = ("批准", "通过", "有条件通过")
-#: 明确表示"未签"的取值。与 `SIGNED` **并集**用来把「结论格」与「模板里那格说明」区分开。
+#: 明确否决的取值。
 REJECTED = ("退回", "驳回")
+#: **明确表示"未签"的取值**——必须收进来判未签，**不许整类跳过**。
+#: 2026-10-06 修：此前"以 `待签` 开头"的格既不进"已签"也不进"未签"（被 `continue` 丢掉）⇒
+#: 「§一 签了、§六 仍写 `待签`」判不出红。活标本与反例见 `--self-test` 的反例⑥d／正控⑥e。
+UNSIGNED = ("待签", "未签", "空缺")
+#: 未签取值必须是**取值形态**：令牌 ＋ 可选的括号说明 ＋ 尾巴标点。
+#: 为什么加这一关（**实盘反例，就在活标本那一件自己身上**）：
+#: `2026-09-27-baseline-verified-doctrine/review.md` 有一段**叙述**逐字含「结论：待签」
+#: （它解释的正是这个洞本身）——"以 `待签` 开头就收"会把那句**引文**当成结论，
+#: 给一份已签的件造出**假红**。⇒ **认取值形态，不认"开头字样"**（skill §五：搜字样 ≠ 认结构）。
+UNSIGNED_SHAPE = re.compile(r"^(%s)(（[^（）]*）|\s*\([^()]*\))?[\s。．.,，;；]*$" % "|".join(UNSIGNED))
 
 
 def _verdict_cells(review_text):
@@ -286,15 +300,23 @@ def _verdict_cells(review_text):
       而 `templates/review.md` 的结论栏有**两处**（§一 基本信息 与 §八 结论与后续）
       ⇒ `§一=批准` ＋ `§八=退回` 会被判成"已签"。
       更讽刺的是：**同一个病同文件里已经修过一次**——判据⑥ 的「批准人」栏
-      （`:308` 的 `re.findall`）就是 2026-09-28 从"取第一处字样"改成"按栏位形态全查"的。
-      「结论」这一格当时漏改了。本函数即那次修改的另一半。
+      （`j6_archived_review_signed` 里那条 `re.findall`）就是 2026-09-28 从"取第一处字样"
+      改成"按栏位形态全查"的。「结论」这一格当时漏改了。本函数即那次修改的另一半。
 
     **取值口径**（不改动任何真实件的前提下收紧）：
       · 表格写法只认**下一个单元格**（与旧实现一致），非表格写法认 `结论：x`；
       · 剥掉 Markdown 强调与空白后，**认"以某个已签／未签取值开头"的格**——
         仓内真实结论带说明尾巴（如「**批准**（评审席第九轮逐字判定语：**通过 —— 记录可签**）」），
         故不能要求整格精确等于某个值；
-      · 其余取值（含模板里那格 "R4 / R5" 的说明文字）**跳过**，不当作结论。
+      · **明确写出的未签取值（`UNSIGNED`）也收进来**（须过 `UNSIGNED_SHAPE` 的形态关）——
+        收进来才会落到判据⑥ 的 `unsigned` 分支上判红；**整类跳过就等于放行**；
+      · **表格里那格说明文字跳过**（以 `<!--` 开头的模板格），非表格写法里凡**不以**上述取值开头的
+        说明也跳过（实测：把真件那句引文单行喂进来 ⇒ `[]`；见 `--self-test` 的对照⑥f）。
+      · ⚠ **如实登记本函数抓不到的**：非表格写法只看"`结论` 后紧跟的取值"，**不认那句话在不在 HTML 注释里**。
+        实测：真模板 `openspec/schemas/opsx-swe-gb-atom/templates/review.md` 的结论格那条长注释里有
+        「只有三种结论：**通过** / 有条件通过（附条件清单与期限）/ 退回」⇒ 会捕到**以 `通过` 开头**的片段，
+        被当成"已签"。**这是既有口径，本轮未动**（本轮只把"明确未签"那一档收进来，不许动"认什么"）；
+        它今天**不产生读数**，因为判据⑥ 只扫 `openspec/changes/archive/`，而模板不在扫描面内。
     """
     out = []
     for line in review_text.splitlines():
@@ -313,6 +335,8 @@ def _verdict_cells(review_text):
         for v in cands:
             if any(v.startswith(k) for k in SIGNED + REJECTED):
                 out.append(v)
+            elif UNSIGNED_SHAPE.match(v.replace("*", "")):
+                out.append(v)
     return out
 
 
@@ -322,6 +346,12 @@ def j6_archived_review_signed(repo):
     **为什么单列一条**：判据① 只判"在场"，它是**内容盲**的——一份"结论：待签"的 review 照样通过它。
     评审没签字却在账上记成"已归档"，正是本项目最忌的形态（把未定当已定）。
     **只对归档件判红**：在办件还没到归档，不该被这条挡住。
+
+    **口径（与 `SIGNED`／`REJECTED`／`UNSIGNED` 三个集合一致，两处不许各说各话）**：
+    一处签了、另一处**明确写着未签**（含**行内**写法 `**结论**：　**待签**（…）`）判红；
+    表格里那格模板说明（`<!-- … R4 / R5 … -->`）与正文里引用的「结论：…」**不算结论**
+    （对照⑥f 钉住"表格那格"这一半；非表格写法能捕到注释里以已签取值开头的片段——既有口径，
+    本轮未动，如实登记在 `_verdict_cells` 的射程里）。
     """
     bad = []
     arch = Path(repo) / "openspec" / "changes" / "archive"
@@ -750,8 +780,35 @@ def j13_secmap_freshness(repo):
     return bad
 
 
+# ★ 判据⑮ 的「脚本面」表：**按结构取**（定位表头行 ⇒ 只收它下面连续的表体行）。
+#   为什么不整篇搜 `` `x.py` ``：正文里另有 `world-core/check.sh` 这类**不在 `tools/` 下**的字样，
+#   整篇搜会把它们算进表 ⇒ 误判（skill §五：**搜字样 ≠ 认结构**）。
+ST_SCRIPT_TABLE_HEAD = re.compile(r"^\|\s*脚本\s*\|\s*管什么\s*\|\s*$")
+ST_SCRIPT_ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|")
+
+
+def _script_table_names(text):
+    """取 `WC-ST-001` §一「脚本面」表的件名；**没有这张表** ⇒ 返回 `None`。"""
+    lines = text.splitlines()
+    for i, ln in enumerate(lines):
+        if ST_SCRIPT_TABLE_HEAD.match(ln):
+            j = i + 1
+            if j < len(lines) and re.match(r"^\|[\s\-:|]+\|$", lines[j]):
+                j += 1                                   # 跳过分隔行 `|---|---|`
+            names = []
+            while j < len(lines) and lines[j].lstrip().startswith("|"):
+                m = ST_SCRIPT_ROW.match(lines[j])
+                # 首格不是反引号包起来的件名 ⇒ 把整行记下来（**别静默跳过**：静默跳过＝那一行不被核查）
+                names.append(m.group(1) if m else lines[j].strip())
+                j += 1
+            return names
+    return None
+
+
 def j15_doc_lists_match_reality(repo):
-    """⑮ 两份"清单表"必须 ≡ 实际（**双向**）：`WC-ST-001` 的测试件清单 ≡ `world-core/tests/*.rs`；
+    """⑮ 两份文档的**三张清单表**必须 ≡ 实际（**双向**）：
+    `WC-ST-001` 的测试件清单 ≡ `world-core/tests/*.rs`；
+    `WC-ST-001` §一「脚本面」表 ≡ `world-core/tools/` 下的 `*.py`／`*.sh`（不含子目录）；
     `WC-AT-001` 的步骤清单 ≡ `check.sh` 的 `step "…"` 首词。
 
     为什么单列一条：那两份文档**自己登记过**这个缺口，逐字——
@@ -759,22 +816,46 @@ def j15_doc_lists_match_reality(repo):
     **要防这类漂移，得让门禁承担**（把「文档里的清单 ≡ 目录里的实际文件」做成一条会红的检查）——**今天没有这条判据**。」
     实测（2026-09-28）：`WC-ST-001` 列 **9** 个测试件、实有 **13** 个（缺的四个**全是本批新增**）；
     `WC-AT-001` 列 **11** 步、`check.sh` 实有 **13** 步（缺 `①b`／`③c`）。⇒ 本判据就是那份文档要的那条检查。
+    「脚本面」那一支同理：`WC-ST-001` §一 曾逐字写「**本表不进任何判据**——判据⑮ 只认 `tests/`
+    下的测试件，**不认 `tools/`**」⇒ 该表**只靠人记**（实测 2026-10-05：列 7／实有 28）。
 
-    **★ 射程（如实写）**：只核「**清单 ≡ 实际**」，**不核**表里那些"这个文件测什么／这一步做什么"的描述对不对
-    ——那要人读。**双向**：文档多了也红（防"表里留着已经删掉的件"）。
+    **★ 射程（如实写）**：
+      · 只核「**件名 ≡ 实际件名**」，**不核**表里那些"这个文件测什么／这一步做什么／管什么"的描述对不对
+        ——那要人读。**双向**：文档多了也红（防"表里留着已经删掉的件"）。
+      · 「脚本面」一支的口径 ＝ `tools/` 下**非递归**的 `*.py`／`*.sh`（与 `WC-ST-001` §一 自述的口径逐字一致）；
+        表体其他扩展名（`*.ps1`／`*.json`）会被算作「表里多了」⇒ 红，因为那与它自己声明的口径不符。
+      · 「脚本面」表**整块不在**、而 `tools/` 下确有 `*.py`／`*.sh` ⇒ 红（**表不见了**比"少一行"更坏）。
     """
     import glob as _glob
     bad = []
     st = Path(repo) / "world-core" / "docs" / "S5-测试" / "WC-ST-001-v0.1.md"
     tests_dir = Path(repo) / "world-core" / "tests"
-    if st.is_file() and tests_dir.is_dir():
-        text = st.read_text(encoding="utf-8")
-        listed = set(re.findall(r"`([a-z_]+\.rs)`", text))
+    tools_dir = Path(repo) / "world-core" / "tools"
+    st_text = st.read_text(encoding="utf-8") if st.is_file() else ""
+    if st_text and tests_dir.is_dir():
+        listed = set(re.findall(r"`([a-z_]+\.rs)`", st_text))
         actual = {os.path.basename(p) for p in _glob.glob(str(tests_dir / "*.rs"))}
         for n in sorted(actual - listed):
             bad.append("WC-ST-001-v0.1.md §一 —— 测试件 `%s` **在实际目录里、表里没有**（新增文件忘改表 ⇒ 本判据会红）" % n)
         for n in sorted(listed - actual):
             bad.append("WC-ST-001-v0.1.md §一 —— 表里列了 `%s`，**实际目录里没有**（删了文件忘改表）" % n)
+    if st_text and tools_dir.is_dir():
+        listed_s = _script_table_names(st_text)
+        actual_s = sorted(p.name for p in tools_dir.iterdir()
+                          if p.is_file() and p.suffix in (".py", ".sh"))
+        if listed_s is None:
+            if actual_s:
+                bad.append("WC-ST-001-v0.1.md §一 —— **找不到「脚本面」表**（表头逐字 `| 脚本 | 管什么 |`）；"
+                           "而 `world-core/tools/` 下有 %d 个 `*.py`／`*.sh` ⇒ **表整块不见了**"
+                           "（比「表里少一行」更坏：读者会以为 `tools/` 下只有表里那几个）" % len(actual_s))
+        else:
+            ls, acts = set(listed_s), set(actual_s)
+            for n in sorted(acts - ls):
+                bad.append("WC-ST-001-v0.1.md §一「脚本面」—— `tools/%s` **在目录里、表里没有**"
+                           "（新增件忘改表 ⇒ 本判据会红）" % n)
+            for n in sorted(ls - acts):
+                bad.append("WC-ST-001-v0.1.md §一「脚本面」—— 表里列了 `%s`，**`world-core/tools/` 里没有**"
+                           "（删件忘改表；或该行首格不是反引号包起来的件名／不在本表口径内）" % n)
     at = Path(repo) / "world-core" / "docs" / "S6-验收" / "WC-AT-001-v0.1.md"
     ck = Path(repo) / "world-core" / "check.sh"
     if at.is_file() and ck.is_file():
@@ -882,7 +963,7 @@ JUDGMENTS = [
     ("⑪ `BRIDGE.md` 与生成器的当前输出逐字节一致（生成物不许手编）", j11_bridge_in_sync_with_generator),
     ("⑫ `specmap.json` 记录了当前生成器的内容哈希（生成物不许手编）", j12_specmap_generator_hash),
     ("⑬ `节对齐.md` 记录了当前来源坐标（生成物不许手编）", j13_secmap_freshness),
-    ("⑮ 两份文档的「清单表」≡ 实际（双向）", j15_doc_lists_match_reality),
+    ("⑮ 两份文档的三张「清单表」≡ 实际（双向）", j15_doc_lists_match_reality),
     ("⑭ 书 §5.6 的每一行判据都有人认领", j14_judges_all_claimed),
     ("⑯ 书的四件「已被撤回的说法」不许写回正文", j16_retracted_claims),
 ]
@@ -979,7 +1060,16 @@ def build_sandbox(root):
     _st = Path(root) / "world-core" / "docs" / "S5-测试" / "WC-ST-001-v0.1.md"
     _st.parent.mkdir(parents=True, exist_ok=True)
     _names = sorted(p.name for p in _t.glob("*.rs"))
-    _st.write_text("".join("| `%s` | 沙盒 |\n" % n for n in _names), encoding="utf-8", newline="\n")
+    # ★ 判据⑮ 的「脚本面」沙盒件：表 ≡ `world-core/tools/` 下的 `*.py`／`*.sh`（同一套口径现算）
+    _td = Path(root) / "world-core" / "tools"
+    _td.mkdir(parents=True, exist_ok=True)
+    for _s in ("sandbox_alpha.py", "sandbox_beta.sh"):
+        _td.joinpath(_s).write_text("#!/usr/bin/env python3\n", encoding="utf-8", newline="\n")
+    _snames = sorted(p.name for p in _td.iterdir() if p.is_file() and p.suffix in (".py", ".sh"))
+    _st.write_text("".join("| `%s` | 沙盒 |\n" % n for n in _names)
+                   + "\n| 脚本 | 管什么 |\n|---|---|\n"
+                   + "".join("| `%s` | 沙盒 |\n" % n for n in _snames),
+                   encoding="utf-8", newline="\n")
     _at = Path(root) / "world-core" / "docs" / "S6-验收" / "WC-AT-001-v0.1.md"
     _at.parent.mkdir(parents=True, exist_ok=True)
     _ck = Path(root) / "world-core" / "check.sh"
@@ -1014,6 +1104,7 @@ def self_test():
     print("== spec_bridge.py --self-test ==")
     failures = []
     covered = set()
+    greens = []
     with tempfile.TemporaryDirectory(prefix="specbridge-") as tmp:
 
         def jname(idx):
@@ -1032,6 +1123,7 @@ def self_test():
 
         def _green(idx, tag, why):
             """对照：**不该红的**必须不红（否则下一个人就不敢写那句话了）。"""
+            greens.append(tag)
             is_red = not run_all(tmp)[idx]["ok"]
             print("  对照%s（%s => 判据%s **不应红**）：%s" % (tag, why, jname(idx), "*误伤" if is_red else "未红 OK"))
             if is_red:
@@ -1129,6 +1221,37 @@ def self_test():
             "| 项 | 内容 |\n|---|---|\n| **结论** | 退回（附整改项） |\n",
             encoding="utf-8", newline="\n")
         _red(5, "⑥c", "结论栏两处不一致（§一=批准、§八=退回）")
+
+        # ── 反例 6d／正控 6e／对照 6f：**「§一 签了、另一处仍写 `待签`」** ──────────────
+        #   形态＝**真实违规形态**（活标本：`openspec/changes/archive/2026-09-27-baseline-verified-doctrine/review.md`
+        #   的 §六 逐字 `**结论**：　**待签**（通过 / 有条件通过 / 退回 / 驳回）`，而同件 §一 已签「批准」）；
+        #   该件 §一 是**表格**写法、§六 是**行内**写法 —— 两种写法同件共存，缺一不可。
+        #   6d 是本轮修改的反例；**没有它，这次修改就是没有反例的判据（＝装饰）**。
+        rv2.write_text(
+            "# Review\n\n"
+            "| 项 | 内容 |\n|---|---|\n| **结论** | 批准 |\n| **批准人** | 沙盒批准人 |\n\n"
+            "## 六、结论与后续\n\n"
+            "**结论**：　**待签**（通过 / 有条件通过 / 退回 / 驳回）\n",
+            encoding="utf-8", newline="\n")
+        _red(5, "⑥d", "§一 已签（表格）＋ §六 行内仍写「待签」（与真件同形态）")
+        # 正控 6e：**同一份件**只把 §六 改成已签 ⇒ 必须绿（否则本判据就是在误伤"两处都签"的合法件）
+        rv2.write_text(
+            "# Review\n\n"
+            "| 项 | 内容 |\n|---|---|\n| **结论** | 批准 |\n| **批准人** | 沙盒批准人 |\n\n"
+            "## 六、结论与后续\n\n"
+            "**结论**：**批准**\n",
+            encoding="utf-8", newline="\n")
+        _green(5, "6e", "同形件 §六 也签了（两处都是批准）")
+        # 对照 6f：**表格里那格说明文字不算结论**（以 `<!--` 开头 ⇒ 跳过）——把它当"未签"会造**假红**。
+        #   ⚠ 它钉的是**表格那一格**：真模板那条**长注释**在"非表格写法"下仍会被捕到以 `通过` 开头的片段
+        #   （既有口径，本轮未动；如实登记在 `_verdict_cells` 的射程里）。
+        rv2.write_text(
+            "# Review\n\n"
+            "| 项 | 内容 |\n|---|---|\n| **结论** | 批准 |\n| **批准人** | 沙盒批准人 |\n\n"
+            "## 六、结论与后续\n\n"
+            "| **结论** | <!-- ★ 按档位填：**R4 ＝ 通过 / 有条件通过 / 退回；R5 ＝ 批准 / 驳回** --> |\n",
+            encoding="utf-8", newline="\n")
+        _green(5, "6f", "表格里那格说明文字（以 `<!--` 开头）——不当作结论")
         rv2.write_text(backup6, encoding="utf-8", newline="\n")
 
         # 反例 7：件里声明了「谁让」，但三要素缺一样（只写"谁让"两字、不写谁批的）
@@ -1254,11 +1377,29 @@ def self_test():
         back15 = st15.read_text(encoding="utf-8")
         st15.write_text(re.sub(r"(?m)^\| `[a-z_]+\.rs` \|[^\n]*\n", "", back15, count=1),
                         encoding="utf-8", newline="\n")
-        _red(13, "⑮", "文档的清单表少了一件（与实际不再一致）")
+        _red(13, "⑮", "文档的**测试件**表少了一件（与实际不再一致）")
         st15.write_text(back15, encoding="utf-8", newline="\n")
 
-        # 对照 15n：**不该红的** —— 沙盒里那两份表与实际一致
-        _green(13, "15n", "清单与实际一致")
+        # ── 反例 15b／15c／15d：「脚本面」表 ≡ `tools/` 实际（**双向**）──
+        #   形态＝**真实违规**：真违规就是表里**少一行**／**多一行**（`tools/` 下新增件忘改表／删件忘改表），
+        #   **不是**标题式的假形态。15b／15c 两向各一条；15d 钉"表整块不见了"那一支。
+        #   ⚠ 夹具**互不污染**：每条反例跑完当场按 `back15` 恢复，后一条从同一份基线改。
+        st15.write_text(re.sub(r"(?m)^\| `sandbox_alpha\.py` \|[^\n]*\n", "", back15, count=1),
+                        encoding="utf-8", newline="\n")
+        _red(13, "15b", "「脚本面」表**少一行**（`tools/sandbox_alpha.py` 在目录里、表里没有）")
+        st15.write_text(back15, encoding="utf-8", newline="\n")
+
+        st15.write_text(back15 + "| `sandbox_ghost.py` | 沙盒：表里有、`tools/` 里没有 |\n",
+                        encoding="utf-8", newline="\n")
+        _red(13, "15c", "「脚本面」表**多一行**（表里有、`tools/` 里没有）")
+        st15.write_text(back15, encoding="utf-8", newline="\n")
+
+        st15.write_text(back15.split("\n| 脚本 | 管什么 |")[0] + "\n", encoding="utf-8", newline="\n")
+        _red(13, "15d", "「脚本面」表**整块不见了**（`tools/` 下有件却没表）")
+        st15.write_text(back15, encoding="utf-8", newline="\n")
+
+        # 对照 15n：**不该红的** —— 沙盒里那三张表与实际一致（测试件／脚本／`check.sh` 步骤）
+        _green(13, "15n", "三张清单表与实际一致")
 
         # ── 反例 14：把某一行的"认领"抹掉（改掉书行号）⇒ 判据⑭ 必须红 ──
         j14 = Path(tmp) / "openspec/BOOK/节落点/第五章.md"
@@ -1299,8 +1440,8 @@ def self_test():
         print("  => 按本项目口径：**这条守卫是装饰，拒绝合入**。")
         return 1
     print("  => 自证通过：**每条判据**（%d 条）在反例下变红、在正控下全绿；" % len(JUDGMENTS))
-    print("     （四处「不应红」的对照：⑧ 的「不设修订记录」声明／⑧ 的表格**指路**行／⑧ 的 `docs/评审/` 豁免目录／"
-          "⑩ 的 MODIFIED 标题。）")
+    # 计数**现算**、不写死（此前这里写死"四处"，而实有对照数随判据增长 ⇒ 该行早已是假话）
+    print("     （「不应红」的对照 %d 处：%s）" % (len(greens), "、".join(greens)))
     return 0
 
 

@@ -40,6 +40,10 @@ fn policy() -> PathBuf {
 }
 
 /// 写一份**合法**的临时策略（含 `writes` 段——默认拒绝要求它必须存在）。
+///
+/// ⚠️ **本批起是两层**（能力层 ＋ 动作层）：`capabilities.<名字>.kind` 与
+/// `actions.<动作>.capability`。夹具按两层写，与出厂 `policy.json` 同形
+/// （判据见 `src/gate.rs::Policy::load`）。
 fn write_policy(dir: &Path, name: &str, body: &Value) -> PathBuf {
     let p = dir.join(name);
     fs::write(&p, serde_json::to_string_pretty(body).unwrap()).unwrap();
@@ -49,7 +53,8 @@ fn write_policy(dir: &Path, name: &str, body: &Value) -> PathBuf {
 fn valid_policy_json() -> Value {
     json!({
         "policy": 1,
-        "capabilities": { "notice.mute": { "reversible": true } },
+        "capabilities": { "notice.mute": { "kind": "invoke" } },
+        "actions": { "notice.mute": { "capability": "notice.mute", "reversible": true } },
         "subjects": { "allow": ["world://user"] },
         "writes": { "world://user": ["world://*"] }
     })
@@ -217,12 +222,29 @@ fn c03_policy_load_rejects_every_malformed_shape() {
     let e = Policy::load(&p).unwrap_err();
     assert!(e.contains("policy"), "实得: {e}");
 
-    // ③ 能力表为空
+    // ③ 能力表为空（**能力层**空 ⇒ 拒启）
     let mut v = valid_policy_json();
     v["capabilities"] = json!({});
     let p = write_policy(&d, "empty-caps.json", &v);
     let e = Policy::load(&p).unwrap_err();
     assert!(e.contains("capabilities"), "实得: {e}");
+
+    // ③b 动作表为空（**动作层**空 ⇒ 拒启；两层各自成判，不合并）
+    let mut v = valid_policy_json();
+    v["actions"] = json!({});
+    let p = write_policy(&d, "empty-actions.json", &v);
+    let e = Policy::load(&p).unwrap_err();
+    assert!(e.contains("actions"), "实得: {e}");
+
+    // ③c ★ **动作引用了不存在的能力** ⇒ 拒启（本批新立的判据）
+    let mut v = valid_policy_json();
+    v["actions"]["notice.mute"]["capability"] = json!("no.such.capability");
+    let p = write_policy(&d, "dangling-action.json", &v);
+    let e = Policy::load(&p).unwrap_err();
+    assert!(
+        e.contains("ext.world.Gate.ActionCapabilityUnknown") && e.contains("no.such.capability"),
+        "悬空的动作必须被拒且点名那个能力，实得: {e}"
+    );
 
     // ④ 白名单为空
     let mut v = valid_policy_json();
@@ -261,19 +283,23 @@ fn c03_policy_load_rejects_every_malformed_shape() {
     //
     // 为何是"应能加载"而不是"应被拒载"（E-5 裁定①"删字段"）：
     // `Policy::load` 用 `serde_json::Value` **手工取值**——`let root: Value =
-    // serde_json::from_str(..)` 之后逐键 `spec.get("reversible")`（`src/gate.rs`
+    // serde_json::from_str(..)` 之后逐键 `spec.get("kind")`（`src/gate.rs`
     // 「`capabilities` 解析」段）；`gate.rs` 里**没有任何 `#[derive(Deserialize)]`
     // 结构**，也就无从施加 `deny_unknown_fields`（`grep -rn "Deserialize" world-core/src/` = 0 命中）
     // ⇒ 未知键既不导致拒载、也不参与裁决。本用例同时是"旧策略文件带着
     // `requires_approval` 仍能加载"的兼容回归。
     let mut v = valid_policy_json();
     v["capabilities"] = json!({
-        "weird": { "reversible": true, "requires_approval": true },
-        "odd": { "reversible": true, "totally_unknown_key": 1 }
+        "weird": { "kind": "invoke", "requires_approval": true },
+        "odd": { "kind": "invoke", "totally_unknown_key": 1 }
+    });
+    v["actions"] = json!({
+        "weird": { "capability": "weird", "reversible": true },
+        "odd": { "capability": "odd", "reversible": true }
     });
     let p = write_policy(&d, "extra-keys-ignored.json", &v);
     let pol = Policy::load(&p).expect("多余键应被忽略，而不是拒载");
-    // 裁决只看 `reversible` + `irreversible_actors`：多余键不得改变结论
+    // 裁决只看**动作**的 `reversible` + `irreversible_actors`：多余键不得改变结论
     // （`verb` 可省，`decide` 取不到时按 `-` 处理，见 `src/gate.rs`）。
     let act = json!({ "capability": "weird", "verb": "do" });
     assert_eq!(
@@ -284,6 +310,15 @@ fn c03_policy_load_rejects_every_malformed_shape() {
 }
 
 /// **c04**：本体"文件缺失"与"家族为空"两条拒启分支。
+///
+/// ⚠️ **本批改了两次夹具**，理由都是"法律多加了一条，夹具就得跟"：
+/// 1. 五要素节存在性判据（`check_sections`）排在家族检查**之前** ⇒ 这份最小本体必须**五节齐备**；
+/// 2. ★ **十二节归属表判据**（`check_section_map`）同样排在家族检查之前 ⇒ 它还必须有
+///    `_section_map`，且表里声明的 `_` 分节键集合要**逐项等于**这份文件里实际的 `_` 分节。
+///    （本夹具的"对象"只写在**冻结映射** `concepts` 里、没有 `_objects` ⇒ 那一项按
+///    `keys: []` ＋ `_where` 声明——这正是该判据允许的形态。）
+///
+/// 两条都**不改**本用例要验的那件事：家族列表为空 ⇒ `NoFamilies`。
 #[test]
 fn c04_ontology_load_rejects_missing_file_and_empty_families() {
     use world_core::ontology::Ontology;
@@ -294,14 +329,46 @@ fn c04_ontology_load_rejects_missing_file_and_empty_families() {
     let e = Ontology::load(&missing).unwrap_err();
     assert!(e.contains("ReadFail"), "实得: {e}");
 
-    // ② 家族为空
+    // ② 家族为空（其余各节齐备，好让拒启的**唯一理由**是家族为空）
     let p = d.join("no-families.json");
     fs::write(
         &p,
         serde_json::to_string(&json!({
             "world": 1,
             "envelope": { "required": ["world"], "optional": [] },
-            "families": {}
+            "families": {},
+            "concepts": { "t": { "fields": { "f": "string" } } },
+            "_links": { "r": { "from": "t", "to": "t", "card": "many" } },
+            "_interfaces": { "cap": { "kind": "read" } },
+            "_actions": { "act": { "capability": "cap", "reversible": true } },
+            "_functions": { "entries": {} },
+            "_permissions": { "default": "deny" },
+            "_section_map": {
+                "_homes": [
+                    "对象（Object）", "关系（Link）", "接口·能力（Interface）",
+                    "动作（Action）", "函数（Function）"
+                ],
+                "_not_domain_sections": { "_note": "夹具：说明格", "_section_map": "本表自己" },
+                "sections": {
+                    "类型（对象）": {
+                        "home": "对象（Object）", "attach": "full",
+                        "keys": [], "_where": "冻结映射 `concepts`（本夹具不设 `_objects`）"
+                    },
+                    "关系": { "home": "关系（Link）", "attach": "full", "keys": ["_links"] },
+                    "接口·能力": {
+                        "home": "接口·能力（Interface）", "attach": "full", "keys": ["_interfaces"]
+                    },
+                    "动作": { "home": "动作（Action）", "attach": "full", "keys": ["_actions"] },
+                    "函数入口": {
+                        "home": "函数（Function）", "attach": "half", "keys": ["_functions"],
+                        "_why_half": "夹具：只挂引用那一半"
+                    },
+                    "许可条文": {
+                        "home": "接口·能力（Interface）", "attach": "half", "keys": ["_permissions"],
+                        "_why_half": "夹具：授权不是能力"
+                    }
+                }
+            }
         }))
         .unwrap(),
     )

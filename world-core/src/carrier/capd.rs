@@ -18,7 +18,7 @@
 //! ## 清单长什么样
 //!
 //! ```json
-//! { "capability": "brightness.set",
+//! { "capability": "notice.mute",
 //!   "provider":   "backlight",
 //!   "verbs":      ["get", "set"],
 //!   "risk":       "low",
@@ -26,6 +26,18 @@
 //!   "confirm":    "never",
 //!   "sandbox":    "none" }
 //! ```
+//!
+//! ## ★ 两栏各用各的词表：`capability` 说"叫什么"，`provider` 说"怎么实现"
+//!
+//! **`capability` 写的是"叫什么"，不是"怎么实现"**——它是**语义层的名字**
+//! （与本体 `_interfaces`、门禁策略的能力表同一套词表：`notice.mute`／`job.start`…）。
+//! **设备词属于 `provider` 那一边**（`backlight`／`package`／`job` 才是"怎么实现"）。
+//! 两栏**不许互换**：把 `brightness.set` 写成 `capability`，等于让本体里根本没有的名字
+//! 冒充一项能力，而真正该被问到的那一栏（"谁能实现它"）永远没人问。
+//!
+//! 同一条口径落在执行器一侧：`Provider::capabilities()` 自报的也必须是**语义层的名字**，
+//! 否则 `cap.d` 与执行器会各有一个**合法**名字、却对不上——那不是拼写错，是**两套词表撞车**。
+//! 对账判据见 [`crate::carrier::providers::cross_check`]。
 //!
 //! **注意这里没有"允不允许"这一栏**：清单只说怎么干。允不允许由门禁裁决
 //! （内核持有的门禁策略），本模块**永远不能放行**。
@@ -64,9 +76,11 @@ pub enum Confirm {
 /// 一项能力的执行清单。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Capability {
-    /// 能力名（与门禁策略里的能力名**同名**）。
+    /// 能力名——**语义层的名字**（与本体 `_interfaces`、门禁策略的能力表同一套词表）。
+    ///
+    /// **不是设备名**：设备词（"怎么实现"）属于 [`Capability::provider`] 那一栏。
     pub name: String,
-    /// 用哪个执行器（provider 名）。
+    /// 用哪个执行器（**设备词／实现词**，如 `backlight`）。
     pub provider: String,
     /// 允许哪些动词（**本模块自己的**收窄：清单外的动词直接拒）。
     pub verbs: Vec<String>,
@@ -285,11 +299,11 @@ mod unit {
 
     #[test]
     fn parses_a_wellformed_manifest() {
-        let raw = r#"{"capability":"brightness.set","provider":"backlight",
+        let raw = r#"{"capability":"notice.mute","provider":"backlight",
                       "verbs":["get","set"],"risk":"low","undo":"never",
                       "confirm":"never","sandbox":"none"}"#;
         let c = Manifest::parse(raw, Path::new("t.json")).unwrap();
-        assert_eq!(c.name, "brightness.set");
+        assert_eq!(c.name, "notice.mute");
         assert_eq!(c.provider, "backlight");
         assert!(c.allows("set"));
         assert!(!c.allows("uninstall"));
@@ -299,7 +313,7 @@ mod unit {
 
     #[test]
     fn high_risk_with_before_each_needs_undo() {
-        let raw = r#"{"capability":"package.install","provider":"package",
+        let raw = r#"{"capability":"ledger.compact","provider":"package",
                       "verbs":["install"],"risk":"high","undo":"before-each",
                       "confirm":"required"}"#;
         let c = Manifest::parse(raw, Path::new("p.json")).unwrap();
@@ -368,13 +382,13 @@ mod unit {
         .unwrap();
         std::fs::write(
             d.join("a.json"),
-            r#"{"capability":"brightness.set","provider":"backlight","verbs":["get","set"]}"#,
+            r#"{"capability":"notice.mute","provider":"backlight","verbs":["get","set"]}"#,
         )
         .unwrap();
         // 非 .json 一律忽略
         std::fs::write(d.join("README.md"), "ignore me").unwrap();
         let m = Manifest::load_dir(&d).unwrap();
-        assert_eq!(m.names(), vec!["brightness.set", "job.start"]);
+        assert_eq!(m.names(), vec!["job.start", "notice.mute"]);
         assert!(m.lookup("job.start").is_some());
         assert!(m.lookup("nope").is_none());
         assert!(!m.is_empty());

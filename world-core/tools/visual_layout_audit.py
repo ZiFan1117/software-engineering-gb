@@ -152,7 +152,7 @@ def audit(text):
 
 
 # ── 三份**字节级期望样本**（对应 P-06 要求的三种情形）────────────────────
-_H = "#world-core projection=visual world=1 vocab=fnv1a64:4bf7b75573fee475 " \
+_H = "#world-core projection=visual world=1 vocab=fnv1a64:6a96abfa9a969462 " \
      "last_seq=2 state=fnv1a64:057b92d9ea7b8091"
 _R = RULE_CHAR * RULE_LEN
 

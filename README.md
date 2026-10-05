@@ -101,39 +101,46 @@
 
 ## 三、怎么跑门禁
 
-四条命令，都在**仓库根**跑。前三条已实测，读数如下（实测时点同前）：
+四条命令，都在**仓库根**跑。**本表不复述读数**——写死的读数必然过期（本项目为此被独立评审席判过三次）；
+每条只给"**怎么判**"，读数一律现取。
 
-| # | 命令 | 管什么 | 今天的读数（rc） |
+| # | 命令 | 管什么 | 怎么判 |
 |---|---|---|---|
-| 1 | `openspec validate --all --strict` | **形态**：结构、每个 `Scenario` 恰好 4 个 `#`、delta 语法 | `Totals: 9 passed, 0 failed (9 items)` → **rc=0** |
-| 2 | `python world-core/tools/spec_bridge.py` | **规格层守卫**（判据条数以 `--json` 的 `passed`/`failed` 为准；见下） | `通过 6 / 失败 1` → **rc=1**（判据⑥ 红） |
-| 3 | `python world-core/tools/spec_bridge.py --self-test` | 守卫**自证会红**：每条判据至少一个反例（**条数以该命令输出为准**） | 逐条"已红 OK" → **rc=0** |
-| 4 | `bash world-core/check.sh` | **出厂门禁 8 步**：① 构建 → ② 骨架冒烟（必须打印 `READY`）→ ③ 三条专属验收（＋③b 契约测试）→ ④ 投影同源 → ⑤ 纯文本审计 → ⑥ 系统级验收 → ⑦ S1 验证面补建 → **⑧ 规格层守卫** | 需 `cargo` ＋ `bash`（Linux／VM 侧），本机 Windows 未实跑 |
+| 1 | `openspec validate --all --strict` | **形态**：结构、每个 `Scenario` 恰好 4 个 `#`、delta 语法 | **rc=0**；`passed`/`failed` 以该命令自己的 `Totals:` 行为准 |
+| 2 | `python world-core/tools/spec_bridge.py` | **规格层守卫**（判据的条数与逐条结论以 `--json` 的 `judgments` 为准） | **rc=0**；有红时命令逐条点名（点不出名字的红不算读数） |
+| 3 | `python world-core/tools/spec_bridge.py --self-test` | 守卫**自证会红**：每条判据至少一个反例 | **rc=0**；反例不变红 ⇒ 判该守卫是装饰 |
+| 4 | `bash world-core/check.sh` | **出厂门禁**（**步数不手写**：以该脚本自己打印的那份结论清单为准，它由 `STEPS` 现算） | **rc=0**；★它首行的「全通过」**不含**两类：**未校验**（⏭）与**登记型红**（⚠️）——两者在结论区**单独报数**，**未校验 ≠ 通过** |
 
-> **第 4 条的第 ⑧ 步就是第 2 条**：`world-core/check.sh:160-169` 调 `spec_bridge.py`。
+> **第 4 条的第 ⑧ 步就是第 2 条**：`world-core/check.sh` 的「⑧ 规格层守卫」那一步调 `spec_bridge.py`
+> （引用按**步骤名**写，**不写行号**——行号会烂）。
 > 也就是说这条守卫**同时**在"一条命令跑通"和 CI 里执行，不是只写在文档里。
+> ★ **本机（Windows）没有 Rust 工具链，也没有 `bash`** ⇒ 第 4 条只能在 Linux／VM 侧跑；
+> 在哪跑、怎么同步、读数怎么取（四要素），见 `world-core/docs/S5-测试/WC-ST-001-v0.1.md` §二、§四。
 
 ### 3.1 判据一览（`world-core/tools/spec_bridge.py`）
 
-> **条数不在这里复述**：判据会增（实测本轮之内 9 → 11）。**以 `--json` 的 `passed`/`failed` 为准。**
-> 下表**逐条列名**，不编号总数；加一条判据就加一行。
+> **判据的条数与逐条结论，一律以 `python world-core/tools/spec_bridge.py --json` 的 `judgments` 为准**。
+> 本件**不复述条数、也不列全表**——重述权威的表会烂（判据会增，而这份表不会自己跟着变）。
+> 下表只**举例**说明它补位的是哪几类**内容侧**的事，**不是全表**；全表请跑上面那条命令。
 
-`openspec validate` 只判**形态**；下面七条是它的**内容侧补位**，任一不成立即非零退出：
+`openspec validate` 只判**形态**；下表这些是它的**内容侧补位**，任一不成立即非零退出：
 
 | # | 判据 | 一句话 |
 |---|---|---|
 | ① | 归档硬前置 | 每个 `openspec/changes/archive/*/` 必须有非空 `review.md` |
 | ② | 证据存在性 | 规格里 `- **证据**：<path>::<fn>` 的函数／脚本必须真实存在（改名即失锚） |
-| ③ | 默认档守卫 | `openspec/config.yaml` 的 `schema:` 必须是 `opsx-swe-gb`（被改回默认档即失败） |
+| ③ | 默认档守卫 | `openspec/config.yaml` 的 `schema:` 必须是 `opsx-swe-gb-atom`（被改回默认档即失败） |
 | ④ | 编号桥覆盖 | `openspec/BRIDGE.md` 必须覆盖规格树下**每一条** `Requirement`（有号或显式标「无号」） |
 | ⑤ | 覆盖在册 | 至少一个 `cover-*` change **未归档**且 `tasks.md` 仍有未勾项（未实现的能力要有落点） |
 | ⑥ | 归档件的评审已签 | 结论 ∈ 批准／通过／有条件通过，且批准人非空、非占位 |
 | ⑦ | 让路登记 | 声明了「谁让」的件必须写全：让哪一条／为什么让／谁批的 |
 
-> ⚠️ **第 2 行 rc=1 是已知红，不是脚本坏了**：唯一红项是判据⑥——
-> `openspec/changes/archive/2026-09-27-baseline-verified-doctrine/review.md` 的结论栏是「未签」。
-> 台账与处置权在 `openspec/BOOK/冲突总账.md` §五 裁-1（作者指示：**评审通过后**由执行者签署；未过不签）。
-> **不要**为了变绿而注释掉它、加 `continue-on-error`、或放宽判据强度——那正是本项目记过的病。
+> ★ **上表是举例，不是全表**：全表以 `--json` 的 `judgments` 为准（本仓另有若干条**同族**的判据，
+> 例如"两份文档的清单表 ≡ 实际"「值必须落在已声明的格里」那几类）。
+
+> ⚠️ **判据⑥ 的红与绿都如实报**（它管"归档件的评审已签"）：它转红时，
+> **不要**注释掉它、加 `continue-on-error`、或放宽判据强度——那正是本项目记过的病；
+> 处置台账在 `openspec/BOOK/冲突总账.md` §五 裁-1（作者指示：**评审通过后**由执行者签署；未过不签）。
 
 ### 3.2 CI（`.github/workflows/world-core-gate.yml`）
 
@@ -142,15 +149,15 @@
   `openspec-validate`／`spec-bridge`／`module-graph`。任一失败不予合入。
 - **无任何密钥**：只用仓库内文件与公开 CLI。OpenSpec CLI 的版本**钉死**在 `@fission-ai/openspec@1.13.2`
   （与本机实测一致；浮动版本会让"同一次提交、两个结论"）。
-- ⚠️ `spec-bridge`（判据⑥）与 `module-graph` **今天是如实红**：见 §三 与 §三.3 的读数与台账。
+- ⚠️ **红绿不在这里复述**（写死必过期）：`spec-bridge` 与 `module-graph` 的当前结论以各自作业的命令输出为准。
   门禁自身也被门禁盯着——`world-core/tools/ci_self_check.py` 会扫**全仓**工作流，
   出现 `continue-on-error` 或必需作业缺失即判红。
 
-### 3.3 待建／在建的机核
+### 3.3 机核（原子化）门禁
 
-| 工具 | 是什么 | 今天的状态（实测 2026-09-27） |
+| 工具 | 是什么 | 今天的状态 |
 |---|---|---|
-| `world-core/tools/module_graph.py` | **原子化机核**（`WC-ATOM-001` §二 A-1 单意图／A-4 `deps == import` 且无环／A-2 四件同夹） | **已落到工作区但尚未入库**（`git status` = `?? world-core/tools/module_graph.py`，51 317 字节）；裸跑 `通过 0 / 失败 3`、`--self-test` 正控自己就失败 ⇒ **rc=1 两条**，红是在建状态的如实反映 |
+| `world-core/tools/module_graph.py` | **原子化机核**（`WC-ATOM-001` §二 A-1 单意图／A-4 `deps == import` 且无环／A-2 四件同夹） | **已入库**（`git ls-files world-core/tools/module_graph.py` 可核）；红绿以 `python world-core/tools/module_graph.py` 的输出为准（**本件不复述**）。它同时接在 `check.sh` 第 ⑨ 步与 CI 的 `module-graph` 作业里 |
 
 ---
 

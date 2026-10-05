@@ -850,10 +850,22 @@ fn t16_two_projections_are_same_source_and_vocab_change_is_detected() {
     assert!(e.contains("状态不同"), "落后一方必须被检出，实得: {e}");
 
     // 判据 3 的真实版本：真的换一份本体文件 → 词表 hash 必须变
+    //
+    // ⚠️ **身份与读路径不是同一件事**（本批订正，原先这里写"两处讲的是同一条语义"——那句不成立）：
+    //   · **身份**由 `concepts`（**非 `_` 键**）决定 —— 它参与 `vocab_hash`（`vocab_hash_of`
+    //     递归剔除 `_` 开头的顶层键）；
+    //   · **读路径**只认 `_objects`（`_` 键）—— 它**不**参与身份。
+    //   ⇒ 只改 `_objects`：**身份不变、读到的语义变了**；只改 `concepts`：**读到的语义不变、身份变了**。
+    //   这两个方向都**不是**本判据要验的东西（本判据验的是"换了词表语义 ⇒ hash 必变"），
+    //   故本处**两处都改**，让"读到的语义"与"算出的身份"指向同一件事。
+    //   ⚠️ 两者的一致性另有判据盯着：`Ontology::load` 的 `ext.world.Ontology.ConceptsDrift`
+    //   （同名字段的类型声明必须逐字一致，不一致即拒启）——本批补的那一条就是为了不让
+    //   这两处**各说各话**；本用例改完两处后，正是那条判据放行的形态。
     let alt = d.join("ontology-alt.json");
     let mut raw: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(ontology()).unwrap()).unwrap();
     raw["concepts"]["job"]["fields"]["status"] = json!("enum(todo,doing,done,cancelled)");
+    raw["_objects"]["job"]["fields"]["status"] = json!("enum(todo,doing,done,cancelled)");
     fs::write(&alt, serde_json::to_string_pretty(&raw).unwrap()).unwrap();
     let alt_ont = world_core::ontology::Ontology::load(&alt).unwrap();
     assert_ne!(

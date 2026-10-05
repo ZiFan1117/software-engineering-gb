@@ -82,10 +82,14 @@ impl Sink for FileSink {
 /// 末尾半行只在内存里忽略（`valid_len`），**一个字节都不动**。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenMode {
-    /// 可写：取单写者锁、必要时创建、丢弃末尾半行（截断落盘）。
+    /// 可写：取单写者锁、**必要时创建**（创建＝"初始化世界"这个**显式动作**）、丢弃末尾半行（截断落盘）。
     ReadWrite,
-    /// 只读：**不取锁、不截断**；账本不存在时按既有行为创建一个空账本
-    /// （这不改动任何**既有**字节，且保留"属主断言可对账本路径生效"的既有语义）。
+    /// 只读：**不取锁、不截断、不创建**。
+    ///
+    /// 账本不在场时，它读到的是**零条事件的空世界**（`valid_len = 0`），
+    /// 而**盘上不留任何字节**——"读"不得有写副作用。
+    /// "账本在不在"这件事由**调用侧**自己看路径（读不到就说读不到），
+    /// 世界核**不替它造一个空账本**来表示"读到了"。
     ReadOnly,
 }
 
@@ -235,19 +239,37 @@ impl Ledger {
             OpenMode::ReadOnly => None,
         };
         if !path.exists() {
-            let file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .read(true)
-                .open(path)
-                .map_err(|e| format!("ext.world.Ledger.CreateFail: {path:?}: {e}"))?;
-            // 刚创建的账本也要过静态防线（否则"新建一个宽松账本"就是绕过路径）
-            guard::assert_after_create(path, "账本（真相）")?;
+            // ★ **创建只发生在可写口径**（创建 ＝ "初始化世界"这个**显式动作**）。
+            //
+            // 症状（两个席从两个方向独立摸到、结论一致，2026-10-05）：
+            // 拿一个**不存在的** `--ledger` 路径跑一条**只读**命令 ⇒ **rc=0**，
+            // 而**盘上多出一个 0 字节账本**。⇒ 那次"读"有了写副作用，它就不是读；
+            // 而它恰恰会被人**当成读**来用（`check` / `state` / `read` / `project` 都在这条路上）——
+            // 与 `P-01`（只读命令会截断半行）是同一族：**"只读"当时只是进程内的约定。**
+            //
+            // 现在：只读口径在账本不在场时**一个字节都不落盘**，读到的是**零条事件的空世界**。
+            // ⚠️ 它不是错误、也不另报一个码：**"账本不在场"与"账本是空的"在世界状态上同一件事**
+            //    （都没有事件），而"要不要把『不在场』说给用户"是**调用侧**的事（它自己看路径）。
+            //    代价（如实登记）：世界核**不再**用"造一个空账本"来表示"读到了"，
+            //    故**只读命令不再创建文件**——依赖那次创建的调用方必须自己初始化。
+            let file = if mode == OpenMode::ReadWrite {
+                let f = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .read(true)
+                    .open(path)
+                    .map_err(|e| format!("ext.world.Ledger.CreateFail: {path:?}: {e}"))?;
+                // 刚创建的账本也要过静态防线（否则"新建一个宽松账本"就是绕过路径）
+                guard::assert_after_create(path, "账本（真相）")?;
+                Some(f)
+            } else {
+                None
+            };
             return Ok(Ledger {
                 path: path.to_path_buf(),
-                sink: match mode {
-                    OpenMode::ReadWrite => Box::new(FileSink { file }),
-                    OpenMode::ReadOnly => Box::new(InertSink),
+                sink: match file {
+                    Some(f) => Box::new(FileSink { file: f }),
+                    None => Box::new(InertSink),
                 },
                 valid_len: 0,
                 ids: std::collections::HashSet::new(),
@@ -328,11 +350,19 @@ impl Ledger {
             }
         }
 
-        let file = OpenOptions::new()
-            .append(true)
-            .read(true)
-            .open(path)
-            .map_err(|e| format!("ext.world.Ledger.OpenFail: {path:?}: {e}"))?;
+        // ★ **只读口径不许要求写权限**（2026-10-05 修）：
+        //   原先这里对**两种口径**都用 `append(true).read(true)` 打开，于是"只读"只是
+        //   **进程内的约定**——它仍然向内核要了写权限。后果实测（零写沙箱：只读挂载的账本，
+        //   或属主之外只读的账本）：`O_APPEND` 当场 `EROFS`／`EACCES` ⇒ `read`／`state`／
+        //   `subscribe`／`project check`／`check` **五条命令全部 rc=2**，码是 `Ledger.OpenFail`。
+        //   即：**账本写不了的时候，世界连读都读不成**——而"读"恰恰是最该在只读世界里活着的那件事。
+        //   现在：写口径才 `append(true)`；只读口径只要**读权限**（打不开仍报 `OpenFail`，
+        //   错误码与处置不变，改的只是"向内核要什么权限"）。
+        let file = match mode {
+            OpenMode::ReadWrite => OpenOptions::new().append(true).read(true).open(path),
+            OpenMode::ReadOnly => OpenOptions::new().read(true).open(path),
+        }
+        .map_err(|e| format!("ext.world.Ledger.OpenFail: {path:?}: {e}"))?;
         Ok(Ledger {
             path: path.to_path_buf(),
             sink: match mode {
@@ -524,8 +554,14 @@ impl Ledger {
     /// **只读 `valid_len` 字节**（`P-01` 修）：末尾半行不进读边界，故读路径
     /// 既不必、也不许先把文件截断。
     pub fn read_from(&self, from_seq: u64) -> Result<Vec<Value>, String> {
-        let mut f = File::open(&self.path)
-            .map_err(|e| format!("ext.world.Ledger.ReadFail: {:?}: {e}", self.path))?;
+        // ★ **账本不在场 ⇒ 零条事件**（不是错误）：只读口径在路径不存在时**不创建**它
+        // （见 [`Ledger::open_mode`]），而"世界还没写过东西"与"世界是空的"在世界状态上同一件事。
+        // ⚠️ 射程：这一格只对**文件不在**成立；**文件在但读不动**仍旧报 `ReadFail`（不许混）。
+        let mut f = match File::open(&self.path) {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(format!("ext.world.Ledger.ReadFail: {:?}: {e}", self.path)),
+        };
         let mut buf = Vec::new();
         std::io::Read::take(&mut f, self.valid_len)
             .read_to_end(&mut buf)
@@ -857,5 +893,191 @@ mod fault_injection {
             e2.starts_with("ext.world.Ledger.Poisoned:"),
             "fsync 失败后必须拒绝写入；实得: {e2}"
         );
+    }
+}
+
+/// **只读口径不许要求写权限**（2026-10-05 修）——标的物是「**本进程写不了的账本**」。
+///
+/// ## 为什么这条判据必须存在
+///
+/// `open_mode` 的只读口径若仍以 `append(true)` 打开账本，"只读"就只是**进程内的约定**：
+/// 它照样向内核要写权限。后果不是推的，是实测的——零写沙箱（只读挂载的账本）里
+/// `read`／`state`／`subscribe`／`project check`／`check` **全部** `Ledger.OpenFail`（rc=2）：
+/// **账本写不了的时候，世界连读都读不成。**
+///
+/// ## 标的物怎么造（**这条是 root 也绕不过的**）
+///
+/// `chmod` 对 root 无效（root 有 `CAP_DAC_OVERRIDE`），故**不许**拿"去掉写位"造这一格。
+/// 本用例用 `chattr +i`（immutable）：内核对**任何**进程——含 root——都拒绝写它，
+/// 于是"这个文件写不了"是**内核级事实**，不是权限位里的一句话。
+///
+/// ## 四关
+///
+/// | 关 | 本用例怎么满足 |
+/// |---|---|
+/// | ① 会红 | 把只读口径短路回 `append(true).read(true)` ⇒ 本条当场红（本席实测） |
+/// | ② 正控 | **同一夹具**上写口径 `Ledger::open` 必须失败（证明"这文件真写不了"），且读回的事件**非空** |
+/// | ③ 反例与真实违规同形态 | 反例就是**修复前那一行**本身，不是另造一个形状 |
+/// | ④ 锚唯一 | 只落在"只读口径打得开／打不开"这一个可观测事实上 |
+///
+/// ## 如实声明的边界（**不许读成"已覆盖一切只读环境"**）
+///
+/// - 标的物是「**文件**不可写」；它**不覆盖**「**整个文件系统**只读（`EROFS`）」那种形态
+///   ——那一种的实测读数在本席 2026-10-05 的零写沙箱记录里（只读 bind 挂载），**不在本用例内**；
+/// - **不支持 `chattr +i` 的文件系统**（如 `tmpfs`）上造不出标的物 ⇒ 本用例**打印
+///   「未能校验」并返回**——**那一步的绿不是通过**。故夹具落在**本仓 `target/`**
+///   （`btrfs`／`ext4` 支持 immutable），**不落 `/tmp`**。
+#[cfg(test)]
+mod readonly_open {
+    use super::*;
+
+    /// 夹具目录：**本仓 `target/`**（不走 `/tmp`——`tmpfs` 不支持 `chattr +i`）。
+    fn sandbox(tag: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let n = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let d = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("wc-ledger-ro-{tag}-{n}"));
+        std::fs::create_dir_all(&d).unwrap();
+        // 账本的静态防线要求所在目录不得对 group/other 可写。
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o700)).unwrap();
+        d
+    }
+
+    fn ev(seq: u64) -> Value {
+        json!({
+            "world": 1, "kind": "notice", "id": format!("n-ro-{seq}"), "seq": seq, "at": "t0",
+            "actor": "world://core", "flags": [],
+            "body": { "type": "ro.open", "subject": "world://test" }
+        })
+    }
+
+    /// `chattr <flag> <path>`：成功 ⇒ `true`（没有 `chattr` 或文件系统不支持 ⇒ `false`）。
+    fn chattr(flag: &str, p: &Path) -> bool {
+        std::process::Command::new("chattr")
+            .arg(flag)
+            .arg(p)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    /// **夹具的守护**：`Drop` 里撤掉 immutable 再删目录——**panic 时也必须跑**。
+    ///
+    /// 为什么不能只写一句顺序代码：本用例的判据**失败时要 panic**，而那句 `chattr -i`
+    /// 若排在断言之后，就**永远跑不到** ⇒ 盘上留下一个**谁也删不掉的**夹具
+    /// （实测：把修复短路回去跑一次，随后的 `rm -rf` 报 `Operation not permitted`）。
+    /// `Drop` 在栈展开里执行，故反例**跑红之后也不会污染后续夹具**。
+    struct Sandbox {
+        dir: PathBuf,
+        file: PathBuf,
+    }
+
+    impl Drop for Sandbox {
+        fn drop(&mut self) {
+            let _ = chattr("-i", &self.file);
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[test]
+    fn readonly_open_does_not_require_write_permission() {
+        let d = sandbox("open");
+        let lp = d.join("ledger.jsonl");
+        // ★ 守护必须在**任何**可能 panic 的语句之前建好（含下面那次 `chattr +i` 的早退路径）。
+        let _sb = Sandbox {
+            dir: d.clone(),
+            file: lp.clone(),
+        };
+        {
+            let mut l = Ledger::open(&lp).unwrap();
+            l.append(ev(1)).unwrap();
+        } // 写句柄在这里关掉：后面只读打开时，不能有别人替它拿着写权限。
+
+        if !chattr("+i", &lp) {
+            eprintln!(
+                "【未能校验】readonly_open_does_not_require_write_permission：\
+                 本环境造不出标的物（`chattr +i` 不可用：缺 chattr，或文件系统不支持 immutable）\
+                 ⇒ 本用例**没有跑**，这一处的绿**不是通过**。"
+            );
+            return;
+        }
+
+        // ② 正控（同夹具、必红）：写口径在**同一个文件**上必须失败。
+        //    它证明"这个文件真的写不了"——否则下面那条"只读口径打得开"是**恒真**的。
+        let werr = match Ledger::open(&lp) {
+            Ok(_) => panic!("正控失败：写口径竟在一个 immutable 的账本上打开了——标的物没造出来"),
+            Err(e) => e,
+        };
+        assert!(
+            werr.contains("ext.world.Ledger.OpenFail"),
+            "写口径的拒绝须是类型化错误码；实得: {werr}"
+        );
+
+        // ① 判据：只读口径必须打得开，且**读得到内容**（不是"打开了个空壳"）。
+        let l = Ledger::open_readonly(&lp).expect("只读口径在写不了的账本上必须打得开");
+        assert_eq!(l.last_seq(), 1, "只读口径必须认到已有的那一条");
+        assert_eq!(
+            l.read_from(1).unwrap().len(),
+            1,
+            "只读口径必须**读得到**账本内容（正控：非空）"
+        );
+        // 清理由 `_sb` 的 `Drop` 承担（写在断言之后就会在跑红时漏掉）。
+    }
+
+    /// ★ **只读口径不许创建账本**（"读"不得有写副作用）。
+    ///
+    /// ## 标的物与症状
+    ///
+    /// 拿一个**不存在的**路径跑一次**只读**打开。症状是：**rc=0**，而**盘上多出一个 0 字节账本**。
+    /// 而它恰恰会被人**当成读**来用（`check`／`state`／`read`／`project` 全走这条路）——
+    /// "读"若有写副作用，它就不是读。
+    ///
+    /// ## 四关
+    ///
+    /// | 关 | 本用例怎么满足 |
+    /// |---|---|
+    /// | ① 会红 | 让只读那一支也走创建（把 `if mode == OpenMode::ReadWrite` 短路成 `if true`）⇒ ② 当场红 |
+    /// | ② 正控 | **同夹具**上**写**口径**必须**把账本建出来——否则②是**恒真**的（路径本来就该不存在时，"不存在"什么也说明不了） |
+    /// | ③ 反例与真实违规同形态 | 反例就是**修复前那一支**（两种口径共用同一段 `create(true)`），不是另造一个形状 |
+    /// | ④ 锚唯一 | 只落在"这次打开之后路径还在不在"这一个可观测事实上 |
+    ///
+    /// ⚠️ 与 [`readonly_open_does_not_require_write_permission`] **是两条判据**（不许互相冒充）：
+    /// 那条管"**已有的**账本写不了时读还读不读得成"，本条管"**不存在的**账本不许被读出来"。
+    #[test]
+    fn readonly_open_never_creates_a_ledger() {
+        let d = sandbox("nocreate");
+        let lp = d.join("ledger.jsonl");
+        let _sb = Sandbox {
+            dir: d.clone(),
+            file: lp.clone(),
+        };
+        assert!(!lp.exists(), "夹具前提：这个路径一开始必须不存在");
+
+        // ① 只读口径必须打得开：**新世界也要能 `check`**（`check.sh` ② 就是在空沙箱上跑 `check`）。
+        let l = Ledger::open_readonly(&lp).expect("只读口径在一个不存在的账本上也必须打得开");
+        // ② ★ 判据：**一个字节都不许落盘**
+        assert!(
+            !lp.exists(),
+            "只读口径**不得创建**账本——盘上那个 0 字节文件就是这次『读』留下的副作用"
+        );
+        // ③ 它读到的是**零条事件的空世界**（不是"打开了个坏东西"）
+        assert_eq!(l.last_seq(), 0, "账本不在场 ⇒ 零条事件");
+        assert!(
+            l.read_from(1).unwrap().is_empty(),
+            "账本不在场 ⇒ 读回必须是空的"
+        );
+
+        // ④ 正控（同夹具、必红）：**写**口径在**同一个路径**上必须把它建出来。
+        {
+            let mut w = Ledger::open(&lp).expect("写口径（初始化动作）必须能创建账本");
+            assert!(lp.exists(), "正控：写口径必须建出账本（否则②恒真）");
+            w.append(ev(1)).unwrap();
+        }
+        let l2 = Ledger::open_readonly(&lp).expect("建出来之后只读口径必须打得开");
+        assert_eq!(l2.last_seq(), 1, "建出来之后，只读口径必须读到那一条");
     }
 }

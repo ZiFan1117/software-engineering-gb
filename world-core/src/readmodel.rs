@@ -6,14 +6,16 @@
 //! state = fold(events[0..seq])
 //! ```
 //!
-//! 由此推出三条硬性质（`07/4-计划/03` §七、`07/2-依据/15` §三）：
+//! 由此推出五条硬性质（`07/4-计划/03` §七、`07/2-依据/15` §三；第 4／5 条是后来补的）：
 //!
 //! 1. **读模型是派生物，不是真相**。它可以随时被删掉、从账本重算，
 //!    结果必须逐字节一致——这是本项目的第三条专属验收测试
 //!    （"删掉读模型 → 重算一致"）。本模块在 v1 **不持久化任何东西**：
 //!    没有"读模型文件"需要维护一致性，也就**不存在"读模型与账本不一致"**这种经典故障。
-//! 2. **回滚 = 追加补偿事件**，绝不修改历史。所以折叠里**没有"撤销"逻辑**——
-//!    补偿事件本身就是一条普通的 `change`，折叠照常前进。
+//! 2. **回滚 = 追加补偿事件**，绝不修改历史。折叠里**没有"改写历史"的逻辑**——
+//!    补偿事件本身就是一条普通的 `change`，折叠照常前进；★**撤回**同样是**追加**
+//!    （账本里多一条**撤回事实**，见 [`Retraction`]），它改的是"**将来怎么折**"
+//!    ——那一条的效果**不再落账**——而**不改账本里的任何一个字节**。
 //! 3. **折叠必须报错而不是猜**。序号断裂、旧值不符、未知家族——一律拒绝折叠。
 //!    读模型若默默容忍坏账本，那么"账本是唯一真相"就成了一句空话。
 //! 4. **缺格即报错**（`REQ-F-032`）。书第五章 5.6 表 5.2 行的通过条件逐字是
@@ -22,6 +24,9 @@
 //!    ⇒ 拒绝折叠，并**点名缺的那一格**（[`DeclaredCells`] ＋ [`State::apply_declared`]）。
 //!    ⚠️ 它与「未知家族」**不是一回事**：不认识的家族仍旧报 `ReadModel.UnknownKind`
 //!    （那是 `REQ-F-029` 对偶的另一半），两处不许互相冒充〔本 change 的 delta `REQ-F-027`／`REQ-F-029`〕。
+//! 5. ★ **撤回＝过户不落账；序号是账本的，效果才是撤回的对象。**
+//!    被撤回的那一条**照样占着它那个 `seq`**（跳过它会让下一条报缺号，而"缺号即拒启"
+//!    是世界的既有口径），但它的**效果**不落账——见 [`State::advance_only`] 与 [`Retraction`]。
 //!
 //! 关于 `before` 的核对：`change` 事件按法律**必带旧值**（回滚所需信息当场留下）。
 //! 本模块因此在折叠时核对"事件声称的旧值 == 账本折叠出的当前值"——
@@ -30,10 +35,69 @@
 //!
 //! ⚠️ 快照（`M08`）在 v1 **不存在**。将来若加，它只能是**带 `base_seq` 的缓存**，
 //! 且必须永远可被"从账本重算"覆盖验证——否则它就从缓存悄悄变成了第二真相。
+//!
+//! ## ★ 撤回与规范形式／快照的关系（**本层如实声明的边界**）
+//!
+//! **撤回事实不进规范形式**（[`State::to_json`] **一个字不动**：它是规范形式，状态指纹
+//! 由它而来——加键会让每一处 `state=…` 变成假话）。⇒ 由它推出两条边界：
+//! - 快照（`Checkpoint::capture` 存的是规范形式）**带不走撤回事实**：从快照恢复出来的
+//!   `State`，[`State::retracted`] 是**空的**。规范形式本身不受影响（指纹照旧），
+//!   但"哪些条被撤回过"这一格，**只有账本答得出**——要那一格就重算，不要读快照；
+//! - 续算（`Checkpoint::resume_unverified`）只施加 `base_seq` **之后**的事件 ⇒
+//!   若一条撤回撤的是 `base_seq` **之前**那一条，续算**做不到**（那条效果已经进了快照）。
+//!   本层**不在那里悄悄放行**：`checkpoint resume` 的既有守门会拿"续算 vs 全量"逐字节比对，
+//!   不等即 `ext.world.Checkpoint.ResumeMismatch` **拒用**（宁可全量重算）。
 
 use serde_json::{json, Map, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+
+/// **撤回事实的落点**：一条 `change` 事件，只要它的 `body.path` 是这个名字，它就是一条撤回事实。
+///
+/// ## 名字的权威在哪
+///
+/// **在本体**：出厂本体 `_objects.notice.fields` 与 `concepts.notice.fields`（非 `_` 键 ⇒ 进词表身份）
+/// **两处同批**逐字声明 `"retract_seq": "integer"`（依据与改动面见 `docs/证据/EV-009.md` 的
+/// 「第 10 轮增量 · 词表身份变更」一节）。读模型把名字**编译进来**，是因为
+/// `M03` 生产代码**零出边**（`WC-MODREG-001` §2；`tools/module_graph.py` 判据② 逐边核对
+/// 「声明集 ≡ 真实 import 集」）⇒ 读模型**不许** `use crate::ontology::…`。
+/// 这与"读模型认得的那三个家族"是**同一口径**：本体加了新东西，**读法要一起加**
+/// （`REQ-F-027`／`tests/family_readmodel.rs::h02` ③ 钉的就是这一条）。
+pub const RETRACT_PATH: &str = "retract_seq";
+
+/// **一条撤回事实**：撤哪条 `seq` ／谁撤的（`actor`）／因为什么。
+///
+/// ★ **撤回＝过户不落账；序号是账本的，效果才是撤回的对象。**
+///
+/// ## 形态（**不新增事件家族**）
+///
+/// 它落在**既有** `change` 家族的一条事件上——四个格子各自有主，没有一格是新造的：
+///
+/// | 事实 | 落在哪 | 依据 |
+/// |---|---|---|
+/// | **撤哪条 `seq`** | `body.after`（`body.path = RETRACT_PATH`） | `notice.fields.retract_seq: integer`（本体逐字声明） |
+/// | **谁撤的** | 信封 `actor` | 信封必填格（本体逐字声明） |
+/// | **因为什么** | 信封 `trace` | 本体对它的逐字定义：「因果：引发本条的那条事件的 id」 |
+///
+/// ⇒ **不动法律**（不新家族、不新字段）、**不动 `to_json`**、**不动账本写入语义**。
+///
+/// ## 它与"补偿事件"是**两件事**（不许互相冒充）
+///
+/// - **补偿**（既有）：再写一条方向相反的 `change`，**效果照常落账** ⇒ 状态的当前值被改到目标值；
+/// - **撤回**（本条）：撤掉**某一条**的效果，**那一条不再落账** ⇒ 当前值不是"被改成什么"，
+///   而是"**从来没变过**"。⇒ 判据也不同：补偿判"值对不对"，撤回判"那一条还算不算数"。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Retraction {
+    /// **被撤回的账本序号**（撤回的对象是那一条的**效果**，不是那个序号本身）。
+    pub target_seq: u64,
+    /// **谁撤的**（撤回事件的 `actor`）。读不到就是空串——本层**不替它编一个身份**。
+    pub actor: String,
+    /// **因为什么**（撤回事件的信封 `trace`＝本体逐字定义的「因果：引发本条的那条事件的 id」）。
+    ///
+    /// `None` ＝ 这一条撤回**没说因为什么**——**不许**拿空串或 `null` 冒充"说了"
+    /// （与 `event.rs` 那条「没有因果与因果指向空是两件事」同一纪律）。
+    pub because: Option<String>,
+}
 
 /// 世界状态。**只能由 [`State::apply`] / [`State::fold`] 产生**。
 ///
@@ -48,6 +112,14 @@ pub struct State {
     /// 键有序 ⇒ 同样的账本必然渲染出同样的字节。（`serde_json` 默认的
     /// `Map` 也是有序的，两者共同保证折叠结果可逐字节比对。）
     objects: BTreeMap<String, BTreeMap<String, Value>>,
+    /// **被撤回的账本序号 → 撤回事实**（[`State::new`] 走 `Default` ⇒ 初值即空表）。
+    ///
+    /// 用 `BTreeMap` 的理由与 `objects` 同：键有序 ⇒ 读数确定（"第几条被撤回"不靠遍历次序）。
+    ///
+    /// ⚠️ 它**不进** [`State::to_json`]（规范形式＝**世界现在什么样**；撤回事实说的是
+    /// "**哪一条不算数**"，那不是世界的一格）。要读它：库侧用 [`State::retracted`]，
+    /// 命令侧用 `world-core state --retracted`（**只增**的输出面）。
+    retracted_seqs: BTreeMap<u64, Retraction>,
 }
 
 impl State {
@@ -75,9 +147,38 @@ impl State {
         self.notices
     }
 
+    /// **撤回事实**：被撤回的账本序号 → [`Retraction`]（按序号有序）。
+    ///
+    /// 与 [`State::last_seq`]／[`State::seen`]／[`State::acts`] **同形**：只读、不改状态、
+    /// 不参与规范形式（见 [`State::to_json`] 与模块文档的"撤回与规范形式／快照的关系"）。
+    pub fn retracted(&self) -> &BTreeMap<u64, Retraction> {
+        &self.retracted_seqs
+    }
+
     /// 读一个字段的当前值。
     pub fn get(&self, subject: &str, path: &str) -> Option<&Value> {
         self.objects.get(subject).and_then(|m| m.get(path))
+    }
+
+    /// **按类型的实例计数**（`类型 → 实例数`）。
+    ///
+    /// 为什么要有这一格（第三批的判据面）：折叠层此前**没有类型这个概念**——
+    /// `objects` 以 subject **字符串**为键（`"world://notice/n-1"`），
+    /// 于是"这个类型现在有几个实例"这件事在读数面上**根本问不出来**，
+    /// 而"声明为单实例的类型却折出多个实例"正是要判的那一格。
+    ///
+    /// 口径：类型 ＝ subject `world://<首段>/<实例…>` 的**首段**（与
+    /// [`crate::ontology::Ontology::entity_of`] 同一口径——**一个事实只有一个权威载体**）；
+    /// 裸主体（`world://<名字>`，没有实例段）**不计入任何类型**（它不是某个类型的实例引用，
+    /// 与 `entity_of` 的 `None` 同源）。只有**有字段写进去**的主体才出现（空主体不占位）。
+    pub fn type_counts(&self) -> BTreeMap<String, u64> {
+        let mut out: BTreeMap<String, u64> = BTreeMap::new();
+        for subject in self.objects.keys() {
+            if let Some(t) = type_of_subject(subject) {
+                *out.entry(t.to_string()).or_insert(0) += 1;
+            }
+        }
+        out
     }
 
     /// 遍历全部 `(主体, 路径, 值)`。顺序**确定**（主体、路径皆为有序键），
@@ -91,18 +192,22 @@ impl State {
     }
 
     /// 折叠一条事件。**必须按 `seq` 顺序、且从连续前缀开始**。
+    ///
+    /// ⚠️ **撤回事实**在这一层是**只过户、不落账**的（见 [`State::advance_only`]）：
+    /// 它是一句"**哪条不算数**"，不是世界的一格。
+    /// 而被**撤回**的那一条走的是另一条路——它由 [`State::fold`]／[`State::fold_declared`]
+    /// **预扫之后直接判掉**：`apply` 自己看不到"将来会不会有人撤回我"。
     pub fn apply(&mut self, ev: &Value) -> Result<(), String> {
         let seq = ev.get("seq").and_then(Value::as_u64).ok_or_else(|| {
             "ext.world.ReadModel.MissingSeq: 事件缺少 seq：账本不是合法 JSON Lines".to_string()
         })?;
 
-        let expected = self.last_seq + 1;
-        if seq != expected {
-            return Err(format!(
-                "ext.world.ReadModel.SeqGap: 事件序号不连续：已折叠到 {}，期望 {expected}，实际 {seq}\
-                 （读模型只折叠**连续的账本前缀**，不猜缺口）",
-                self.last_seq
-            ));
+        self.check_next(seq)?;
+
+        // ★ 撤回事实**本身也不落账**。认定与解析只有一处（[`retract_target_of`]）。
+        if retract_target_of(ev)?.is_some() {
+            self.last_seq = seq;
+            return Ok(());
         }
 
         let kind = ev
@@ -124,6 +229,49 @@ impl State {
 
         self.last_seq = seq;
         self.seen += 1;
+        Ok(())
+    }
+
+    /// **过户不落账**：把账本的序号推过这一条，**不施加任何改动**。
+    ///
+    /// ★ **撤回＝过户不落账；序号是账本的，效果才是撤回的对象。**
+    ///
+    /// ## 它做什么、不做什么（逐格，可判）
+    ///
+    /// | 格 | [`State::apply`] | 本方法 |
+    /// |---|---|---|
+    /// | 连线自检（`seq` 必须接在 `last_seq` 之后） | **做** | ★**做同一道**（[`State::check_next`]，全模块唯一一处） |
+    /// | `last_seq` | 推进 | 推进（**必须**：不推进则下一条报缺号） |
+    /// | `objects`（字段） | 落 | **不落** |
+    /// | `acts`／`notices`（事件效果） | 落 | **不落** |
+    /// | `seen`（已折叠条数） | +1 | **不加**——`seen` 数的是**折叠过**的条数，而过户的那一条**没有折叠** |
+    /// | 实例上限（折叠之后的读数） | 计入 | **不计入**（它没进 `objects`） |
+    ///
+    /// ## 为什么**不许**用裸 `continue` 代替它
+    ///
+    /// 被撤回的那一条**照样占着它那个 `seq`**。用 `continue` 跳过它 ⇒ `last_seq` 停在它前面
+    /// ⇒ 下一条一来就报 `SeqGap`（**缺号即拒启**是世界的既有口径：
+    /// `src/ledger.rs` 启动时逐行校验 `seq` 从 1 起连续）。
+    /// 所以"撤回"只能表现为**过户**，不能表现为"那一条不存在"。
+    pub fn advance_only(&mut self, seq: u64) -> Result<(), String> {
+        self.check_next(seq)?;
+        self.last_seq = seq;
+        Ok(())
+    }
+
+    /// **连线自检**（全模块**唯一一处**）：这一条的 `seq` 必须接在已折叠的 `last_seq` 后面。
+    ///
+    /// 抽成一处是刻意的：[`State::apply`] 与 [`State::advance_only`] 必须做**同一道**自检，
+    /// 抄两份迟早漂移——而"缺号即拒启"正是本模块最不能漂的一条（错误文案与实现前逐字相同）。
+    fn check_next(&self, seq: u64) -> Result<(), String> {
+        let expected = self.last_seq + 1;
+        if seq != expected {
+            return Err(format!(
+                "ext.world.ReadModel.SeqGap: 事件序号不连续：已折叠到 {}，期望 {expected}，实际 {seq}\
+                 （读模型只折叠**连续的账本前缀**，不猜缺口）",
+                self.last_seq
+            ));
+        }
         Ok(())
     }
 
@@ -201,6 +349,9 @@ impl State {
             acts: u64_of("acts")?,
             notices: u64_of("notices")?,
             objects,
+            // ⚠️ **撤回事实不在规范形式里** ⇒ 从这里恢复出来的状态**带不回**它们
+            //    （空的，不是"猜一个"）。边界与后果逐字见模块文档那一节。
+            retracted_seqs: BTreeMap::new(),
         })
     }
 
@@ -214,10 +365,93 @@ impl State {
     /// 要合上它，走 [`State::fold_declared`]（带法律的那条路）。
     pub fn fold(events: &[Value]) -> Result<Self, String> {
         let mut s = State::new();
+        // ★ **循环之前先预扫**：撤回事实排在它撤回的那一条**之后**，走到那一条时
+        //   "它将来会不会被撤回"只有先扫一遍才知道。见 [`State::scan_retractions`]。
+        s.retracted_seqs = Self::scan_retractions(events)?;
         for ev in events {
+            // ★ **被撤回的那一条：过户不落账**——注意这里**不是**裸 `continue`：
+            //   裸 `continue` 会让下一条报缺号，而"缺号即拒启"是世界的既有口径。
+            if let Some(seq) = ev.get("seq").and_then(Value::as_u64) {
+                if s.retracted_seqs.contains_key(&seq) {
+                    s.advance_only(seq)?;
+                    continue;
+                }
+            }
             s.apply(ev)?;
         }
         Ok(s)
+    }
+
+    /// **预扫撤回事实**（[`State::fold`]／[`State::fold_declared`] 在循环**之前**各调一次）。
+    ///
+    /// ## 为什么必须预扫
+    ///
+    /// 账本只追加 ⇒ 撤回事实按 `seq` 排在它撤回的那一条**之后**；而折叠是**向前**走的
+    /// ⇒ 走到被撤回的那一条时，"它将来会不会被撤回"这件事，**只有先扫一遍才知道**。
+    /// 收齐之后，循环里对它走 [`State::advance_only`]（过户不落账）。
+    ///
+    /// ## 四条拒（都点名；都是"不许猜"）
+    ///
+    /// | 情形 | 错误码 | 为什么必须拒 |
+    /// |---|---|---|
+    /// | `body.after` 不是正整数 | `RetractMalformed`（在 [`retract_target_of`]） | 一条打错字的撤回若被静默忽略，"没撤回"与"撤回了"在读数上一样、在结论上相反 |
+    /// | 撤回一条账本里**没有**的 `seq` | `RetractTargetUnknown` | 撤一条不存在的记录不是"撤回"，是一句不成立的声明 |
+    /// | 同一条 `seq` 被撤回**两次** | `RetractAlreadyRetracted` | 撤回若可叠加，它就从一次断言变成可以反复拨的开关 |
+    /// | 撤回的是一条**撤回事实**本身 | `RetractTargetNotAnEffect` | 撤回的对象只有"**效果**"；撤回事实不是效果 ⇒ 否则它是一个静默的空操作 |
+    ///
+    /// ⚠️ 这四条**只在账本里真出现撤回事实时**才可能触发 ⇒ 对不含撤回事实的既有账本，
+    /// 本函数恒为 `Ok(空表)`、行为与引入它之前**逐字节相同**。
+    fn scan_retractions(events: &[Value]) -> Result<BTreeMap<u64, Retraction>, String> {
+        // `seq → 事件`：判"撤的那条在不在"与"它是不是一条撤回事实"都要用它。
+        let by_seq: BTreeMap<u64, &Value> = events
+            .iter()
+            .filter_map(|e| e.get("seq").and_then(Value::as_u64).map(|s| (s, e)))
+            .collect();
+        let mut facts: BTreeMap<u64, Retraction> = BTreeMap::new();
+        // 被撤回的 seq → 是**哪一条**（撤回事件的 seq）撤的：只为把"撤了两次"这句话说清楚。
+        let mut retracted_at: BTreeMap<u64, u64> = BTreeMap::new();
+        for ev in events {
+            let Some(target) = retract_target_of(ev)? else {
+                continue;
+            };
+            let at = ev.get("seq").and_then(Value::as_u64).unwrap_or(0);
+            let Some(target_ev) = by_seq.get(&target) else {
+                return Err(format!(
+                    "ext.world.ReadModel.RetractTargetUnknown: 第 {at} 条是撤回事实，它撤的是 seq={target}，\
+                     但账本里**没有这一条**（账本实有 {} 条）——撤回的对象必须是账本里真有的那一条；\
+                     撤一条不存在的记录不是「撤回」，是一句不成立的声明",
+                    by_seq.len()
+                ));
+            };
+            if retract_target_of(target_ev)?.is_some() {
+                return Err(format!(
+                    "ext.world.ReadModel.RetractTargetNotAnEffect: 第 {at} 条是撤回事实，它撤的是 seq={target}，\
+                     而那一条**本身是一条撤回事实**——撤回的对象只有「效果」，撤回事实不是效果。\
+                     （撤掉一句「哪条不算数」是什么意思？本层不猜，故拒。）"
+                ));
+            }
+            if let Some(prev) = retracted_at.get(&target) {
+                return Err(format!(
+                    "ext.world.ReadModel.RetractAlreadyRetracted: seq={target} 被撤回了**两次**\
+                     （第 {prev} 条撤过一次，第 {at} 条又撤一次）——一条记录只能被撤回一次；\
+                     若撤回可叠加，它就从一次断言变成了一个可以反复拨的开关"
+                ));
+            }
+            retracted_at.insert(target, at);
+            facts.insert(
+                target,
+                Retraction {
+                    target_seq: target,
+                    actor: ev
+                        .get("actor")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                    because: ev.get("trace").and_then(Value::as_str).map(str::to_string),
+                },
+            );
+        }
+        Ok(facts)
     }
 
     /// **带法律的折叠**（`REQ-F-032`）：先核"已声明的必填格"（缺格即报错），再折叠。
@@ -268,11 +502,94 @@ impl State {
         self.apply(ev)
     }
 
-    /// 从零折叠一串事件（**带法律**；缺格即报错）。逐条等价于 [`State::apply_declared`]。
+    /// 从零折叠一串事件（**带法律**；缺格即报错 ＋ **按类型的实例上限**）。逐条等价于 [`State::apply_declared`]。
+    ///
+    /// ## 折叠**之后**还要问一遍：按类型的实例计数过没过声明上限
+    ///
+    /// 为什么要在**折叠之后**（而不是逐条写入时）：实例计数是**折叠的产物**
+    /// （`objects` 的键），逐条时读到的是"到目前为止"的部分计数——一条回滚／补偿
+    /// 可能把计数降回去。判据落在**最终状态**上，读的才是"这个世界现在有几个这类实例"。
+    ///
+    /// 口径：`instance_limits` 里的每一条都要满足 `实际实例数 ≤ 上限`；
+    /// **没声明的类型不判**（法律没写，本层不替它发明上限）。
     pub fn fold_declared(cells: &DeclaredCells, events: &[Value]) -> Result<Self, String> {
         let mut s = State::new();
+        // ★ 与 [`State::fold`] **同一处口径**：循环之前预扫撤回事实（理由逐字见那里）。
+        s.retracted_seqs = Self::scan_retractions(events)?;
         for ev in events {
+            // ★ 被撤回的那一条：**过户不落账**（不是裸 `continue`，理由见 [`State::advance_only`]）。
+            //
+            // ⚠️ 边界（如实声明）：被撤回的那一条**不再过缺格判据**——它根本不落账，
+            //    也就不构成"某个已声明的格被读到／没被读到"。缺格判的是**折叠进去的那些行**。
+            if let Some(seq) = ev.get("seq").and_then(Value::as_u64) {
+                if s.retracted_seqs.contains_key(&seq) {
+                    s.advance_only(seq)?;
+                    continue;
+                }
+            }
             s.apply_declared(cells, ev)?;
+        }
+        for (entity, limit) in &cells.instance_limits {
+            let n = s.type_counts().get(entity).copied().unwrap_or(0);
+            if n > *limit {
+                return Err(format!(
+                    "ext.world.ReadModel.TooManyInstances: 类型 `{entity}` 声明为至多 {limit} 个实例\
+                     （`instance_mode: \"single\"` 即上限 1），折叠后实得 **{n}** 个——**声明为单实例的类型折出了多个实例**。\n\
+                     \x20 实例名（`world://{entity}/<实例…>`）：{}\n\
+                     \x20 处置：把多余的实例改成别的类型／别的名字，或改本体把该类型的上限写成 `many`\
+                     （改法律＝走评审）——**不许**让声明与事实各说各话",
+                    s.objects
+                        .keys()
+                        .filter(|k| type_of_subject(k) == Some(entity.as_str()))
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+        }
+        // ★ **每个实例必须指回定义面**（书 §5.3 的**读侧**那一半；写侧的执行体是
+        //   `Ontology::check_concepts` 的 `UndeclaredEntity`）。
+        //
+        //   为什么必须补这一半（实测，不是推的）：**同一本账，写侧拒的、读侧收** ——
+        //   拿真二进制跑过两遍：`append` 一个未声明实体的 `change` ⇒ `rc=2`、账本 0 字节；
+        //   把**同一行**直接放进账本（＝恢复／迁移／手工修复那三条路）再 `state --json`
+        //   ⇒ `rc=0`，那个主体**就在状态里**。那是"同一个事实两个答案"。
+        //
+        //   ⚠️ `None` ⇒ 这一半**没接** ⇒ 不判（见字段文档：只有装上这一半的调用方才会被判）。
+        if let Some(declared) = &cells.declared_entities {
+            // **空表不许上电**（与 `NoDeclaredCells` 同一纪律）：法律里一个对象类型都没有
+            // ⇒ 这条判据无从成立。"一个实体都没查"与"每个实体都查过了"在读数上一样、
+            // 在结论上相反 ⇒ 拒，不默默放行。
+            if declared.is_empty() {
+                return Err(
+                    "ext.world.ReadModel.NoDeclaredEntities: 递进来的**已声明实体集**是空的\
+                     ——没有可比对的实体清单，故拒绝折叠，而不是默默放行。\n\
+                     \x20 处置：把法律以数据递进来（`DeclaredCells::with_declared_entities(ont.known_entities(), ont.nested_types())`）"
+                        .to_string(),
+                );
+            }
+            // 逐主体判（`objects` 的键有序 ⇒ 报哪一条是确定的）。**射程**（不许读成更宽）：
+            //   · 只判**有字段写进去**的主体（空主体不占位）；
+            //   · **裸主体不判**（`world://<名字>` 不是实例引用，见已登记缺口）；
+            //   · **不判身份**（`actor`／`to`）——它们不是对象实例；
+            //   · **不判**实例名的唯一性（那是另一条，登记在 `_pending_tables`）。
+            for subject in s.objects.keys() {
+                let Some(t) = instance_type_of(subject, &cells.nested_types) else {
+                    continue;
+                };
+                if !declared.contains(t) {
+                    return Err(format!(
+                        "ext.world.ReadModel.EntityNotDeclared: 主体 `{subject}` 的**类型段** `{t}` \
+                         未在出厂本体里声明（`_objects`）——**每个实例必须指回定义面**。\n\
+                         \x20 写侧会拒这一条（`ext.world.Ontology.UndeclaredEntity`），读侧不许把它折进状态：\
+                         **同一本账、同一件事，读写两侧必须一个答案**。\n\
+                         \x20 已声明的类型：{}\n\
+                         \x20 处置：把该主体改成已声明类型的实例，或先在 `_objects` 里声明它（改法律＝走评审）\
+                         ——**不许**让读法比写法宽",
+                        declared.iter().cloned().collect::<Vec<_>>().join(", ")
+                    ));
+                }
+            }
         }
         Ok(s)
     }
@@ -313,6 +630,91 @@ impl State {
     }
 }
 
+/// **这一条事件是不是撤回事实？** 是 ⇒ `Ok(Some(被撤回的 seq))`；不是 ⇒ `Ok(None)`。
+///
+/// ## 认定口径（**只有这一处**）
+///
+/// `kind == "change"` 且 `body.path == RETRACT_PATH`；`body.after` 就是被撤回的那个 `seq`。
+/// [`State::apply`] 与 [`State::scan_retractions`] **共用**它——两处若各写一份，
+/// "什么算撤回"迟早变成两种说法。
+///
+/// ## 三处**刻意返回 `Ok(None)`**（判了就会把病因说错）
+///
+/// - **不是 `change` 家族** ⇒ 不是撤回事实（撤回事实落在 `change` 上，见 [`Retraction`]）；
+/// - **没有 `body`／`body` 不是对象／没有 `path`** ⇒ 不是：那是**形状**问题，
+///   由 [`State::apply`] 报它自己那一族（`BadCell`／`MissingCell`），本函数**不抢**；
+/// - **`path` 是别的字段** ⇒ 不是。
+///
+/// ## 一处**必须报错**
+///
+/// **`path` 就是 `RETRACT_PATH`，但 `after` 不是正整数**（缺失、`null`、0、字符串、小数）
+/// ⇒ `ext.world.ReadModel.RetractMalformed`。**不许**降级成"那就当它不是撤回事实"：
+/// 一条打错字的撤回若被静默忽略，世界会**照旧折叠**、而那条被指的记录**照旧生效**——
+/// "没撤回"与"撤回了"在读数上一样、在结论上相反（本项目最贵的一类错）。
+/// `after = 0` 也算坏：账本的 `seq` **从 1 起**（`src/ledger.rs` 启动即逐行校验）。
+pub fn retract_target_of(ev: &Value) -> Result<Option<u64>, String> {
+    if ev.get("kind").and_then(Value::as_str) != Some("change") {
+        return Ok(None);
+    }
+    let Some(body) = ev.get("body").and_then(Value::as_object) else {
+        return Ok(None);
+    };
+    if body.get("path").and_then(Value::as_str) != Some(RETRACT_PATH) {
+        return Ok(None);
+    }
+    match body.get("after").and_then(Value::as_u64) {
+        Some(t) if t > 0 => Ok(Some(t)),
+        _ => Err(format!(
+            "ext.world.ReadModel.RetractMalformed: seq={} 声称是一次撤回（`path={RETRACT_PATH}`），\
+             但 `after` 不是正整数（实得 {}）——撤回必须说清**撤哪一条**；说不清就拒，不猜。\n\
+             \x20 口径：`after` ＝ 被撤回的那条事件的 `seq`（账本的 `seq` 从 1 起）",
+            ev.get("seq").and_then(Value::as_u64).unwrap_or(0),
+            body.get("after").cloned().unwrap_or(Value::Null)
+        )),
+    }
+}
+
+/// **subject 的类型段**：`world://<类型>/<实例…>` ⇒ `Some("<类型>")`；裸主体 ⇒ `None`。
+///
+/// 与 [`crate::ontology::Ontology::entity_of`] **同一口径**（本模块生产代码零出边 ⇒
+/// 不 `use` 那边；口径一致这件事由两侧各自的用例钉住，不由"共用一行代码"钉住）。
+pub fn type_of_subject(subject: &str) -> Option<&str> {
+    let rest = subject.strip_prefix("world://")?;
+    let (entity, id) = rest.split_once('/')?;
+    if entity.is_empty() || id.is_empty() {
+        None
+    } else {
+        Some(entity)
+    }
+}
+
+/// **主体的"类型段"，且认得内嵌形态**：两段 ⇒ 第 1 段；四段内嵌 ⇒ 第 3 段；其余 ⇒ `None`。
+///
+/// | 输入 | 输出 | 为什么 |
+/// |---|---|---|
+/// | `world://s`（裸主体） | `None` | **不是实例引用**（与 `entity_of` 的 `None` 同源） |
+/// | `world://notice/n-1` | `Some("notice")` | 两段：类型 ＝ 第 1 段 |
+/// | `world://job/j-1/notice/n-1` | `Some("notice")`（当 `notice` 的 `part_of` 逐字是 `job`） | **内嵌四段**：类型 ＝ **第 3 段** |
+/// | `world://a/b/c` | `Some("a")` | 三段**不是**内嵌形态；首段永远是类型（与 `entity_of` 同口径） |
+/// | `world://a//c`（空段） | `None` | 形状坏 ⇒ 本判据不抢（`apply` 那一族会报） |
+///
+/// 与 [`crate::ontology::Ontology::entity_of`]／`instance_type` **同一口径**（本模块生产代码零出边
+/// ⇒ 不 `use` 那边；一致性由两侧各自的用例钉住）。
+fn instance_type_of<'a>(subject: &'a str, nested: &'a BTreeMap<String, String>) -> Option<&'a str> {
+    let rest = subject.strip_prefix("world://")?;
+    let segs: Vec<&str> = rest.split('/').collect();
+    if segs.iter().any(|s| s.is_empty()) {
+        return None;
+    }
+    if segs.len() == 4 && nested.get(segs[2]).map(String::as_str) == Some(segs[0]) {
+        return Some(segs[2]);
+    }
+    if segs.len() >= 2 {
+        return Some(segs[0]);
+    }
+    None
+}
+
 /// **读模型侧的"已声明格"清单**（`REQ-F-032` 判据①：「逐格可枚举」）。
 ///
 /// 它只装**必填**格，且只装本体逐字声明的那两处：
@@ -336,6 +738,23 @@ impl State {
 pub struct DeclaredCells {
     envelope_required: Vec<String>,
     family_required: BTreeMap<String, Vec<String>>,
+    /// **按类型的实例上限**（`类型 → 上限`）。空表 ＝ 法律**没声明**任何上限
+    /// ⇒ 本层不判（**这不等于"实例可以无限"**：它等于"这件事法律没写"，
+    /// 属于 `_pending_tables` 里如实登记的缺口，不属本层的判据面）。
+    instance_limits: BTreeMap<String, u64>,
+    /// **已声明的实体集**（对象类型名；装配处 `M04` 从本体取）。
+    ///
+    /// ★ 为什么是 `Option` 而不是"空表即不判"：**"这一半没接进来"与"法律里一个类型都没有"
+    /// 是两件事** —— 前者是这一层没接上线（调用方没递），后者是法律本身空。
+    /// 混成一个，就把"**没接**"读成了"**没问题**"（本项目最贵的那类错）。
+    /// - `None` ⇒ 这一半**没接** ⇒ 本层**不判**（既有调用点直接 `DeclaredCells::new` 的都在这一档）；
+    /// - `Some(空集)` ⇒ 法律里**一个对象类型都没有** ⇒ [`State::fold_declared`] **拒绝折叠**（G1 形态）。
+    declared_entities: Option<BTreeSet<String>>,
+    /// **内嵌类型 → 父类型**（`_objects.<类型>.part_of`；装配处 `M04` 给）。
+    ///
+    /// 只在判"主体属于哪个类型"时用：四段形态 `world://<父>/<父实例>/<内嵌类型>/<内嵌实例>`
+    /// 的类型是**第 3 段**（且第 3 段必须正是按 `part_of` 声明的那个内嵌类型）。
+    nested_types: BTreeMap<String, String>,
 }
 
 impl DeclaredCells {
@@ -347,7 +766,41 @@ impl DeclaredCells {
         Self {
             envelope_required,
             family_required,
+            instance_limits: BTreeMap::new(),
+            declared_entities: None,
+            nested_types: BTreeMap::new(),
         }
+    }
+
+    /// 追加**按类型的实例上限**（`_objects.<类型>.instance_mode` 派生；装配处 `M04` 给）。
+    pub fn with_instance_limits(mut self, limits: BTreeMap<String, u64>) -> Self {
+        self.instance_limits = limits;
+        self
+    }
+
+    /// 追加**已声明的实体集** ＋ **内嵌标记**（装配处 `M04` 给；同 [`Self::with_instance_limits`] 的体例）。
+    ///
+    /// ★ **调用它就是"把这一半接上了"**：此后 [`State::fold_declared`] 会判
+    /// "**每个实例必须指回定义面**"（书 §5.3 的读侧那一半）。**不调用＝这一半没接**，
+    /// 且"没接"这一点由 [`DeclaredCells::declared_entities`] 的 `None` **显式**表达，不靠空表冒充。
+    pub fn with_declared_entities(
+        mut self,
+        entities: BTreeSet<String>,
+        nested_types: BTreeMap<String, String>,
+    ) -> Self {
+        self.declared_entities = Some(entities);
+        self.nested_types = nested_types;
+        self
+    }
+
+    /// 已声明的实体集（`None` ＝ 这一半**没接**，见字段文档）。
+    pub fn declared_entities(&self) -> Option<&BTreeSet<String>> {
+        self.declared_entities.as_ref()
+    }
+
+    /// 声明过实例上限的类型（`None` ＝ 这一类型没声明上限）。
+    pub fn instance_limit(&self, entity: &str) -> Option<u64> {
+        self.instance_limits.get(entity).copied()
     }
 
     /// 一个格都没有 ⇒ 本层无从判（**不许**读成"检查通过"）。

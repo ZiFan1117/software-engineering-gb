@@ -119,7 +119,7 @@
 > **`cli08` 的"必须不同"判据依赖"换词表要能被检出"是 `REQ-F-020` 的明文判据**（`WC-SRS-001`:134）；若只改 `_comment` 而 `vocab=` 变了，才是 bug。
 > ⚠️ **状态（★ 2026-09-28 订正）**：`cli07`／`cli08` **已实现并已跟踪**——`world-core/tests/cli.rs:208` 的 `cli07_usage_string_discloses_default_actor`、`:327` 的 `cli08_channel_bind_refuses_socket_not_in_identity_map`；该文件现共 **14** 条 `cli*` 用例（`git grep -c "^fn cli" -- world-core/tests/cli.rs` ⇒ 14）。**原写"现有 6 条"是写下时的读数。** 本节其余部分仍是**用例定义与期望**，不是"已通过"。
 > **但 `cli08` 的判据已在本轮当场手工验证过**（2026-09-26，VM，工作区 `3a6b342`，跑真实二进制）：
-> 同一账本、同一出厂本体，只把 `_comment` 改一处 ⇒ `vocab=fnv1a64:4bf7b75573fee475` **不变**；
+> 同一账本、同一出厂本体，只把 `_comment` 改一处 ⇒ `vocab=fnv1a64:6a96abfa9a969462` **不变**；
 > 把 `concepts.notice.fields` 加一个字段（真正的语义变更）⇒ `vocab=` 变为 **`fnv1a64:6f97aa5c526d3946`**（**变了**）。
 > 命令（可复现）：用 `python3` 生成两份改过的本体，分别以 `--ontology` 指向它们跑 `project language | head -n1`。
 > **这只是判据的手工验证，不构成 `cli08` 已实现**；实现后须回填 `WC-TR-001`。
@@ -186,7 +186,7 @@
 
 **G1｜普通值**（1 条 `change`；账本 `state` 指纹 `fnv1a64:5a590d1aa7e3d4a4`，`last_seq=1`）
 ```
-#world-core projection=visual world=1 vocab=fnv1a64:4bf7b75573fee475 last_seq=1 state=fnv1a64:5a590d1aa7e3d4a4
+#world-core projection=visual world=1 vocab=fnv1a64:6a96abfa9a969462 last_seq=1 state=fnv1a64:5a590d1aa7e3d4a4
 世界状态（视觉投影）
 ────────────────────────────────────────────  ← 44×U+2500
   已折叠 1 条事件（最近序号 1）｜动作 0 条｜通告 0 条
@@ -199,7 +199,7 @@
 
 **G2｜含换行/制表/引号/反斜杠的值**（第 2 条 `change` 的 `after = "a\nb\t\"q\"\\z"`；`last_seq=2`）
 ```
-#world-core projection=visual world=1 vocab=fnv1a64:4bf7b75573fee475 last_seq=2 state=fnv1a64:4a144bdf8498f97e
+#world-core projection=visual world=1 vocab=fnv1a64:6a96abfa9a969462 last_seq=2 state=fnv1a64:4a144bdf8498f97e
 世界状态（视觉投影）
 ────────────────────────────────────────────
   已折叠 2 条事件（最近序号 2）｜动作 0 条｜通告 0 条
@@ -217,7 +217,7 @@
 
 **G3｜空状态**（空账本；`last_seq=0`，指纹 `fnv1a64:bfe5a6d1cc805a56`）
 ```
-#world-core projection=visual world=1 vocab=fnv1a64:4bf7b75573fee475 last_seq=0 state=fnv1a64:bfe5a6d1cc805a56
+#world-core projection=visual world=1 vocab=fnv1a64:6a96abfa9a969462 last_seq=0 state=fnv1a64:bfe5a6d1cc805a56
 世界状态（视觉投影）
 ────────────────────────────────────────────
   （账本为空：这个世界还没有发生过任何事）

@@ -50,10 +50,10 @@ $ cd /root/world/world-core && bash check.sh
   ✅ 追加→读回 / 重启→还在 / ★删读模型→重算一致
 
 ── ④ 投影与同源核对（REQ-F-018/019/020）──────────────────
-  语言投影首行: #world-core projection=language world=1 vocab=fnv1a64:4bf7b75573fee475 last_seq=2 state=fnv1a64:a2093a927e613f43
-  视觉投影首行: #world-core projection=visual world=1 vocab=fnv1a64:4bf7b75573fee475 last_seq=2 state=fnv1a64:a2093a927e613f43
+  语言投影首行: #world-core projection=language world=1 vocab=fnv1a64:6a96abfa9a969462 last_seq=2 state=fnv1a64:a2093a927e613f43
+  视觉投影首行: #world-core projection=visual world=1 vocab=fnv1a64:6a96abfa9a969462 last_seq=2 state=fnv1a64:a2093a927e613f43
   == world-core project check ==
-    词表 : fnv1a64:4bf7b75573fee475（世界版本 1）
+    词表 : fnv1a64:6a96abfa9a969462（世界版本 1）
     状态 : last_seq=2 指纹=fnv1a64:a2093a927e613f43
     同源 : ✅ 语言投影与视觉投影一致（同一读模型 + 同一词表）
 
@@ -142,7 +142,7 @@ $ ls -l target/release/world-core
 605032 target/release/world-core
 
 $ ./target/release/world-core project language | head -3
-#world-core projection=language world=1 vocab=fnv1a64:4bf7b75573fee475 last_seq=0 state=fnv1a64:bfe5a6d1cc805a56
+#world-core projection=language world=1 vocab=fnv1a64:6a96abfa9a969462 last_seq=0 state=fnv1a64:bfe5a6d1cc805a56
 rc=0
 
 $ bash check.sh

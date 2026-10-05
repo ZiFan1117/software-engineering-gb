@@ -389,7 +389,11 @@ assert_has "② 自报同源一致" "$(W project check 2>&1)" '同源.*(一致|�
 python3 - "$SB/ontology.json" "$SB/ont-vocab.json" <<'PY'
 import json, sys, collections
 o = json.load(open(sys.argv[1], encoding="utf-8"), object_pairs_hook=collections.OrderedDict)
+# ⚠ 两处**都**改：`concepts` 是**身份**（非 `_` 键，参与 vocab_hash）、
+#   `_objects` 是**读的权威**（`_` 键，不参与身份）。只改 `_objects` ⇒ hash 不变，
+#   本判据会假红（"改语义 hash 不变"其实是因为改的那一处本来就不参与身份）。
 o["concepts"]["job"]["fields"]["status"] = "enum(todo,doing,done,cancelled)"
+o["_objects"]["job"]["fields"]["status"] = "enum(todo,doing,done,cancelled)"
 json.dump(o, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY
 chmod 600 "$SB/ont-vocab.json"
@@ -487,7 +491,15 @@ assert_eq "③ 带 / 不带 to 的**结论无关性**：state 与基线逐字节
 assert_has "④ act 的 request_id（业务级配对字段）读回后**逐字保留**" "$(W read 2>/dev/null)" '"request_id": ?"r-'
 O="$(A act '{"capability":"notice.mute","verb":"do","params":{}}')"; assert_rc "⑤ **反例**：act 缺 request_id ⇒ rc=2" 2 "$?"
 assert_has "⑥ 理由点名 request_id" "$O" 'request_id'
-reg "⑦ 通道**线格式**（{\"ok\":true,\"event\":…} / {\"ok\":false,\"error\":…}）与"一行请求一行应答"需要长驻服务进程，而 v1 CLI **不提供** serve 子命令 ⇒ 该面的端到端观测不可达；契约面由 TC-044（集成级 c14）与 WC-IRS-001 §3.7.5 承担"
+# ★ **2026-10-03 理由句按实更新（作者指示认这次范围变更；代录不代签）**：
+#   原理由句逐字是「…需要长驻服务进程，而 v1 CLI **不提供** serve 子命令 ⇒ 该面的端到端观测不可达」。
+#   现在 **`serve` 已存在**（`world-core serve`，读继承 fd 3 ＋ 报到 ＋ 看门狗）⇒
+#   **"v1 不提供 serve"这句已过期**，已按实改。
+#   ⚠ **登记项本身不销号**，理由**换成了新的、可核的那一条**：要端到端观测"通道线格式"，
+#   还需要**把监听套接字转交到子进程的 fd 3** 的工具（`systemd-socket-activate`／`socat` 之类）；
+#   **本机未核**该工具是否可用 ⇒ 按本仓口径「拿不准写无法判定」，**不假装它现在可测**。
+#   若下一轮核实该工具可用，**本登记项应销号**（销号也按实写）。
+reg "⑦ 通道**线格式**（{\"ok\":true,\"event\":…} / {\"ok\":false,\"error\":…}）与"一行请求一行应答"需要长驻服务进程：**`serve` 子命令已于 2026-10-03 落地**（作者指示），故原理由句「v1 不提供 serve」**已过期并已按实改写**；但端到端观测仍需**把套接字转交到子进程 fd 3 的工具**（`systemd-socket-activate`／`socat`），**本机未核** ⇒ 该面**可测性无法判定**，契约面由 TC-044（集成级 c14）与 WC-IRS-001 §3.7.5 承担"
 
 # ══ TC-074 · REQ-F-025 主体身份可核 ═══════════════════════════════════
 echo; echo "── TC-074 · REQ-F-025 主体身份可核 ──"
@@ -644,7 +656,21 @@ echo; echo "── TC-076 · REQ-F-026 四边界：出厂配置里的四个数�
 #   WC-RTM-001.csv 第 32 行、WC-IRS-001 §3.7.7、openspec/BRIDGE.md 仍写"四个边界一个都没有／
 #   【待验证】"⇒ 那些**文档**的同步由归档那一轮统一处置（与本 change tasks.md 第 10 组同体例）。
 H="$(W --help 2>&1)"
-assert_not_has "① v1 CLI **不提供顶层 serve 子命令**（通道仍是子命令，无长驻顶层服务）——据 --help 实测" "$H" '^  serve'
+# ★ **2026-10-03 口径变更（作者指示，代录不代签）**：本条原为
+#   `assert_not_has "① v1 CLI **不提供顶层 serve 子命令**（通道仍是子命令，无长驻顶层服务）"`
+#   作者逐字：「**好的，我你所有需要我批的，我都批。**……**烟囱式的需要我审批的，都批都批，
+#   你都代批了就行**」——而"`serve`（读继承 fd）＋ `WATCHDOG`"正是作者点名要加的第一件。
+#   ⇒ 「v1 不提供顶层 `serve`」**已被作者指示取代**（**不是执行者自行翻案**）。
+#   变更落点：本行 ＋ `docs/证据/EV-009.md`（**SRS 一字未动**，按红线）。
+assert_has "① **提供**顶层 serve 子命令（作者 2026-10-03 指示：读继承 fd ＋ WATCHDOG）——据 --help 实测" "$H" '^  serve'
+# ★ **反向验证（本判据必须会红）**：把 `serve` 那一行从 `--help` 里抹掉 ⇒ 同一条**正向**断言必须失败。
+#   为什么要有这一步：`assert_has` 若哪天被改成恒真（或 `--help` 被改成永远输出它），
+#   上面那句就退化成装饰；这一步把"判据真的在看那一行"钉住。
+if printf '%s\n' "$H" | grep -vE '^  serve' | grep -qE '^  serve'; then
+  bad "①反例：抹掉 serve 行后该断言**仍判通过** ⇒ 判据是装饰"
+else
+  ok "①反例：抹掉 serve 行后该判据**必红**（判定器非装饰）"
+fi
 assert_has "② --help 写明四个数值取自 --policy 的 channel_limits（接线看得见）" "$H" 'channel_limits'
 
 # ③ **四个数值在出厂配置里齐备**（旧的③打印「无任何资源边界数值」却**什么也没查**——
@@ -763,6 +789,15 @@ g076_srv() {
     "$SOCKDIR/$tag.sock" "$(id -u)" >"$SB/$tag.channel.json"
   chmod 600 "$SB/$tag.channel.json"
   rm -f "$SOCKDIR/$tag.sock"
+  # ★ T1／AC-1：把这条**临时口**写进**这一轮的法律**（`$pol`）——判据的会红条件一字未动。
+  python3 - "$pol" "$SOCKDIR/$tag.sock" <<'PY'
+import json, sys
+p, sock = sys.argv[1], sys.argv[2]
+d = json.load(open(p, encoding="utf-8"))
+d["listeners"] = [{"socket": sock, "actor": "world://agent/tc076", "owner": "fixture"}]
+json.dump(d, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+PY
+  chmod 600 "$pol"
   timeout 25 "$BIN" --ontology "$SB/ontology.json" --ledger "$L76" --policy "$pol" \
     --channel "$SB/$tag.channel.json" channel serve "$SOCKDIR/$tag.sock" "$n" \
     >"$SB/$tag.srv.log" 2>&1 &

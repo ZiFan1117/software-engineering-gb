@@ -173,6 +173,113 @@ impl ChannelConfig {
     pub fn listener_for(&self, socket: &Path) -> Option<&Listener> {
         self.listeners.iter().find(|l| l.socket == socket)
     }
+
+    /// 加载渲染物**并逐条对回在册**——「身份映射只许有一处权威」在**受理期**的落点。
+    ///
+    /// ## 它解决的那个洞（本模块今天最要紧的一条）
+    ///
+    /// **受理路径只读渲染物**：`serve` 从继承来的 fd 取套接字路径 → [`Self::load`] →
+    /// [`Self::listener_for`]；而**法律那份 `listeners` 在运行路径上零读者**。
+    /// 于是渲染物事实上是**第二在册**：往它里面凭空加一行映射，口就能起、
+    /// 账本里就会多出一个法律里没有的身份，而**没有任何东西会红**。
+    /// `policy.json._listeners_note` 自己写着「总线上**不得**凭另一份配置文件自行定义映射」——
+    /// 本函数就是那句话的执行体。
+    ///
+    /// ## 口径（四条，都可判真假）
+    ///
+    /// - 对账键是 **(socket, actor) 同时相同**：只对 socket 不够——同一个口换个身份也是账外口；
+    /// - 法律读不出来 ⇒ **拒启**（[`declared_listeners`] 的 `Channel.NoDeclaredListeners`）：
+    ///   没有在册表就没有对账基准，而「基准缺失」**不许**被读成「没有账外口」；
+    /// - 账外口 ⇒ **拒启**（`Channel.UndeclaredListener`），并**点名**那一条；
+    /// - 它**不判**「在册未上线」（法律里登记了、今天没起）：那是合法状态
+    ///   （法律的本分是「先声明、后使用」），**单独报、不在这里红**。
+    ///
+    /// 反例（必红）：往渲染物里加一行 `{socket: …/ghost.sock, actor: world://ghost, uid: …}`
+    /// ⇒ `cmd_serve` 在**受理之前** rc=2 退出（见 `tests/channel_bounds.rs::l07`）。
+    pub fn load_checked(cfg: &Path, policy: &Path) -> Result<Self, String> {
+        let conf = Self::load(cfg)?;
+        let law = declared_listeners(policy)?;
+        for l in &conf.listeners {
+            let hit = law
+                .iter()
+                .any(|d| d.socket == l.socket && d.actor == l.actor);
+            if !hit {
+                return Err(format!(
+                    "ext.world.Channel.UndeclaredListener: 渲染物 {} 里的口 {} → `{}` \
+                     在法律 {} 的 `listeners` 里解析不到——**账外口一律拒启**。\n\
+                     \x20 身份映射只许有一处权威（法律）；渲染物只是它的渲染物。\n\
+                     \x20 处置：往法律那一节补上这条绑定（改法律走 R5），\
+                     或用 tools/render_channel.py 按法律重新渲染。",
+                    cfg.display(),
+                    l.socket.display(),
+                    l.actor,
+                    policy.display()
+                ));
+            }
+        }
+        Ok(conf)
+    }
+}
+
+/// 法律里的一条在册绑定（`policy.json.listeners` 的 `socket`／`actor`）。
+///
+/// **它就是「对账基准」的形状**：渲染物每一条都必须能在这些对里解析到。
+/// `owner`（名字）不进这里——把名字换成 uid 是**部署面**的事（那台机器上谁是这个用户），
+/// 本模块不读用户库。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Declared {
+    pub socket: PathBuf,
+    pub actor: String,
+}
+
+/// 从**法律**读在册表（`policy.json` 的 `listeners`）——身份映射的唯一权威。
+///
+/// fail-closed：文件读不出／不是 JSON／没有 `listeners`／它是空的／某条缺 `socket` 或 `actor`
+/// ⇒ 一律 `Channel.NoDeclaredListeners` **拒启**并点名。理由与 `ChannelConfig::load`
+/// 对空 `listeners` 的口径同源：**没有身份映射的通道等于无门之门**；
+/// 而这里多一条——**没有在册表就没有对账基准**，报绿就等于"没查"。
+pub fn declared_listeners(policy: &Path) -> Result<Vec<Declared>, String> {
+    let text = std::fs::read_to_string(policy)
+        .map_err(|e| format!("ext.world.Channel.ReadFail: {}: {e}", policy.display()))?;
+    let v: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("ext.world.Channel.BadJson: {}: {e}", policy.display()))?;
+    let arr = v
+        .get("listeners")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            format!(
+                "ext.world.Channel.NoDeclaredListeners: {} 里没有 `listeners` 段——\
+                 法律是身份映射的唯一权威，它缺了这一节就没有对账基准",
+                policy.display()
+            )
+        })?;
+    if arr.is_empty() {
+        return Err(format!(
+            "ext.world.Channel.NoDeclaredListeners: {} 的 `listeners` 是空的——\
+             没有身份映射的通道等于无门之门",
+            policy.display()
+        ));
+    }
+    let mut out = Vec::new();
+    for item in arr {
+        let socket = item.get("socket").and_then(Value::as_str).ok_or_else(|| {
+            format!(
+                "ext.world.Channel.NoDeclaredListeners: {} 的某条 listeners 缺 `socket`",
+                policy.display()
+            )
+        })?;
+        let actor = item.get("actor").and_then(Value::as_str).ok_or_else(|| {
+            format!(
+                "ext.world.Channel.NoDeclaredListeners: {} 的某条 listeners 缺 `actor`",
+                policy.display()
+            )
+        })?;
+        out.push(Declared {
+            socket: PathBuf::from(socket),
+            actor: actor.to_string(),
+        });
+    }
+    Ok(out)
 }
 
 /// **四个资源边界的数值**（`REQ-F-026`）。
@@ -487,6 +594,92 @@ pub fn serve_n_with(
         }
     }
     Ok(ok)
+}
+
+/// 多口轮询时"所有口都空"的等待间隔（毫秒）。
+///
+/// 为什么要有它：本仓只许 `serde_json` 一个 crate family ⇒ 没有 `poll(2)`/`epoll` 可用，
+/// 于是"同时等多个口"只能**非阻塞轮询 ＋ 短睡**。10ms 是取舍：口空闲时每 10ms 醒一次
+/// （可忽略的 CPU），而一次点击的响应延迟上限就是这 10ms（对人手不可感知）。
+const MULTI_LISTEN_TICK_MS: u64 = 10;
+
+/// **一次受理多个口**（`(甲-e)`：载体把 n 个 fd **一次**交过来，**每个口各自的 socket 单元**带自己的身份）。
+///
+/// ## 它解决的那个洞（现场实测过）
+///
+/// `serve_n_with` 一次只服务**一个** `UnixListener`。多口若各起一个循环串行跑，
+/// **口 A 上的一条连接会让口 B 的连接一直等在队列里**——而"空闲超时"是**口上**的边界，
+/// 于是用户看到的是"另一个口坏了"，不是"它在排队"。⇒ 本函数用**单线程轮询**把它消掉。
+///
+/// ## ★ 它**不是**并发受理（口径不许被读大）
+///
+/// - **仍然是同一个写者**（不许 fork、不许起第二个服务）；
+/// - **仍然是一次一条**：`max_connections` 只能为 1 那条**架构事实没动**、
+///   `BadConcurrency` 一个字没改；本函数只把"要等谁让出循环"消掉；
+/// - 代价（如实登记）：所有口空闲时按 `MULTI_LISTEN_TICK_MS` 空转一次。
+///
+/// ## 判据（会红）
+///
+/// - **每个口各自认领身份**：`expects[i]` 必须是第 `i` 个口**自己的**绑定（调用方按该 fd 的
+///   `local_addr()` 取）⇒ 反例（真实违规的形态）：给两个口传**同一个** `expect`
+///   ⇒ 第二个口上落的话会挂在第一个口的身份下（那就是冒充）；
+/// - 口与身份**必须一一对应且非空** ⇒ 否则 `Channel.BadListeners` 拒（不静默按第一个凑）；
+/// - 任一连接的坏请求**不中止**其余口（与 `serve_n_with` 同口径：一次坏请求不该让总线停摆）。
+#[cfg(unix)]
+pub fn serve_all_with(
+    sink: &mut impl RequestSink,
+    listeners: &[std::os::unix::net::UnixListener],
+    expects: &[Listener],
+    session: &mut Session,
+    n: usize,
+) -> Result<usize, String> {
+    if listeners.is_empty() || listeners.len() != expects.len() {
+        return Err(format!(
+            "ext.world.Channel.BadListeners: 口与身份映射必须一一对应且非空（实得 {} 个口 / {} 个身份）",
+            listeners.len(),
+            expects.len()
+        ));
+    }
+    let lim = session.limits();
+    for l in listeners {
+        l.set_nonblocking(true)
+            .map_err(|e| format!("ext.world.Channel.AcceptFail: 设非阻塞失败：{e}"))?;
+    }
+    let mut served = 0usize;
+    while served < n {
+        let mut did_work = false;
+        for (i, l) in listeners.iter().enumerate() {
+            match l.accept() {
+                Ok((s, _)) => {
+                    did_work = true;
+                    s.set_nonblocking(false)
+                        .map_err(|e| format!("ext.world.Channel.AcceptFail: 恢复阻塞失败：{e}"))?;
+                    match serve_stream(&mut *sink, s, &expects[i], session) {
+                        Ok(_) => served += 1,
+                        Err(e) => eprintln!("[FAIL] {e}"),
+                    }
+                    let refused = refuse_pending(l, lim)?;
+                    if refused > 0 {
+                        eprintln!(
+                            "[FAIL] ext.world.Channel.TooManyConnections: 并发上限 max_connections={}，\
+                             服务期间到达的 {refused} 条连接一并拒绝",
+                            lim.max_connections
+                        );
+                    }
+                    // ★ `refuse_pending` 收尾会把监听者设回**阻塞** ⇒ 这里必须再设回非阻塞，
+                    //   否则下一轮的 `accept()` 会阻塞在**第一个**口上，多口轮询当场失效。
+                    l.set_nonblocking(true)
+                        .map_err(|e| format!("ext.world.Channel.AcceptFail: 设非阻塞失败：{e}"))?;
+                }
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {}
+                Err(e) => return Err(format!("ext.world.Channel.AcceptFail: {e}")),
+            }
+        }
+        if !did_work {
+            std::thread::sleep(Duration::from_millis(MULTI_LISTEN_TICK_MS));
+        }
+    }
+    Ok(served)
 }
 
 /// 受理并服务**一个**连接 —— `serve_once_with` 的**不设界**薄壳（见 `serve_n` 的同一条说明）。

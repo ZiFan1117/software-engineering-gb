@@ -262,7 +262,7 @@
 | M07 | 定位/层/依赖边界钉死；渲染契约形状与"可审计契约"地位有明文；**"不可复用另一投影的输出"被明确否掉并给理由**；同源比对的归属与范围写清（且明确排除排版）；渲染失败时退出码有规定 |
 | M08 | 缓存地位与"删掉无后果"；**"以账本为准"的裁决方向**；**续算 ≡ 全量重算"逐字节相同"**；**未核验路径的自我暴露**（`resume_unverified`"名字里带 `unverified` 是刻意的"）；坏快照三类必须被拒；缓存文件也过静态墙 |
 | M09 | **"通道写入必须过唯一咽喉"最扎实**（三处互证，且不需实现即可判定）；"身份不来自请求自称"意图与手段一致；配置形状与"无门之门"拒绝规则；**缺口被如实登记、没有假装满足**；身份粒度取舍有外部对照与代价声明 |
-| **新建载体的中心身份值：四方同值 + 运行期确认**（本批新增，2026-09-27） | 词表身份 **`fnv1a64:4bf7b75573fee475`** 与空状态指纹 **`fnv1a64:bfe5a6d1cc805a56`**：① `WC-LFMT-001-v0.1` 起草方用 PowerShell/BigInteger 实现 FNV-1a64 **独立复算**，逐位一致；② `WC-ONT-001-v0.1` 起草方用 **Python 3.12 另一份独立实现**复算，同值，且**"从写好的 `.md` 附录 A 里把该串抽回来再算仍是同值"**；③ 已撤出历史稿 `WC-OD-011` §一 的**记录值**同值；④ **Rust 真二进制运行期**（Arch VM，`world-core ... project check`）打印同值。⇒ 这正好把 A-5（M01-D18）「`vocab_hash` 算法无参数字面量 ⇒ 第三方无法复现」**闭环**。另：运行期落盘的账本首行真实字节为 `{"actor":"world://user","at":…,"body":{"after":1,"before":null,"path":"p","subject":"world://probe"},"chain":"fnv1a64:…","flags":[],"id":"e…-0","kind":"change","seq":1,"world":1}` —— **键升序 + 紧凑 + 无 BOM + LF 结尾**，为 LFMT 的规范化字节口径提供了"一例真实输出" |
+| **新建载体的中心身份值：四方同值 + 运行期确认**（本批新增，2026-09-27） | 词表身份 **`fnv1a64:6a96abfa9a969462`** 与空状态指纹 **`fnv1a64:bfe5a6d1cc805a56`**：① `WC-LFMT-001-v0.1` 起草方用 PowerShell/BigInteger 实现 FNV-1a64 **独立复算**，逐位一致；② `WC-ONT-001-v0.1` 起草方用 **Python 3.12 另一份独立实现**复算，同值，且**"从写好的 `.md` 附录 A 里把该串抽回来再算仍是同值"**；③ 已撤出历史稿 `WC-OD-011` §一 的**记录值**同值；④ **Rust 真二进制运行期**（Arch VM，`world-core ... project check`）打印同值。⇒ 这正好把 A-5（M01-D18）「`vocab_hash` 算法无参数字面量 ⇒ 第三方无法复现」**闭环**。另：运行期落盘的账本首行真实字节为 `{"actor":"world://user","at":…,"body":{"after":1,"before":null,"path":"p","subject":"world://probe"},"chain":"fnv1a64:…","flags":[],"id":"e…-0","kind":"change","seq":1,"world":1}` —— **键升序 + 紧凑 + 无 BOM + LF 结尾**，为 LFMT 的规范化字节口径提供了"一例真实输出" |
 
 ---
 
@@ -362,7 +362,7 @@
 
 | # | 事实 | 证据 |
 |---|---|---|
-| 1 | 词表身份与状态指纹**四方同值** | `project check` 运行期打印 `fnv1a64:4bf7b75573fee475` / `fnv1a64:bfe5a6d1cc805a56`（见 §四） |
+| 1 | 词表身份与状态指纹**四方同值** | `project check` 运行期打印 `fnv1a64:6a96abfa9a969462` / `fnv1a64:bfe5a6d1cc805a56`（见 §四） |
 | 2 | 账本首行落盘字节 = **键升序 + 紧凑 + 无 BOM + LF** | `head -1 ledger.jsonl` 原始输出已在 §四 逐字贴出 |
 | 3 | **`world-core/channel.json` 不存在** | `git ls-files "*channel.json"` **零命中**；`git check-ignore -v world-core/channel.json` **不忽略**；`world-core/` 根目录只有 `ontology.json`/`policy.json`。⇒ `WC-MODREG-001 §二` `M09` 行**已就地订正**（§五 #9）；`WC-SCMP-001 §4.2` 表 D 与 `WC-LLD-001` 须同步回改 |
 | 4 | `check.sh` 的**纯文本审计不覆盖任何文档** | `check.sh:86` 只审 `ontology.json policy.json <ledger.jsonl>`；而 `tools/plain_text_audit.py:48-55` **会把 CRLF 判为不合格**（探针实测 `含控制字符 U+000D` ⇒ `rc=1`）⇒ `AC-07` 在**文档**这一面是装饰（已交 `WC-SCMP-001` 登记） **⚠ 2026-09-27 当场补测（本条现在有了数值）**：把 `world-core/docs` 整目录交给该工具 ⇒ **受审 50 份，不合格 1 份**（**2026-09-27 订正：受审数 51 → 50**——实测 `world-core/docs` 下 `.md` **48 份** + `.csv` **2 份** = **50 个受审文件**，即 `python tools/plain_text_audit.py docs` 的 `受审文件: 50`；**原记 51 是错的**，以该命令的实测输出为准）（`WC-FSR-001-v0.1.md`，`含控制字符 U+000D（位置 9）`，即 1107 个 CR），`rc=1`。**归一该文件后重跑 ⇒ 受审 50 份、全部合格、`rc=0`**（2026-09-27 复测：`受审文件: 50` / `门禁结论：通过` / `rc=0`）。⇒ ① `AC-07` 对文档**是可判的、判据已经存在**，缺的只是"把文档纳入审计面"这一句；② `G-25` 的"工作区字节未归一"**在 `world-core/docs` 内已实际关闭**；③ 全库唯一剩余的 `w/crlf` 是 `agentd/internal/job/job.go`（**不属 world-core、本次未动**；其索引侧为 `i/lf`，故**仓库字节仍是 LF**） |

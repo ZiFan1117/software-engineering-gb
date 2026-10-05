@@ -65,13 +65,37 @@ fn factory_policy() -> PathBuf {
 }
 
 /// 写一份合法的临时策略（含 `writes` 段——默认拒绝要求它必须存在）。
+///
+/// ## 本批起是**两层**（夹具的输入形态随之变了）
+///
+/// 入参 `caps` 的每一项带 `kind`（能力层）与 `reversible`（动作层）；本函数把它
+/// **拆成两层**落盘：`capabilities.<名字>.kind` ＋ `actions.<名字>.capability/reversible`
+/// （出厂 `policy.json` 同形；判据见 `src/gate.rs::Policy::load`）。
+/// ⇒ 调用点的夹具**没变宽**（仍是"一项能力一条动作"这个最小形态），
+/// 变的是它落到哪一层——两层的拆法在**这里**写一次。
 fn write_policy(dir: &Path, caps: Value) -> PathBuf {
+    let mut capabilities = serde_json::Map::new();
+    let mut actions = serde_json::Map::new();
+    for (name, spec) in caps.as_object().expect("caps 必须是对象") {
+        capabilities.insert(
+            name.clone(),
+            json!({ "kind": spec.get("kind").cloned().unwrap_or(json!("invoke")) }),
+        );
+        actions.insert(
+            name.clone(),
+            json!({
+                "capability": name,
+                "reversible": spec.get("reversible").cloned().unwrap_or(json!(true)),
+            }),
+        );
+    }
     let p = dir.join("policy.json");
     fs::write(
         &p,
         serde_json::to_string_pretty(&json!({
             "policy": 1,
-            "capabilities": caps,
+            "capabilities": Value::Object(capabilities),
+            "actions": Value::Object(actions),
             "subjects": { "allow": ["world://user", "world://agent/*"] },
             "writes": { "world://user": ["world://*"] },
             "irreversible_actors": ["world://user"]
@@ -79,6 +103,38 @@ fn write_policy(dir: &Path, caps: Value) -> PathBuf {
         .unwrap(),
     )
     .unwrap();
+    p
+}
+
+/// **本文件专用的测试本体**：出厂本体 ＋ 追加若干**能力**（`_interfaces`）与
+/// 对应的**动作**（`_actions`）。
+///
+/// 为什么必须有它（本批新）：`World::open` 会核「闸侧的能力 ⊆ 本体的 `_interfaces`」
+/// （`ext.world.Gate.CapabilityNotInOntology`）⇒ 一份**只改策略**的夹具再也起不来。
+/// 本函数按与 `write_policy` **同一个入参**（`caps` 的键集）补本体那一侧，
+/// 于是"两处同名"这件事在夹具里是**构造出来的**，不是顺手写对的。
+fn write_ontology(dir: &Path, caps: &Value) -> PathBuf {
+    let text = fs::read_to_string(manifest_dir().join("ontology.json")).unwrap();
+    let mut v: Value = serde_json::from_str(&text).unwrap();
+    for (name, spec) in caps.as_object().expect("caps 必须是对象") {
+        let kind = spec.get("kind").cloned().unwrap_or(json!("invoke"));
+        v["_interfaces"][name] = json!({ "kind": kind, "what": "夹具：本文件专用" });
+        v["_actions"][name] = json!({
+            "capability": name,
+            "reversible": spec.get("reversible").cloned().unwrap_or(json!(true))
+        });
+    }
+    let p = dir.join("ontology-with-fixture-caps.json");
+    fs::write(
+        &p,
+        format!("{}\n", serde_json::to_string_pretty(&v).unwrap()),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o600)).unwrap();
+    }
     p
 }
 
@@ -200,27 +256,35 @@ fn a03_gate_reads_the_risk_level_of_the_factory_config() {
     let w = World::open(&factory_ontology(), &lp, &factory_policy())
         .expect("出厂配置两处必须一致（否则世界起不来）");
 
-    let caps: Vec<(String, bool, Option<Risk>)> = w
+    // ⚠ 本批起**两层**：`risk`（闸读到的等级）在**能力层**，`reversible` 在**动作层**
+    // （同一项能力可以有可逆与不可逆两种动作 ⇒ 可逆性不是能力的性质）。
+    let caps: Vec<(String, Option<Risk>)> = w
         .policy()
         .capabilities()
-        .map(|(n, c)| (n.to_string(), c.reversible, c.risk))
+        .map(|(n, c)| (n.to_string(), c.risk))
         .collect();
     let find = |name: &str| {
         caps.iter()
-            .find(|(n, _, _)| n == name)
+            .find(|(n, _)| n == name)
             .unwrap_or_else(|| panic!("出厂策略里应有能力 `{name}`：{caps:?}"))
+    };
+    let rev_of = |name: &str| {
+        w.policy()
+            .action(name)
+            .unwrap_or_else(|| panic!("出厂策略里应有动作 `{name}`"))
+            .reversible
     };
 
     // 有执行清单的三项：等级必须与 `cap.d/*.json` 里写的一致。
-    assert_eq!(find("ledger.compact").2, Some(Risk::High));
-    assert!(!find("ledger.compact").1);
-    assert_eq!(find("notice.mute").2, Some(Risk::Low));
-    assert!(find("notice.mute").1);
-    assert_eq!(find("job.start").2, Some(Risk::Low));
+    assert_eq!(find("ledger.compact").1, Some(Risk::High));
+    assert!(!rev_of("ledger.compact"));
+    assert_eq!(find("notice.mute").1, Some(Risk::Low));
+    assert!(rev_of("notice.mute"));
+    assert_eq!(find("job.start").1, Some(Risk::Low));
 
     // 没有执行清单的能力：等级**读不到**（`None`），不得被当成低危。
     assert_eq!(
-        find("world.rekey").2,
+        find("world.rekey").1,
         None,
         "没有清单 ⇒ 等级未声明；把它当 low 是悄悄放宽"
     );
@@ -352,14 +416,14 @@ fn a06_risk_sets_friction_weight_but_not_the_verdict() {
     use world_core::gate::Decision;
 
     let d = tmpdir("a06");
-    let pol = write_policy(
-        &d,
-        json!({
-            "notice.mute":    { "reversible": true },
-            "ledger.compact": { "reversible": false },
-            "world.migrate":  { "reversible": false }
-        }),
-    );
+    let caps = json!({
+        "notice.mute":    { "reversible": true },
+        "ledger.compact": { "reversible": false },
+        "world.migrate":  { "reversible": false }
+    });
+    let pol = write_policy(&d, caps.clone());
+    // 本体的 `_interfaces`／`_actions` 必须与策略**同名同义**（`World::open` 逐项核）
+    let ont = write_ontology(&d, &caps);
     // 可逆 + 低危：与下面那项 **risk 相同**，用来证明"risk 不决定放行"。
     write_manifest(&d, "notice.mute", "low", "never", "never");
     // 不可逆 + 低危（`confirm: required` ⇒ 载体侧同判不可逆，互校一致）。
@@ -368,8 +432,8 @@ fn a06_risk_sets_friction_weight_but_not_the_verdict() {
     write_manifest(&d, "world.migrate", "high", "never", "never");
 
     let lp = d.join("ledger.jsonl");
-    let mut w = World::open(&factory_ontology(), &lp, &pol)
-        .expect("夹具两处必须互校一致，否则本用例测的是拒启而不是等级");
+    let mut w =
+        World::open(&ont, &lp, &pol).expect("夹具两处必须互校一致，否则本用例测的是拒启而不是等级");
 
     {
         let p = w.policy();
@@ -512,14 +576,16 @@ fn a07_carrier_undo_is_neither_cross_checked_nor_a_proof_of_world_reversibility(
     use world_core::carrier::capd::Undo;
     use world_core::gate::Decision;
 
-    let mk = |tag: &str, undo: &str| -> (PathBuf, PathBuf) {
+    let mk = |tag: &str, undo: &str| -> (PathBuf, PathBuf, PathBuf) {
         let d = tmpdir(tag);
-        let pol = write_policy(&d, json!({ "job.start": { "reversible": true } }));
+        let caps = json!({ "job.start": { "reversible": true } });
+        let pol = write_policy(&d, caps.clone());
+        let ont = write_ontology(&d, &caps);
         write_manifest(&d, "job.start", "low", undo, "never");
-        (d, pol)
+        (d, pol, ont)
     };
-    let (da, pol_a) = mk("a07-undo-before-each", "before-each");
-    let (db, pol_b) = mk("a07-undo-never", "never");
+    let (da, pol_a, ont_a) = mk("a07-undo-before-each", "before-each");
+    let (db, pol_b, ont_b) = mk("a07-undo-never", "never");
 
     fn undo_of(w: &World) -> Undo {
         w.policy()
@@ -530,10 +596,10 @@ fn a07_carrier_undo_is_neither_cross_checked_nor_a_proof_of_world_reversibility(
             .undo
     }
 
-    let wa = World::open(&factory_ontology(), &da.join("ledger.jsonl"), &pol_a).expect(
+    let wa = World::open(&ont_a, &da.join("ledger.jsonl"), &pol_a).expect(
         "世界侧可逆 + 载体侧留了撤销点 = **书明说的正常形态**，必须能启动（undo 不参与互校）",
     );
-    let wb = World::open(&factory_ontology(), &db.join("ledger.jsonl"), &pol_b)
+    let wb = World::open(&ont_b, &db.join("ledger.jsonl"), &pol_b)
         .expect("世界侧可逆 + 载体侧不留撤销点 ⇒ 同样必须能启动");
 
     assert_eq!(undo_of(&wa), Undo::BeforeEach, "夹具 A 的 undo 字段");

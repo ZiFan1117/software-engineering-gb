@@ -27,9 +27,16 @@ BIN="${CARGO_TARGET_DIR:-target}/debug/world-core"   # 2026-09-27：感知 CARGO
 #   第 ⑨ 步（机核层守卫）落地后，那句结论就成了漏报，且没有任何东西会因此变红。
 #   "手写一份步骤名"与"手写一个条数"是同一种病：加一步就过期。
 # 现在：每个步骤用 `step` 声明一次，**标题与结论清单同源**；步数由 `${#STEPS[@]}` 现算。
+# ⚠ 2026-10-03 增（`STEP_KIND`）：标题照旧是**裸步骤名**（判据⑮ `spec_bridge.py` 拿它跟
+#   `WC-AT-001` 的清单表逐条对齐，**不许**往里塞标记）；**结局另存一列**——
+#   原来结论行对每一步都打 `✅`，于是"未校验（SKIP）"的步在结论里**也长成绿的**。
 STEPS=()
+STEP_KIND=()      # 与 STEPS 同下标；取值 PASS／SKIP／FAIL
+CUR_STEP=-1
 step() { # step <步骤标题>
   STEPS+=("$1")
+  STEP_KIND+=("PASS")
+  CUR_STEP=$(( ${#STEPS[@]} - 1 ))
   printf '── %s\n' "$1"
 }
 
@@ -40,24 +47,107 @@ step() { # step <步骤标题>
 #   · 真正的失败若被**工具自己**吞掉（例如命令替换里写反引号导致的
 #     `command not found` 只进 stderr、不改 rc），管道这一层**看不见**。
 # 现在：先跑、先取 rc、先判定，再打印尾部若干行。失败即中止（与 CI 同为阻断式）。
-run_tail() { # run_tail <展示行数> <描述> <命令...>
+run_tail() { # run_tail <展示行数> <描述> [<结局>] <命令...>
+  # 本步**结局**＝**可选的第 4 个位置参数**：只给"可能没跑"的步用；缺省 PASS。
+  # ⚠ 但**第 3 参是不是结局，按字面探测**：**恰为** `PASS`／`SKIP`／`FAIL` 才当结局，否则当命令。
+  #   为什么必须探测（2026-10-03 血泪，VM 实盘）：本函数原先**读第 3 参当结局**，而既有调用
+  #   `run_tail 4 "格式检查（与 CI 同一条命令）" cargo fmt --all -- --check` 的第 3 参是 `cargo`
+  #   ⇒ 报「未知步结局「cargo」」⇒ `exit 2` ⇒ **全量门禁在 ①b 当场中止、⑦b 根本没跑到**
+  #   （`CHECK_RC=2`），**而当时的 `--self-test` 却是绿的**——它只喂了 `PASS`／`false`，
+  #   **没有一条"既有调用的真实形态"**。⇒ 教训：**自证通过 ≠ 判据有效**；
+  #   改公共函数的签名，必须拿**既有调用点的真实形态**做反例（本脚本自证里那条
+  #   `跑通既有调用形态` 就是它），并到实盘跑一遍。
+  # 结局渲染由 `tools/step_marker.py` 持有（唯一权威载体）：**只有 PASS 配打 ✅**；
+  #   SKIP 打 `⏭`、FAIL 打 `❌`。（本探测**只认字面**，既不猜词、也不把命令名当结局。）
   local n="$1"; shift
   local what="$1"; shift
+  local kind="PASS"
+  case "${1:-}" in
+    PASS|SKIP|FAIL) kind="$1"; shift ;;
+  esac
+  local mark
+  case "$kind" in
+    PASS) mark="$MARK_PASS" ;;
+    SKIP) mark="$MARK_SKIP" ;;
+    FAIL) mark="$MARK_FAIL" ;;
+  esac
   local out rc=0
   # `|| rc=$?`：`set -e` 下裸赋值会因命令替换失败而当场中止，取 rc 的机会都没有；
   # 用 `||` 抑制 `set -e` 并保住真 rc（这正是"显式取 rc"的字面意思）。
   out="$("$@" 2>&1)" || rc=$?
   printf '%s\n' "$out" | tail -n "$n" | sed 's/^/  /'
+  # ★ 守卫自报的 `STATUS=SKIP` 优先：rc=0 也可能是"根本没跑"
+  case "$out" in *STATUS=SKIP*) mark="$MARK_SKIP"; kind="SKIP" ;; esac
+  if [ "$kind" != "PASS" ] && [ "$CUR_STEP" -ge 0 ]; then
+    STEP_KIND[$CUR_STEP]="$kind"      # 本步的结论行据此换标记（**FAIL 到不了这里**：下面即 exit）
+  fi
   if [ "$rc" -ne 0 ]; then
-    echo "  ❌ $what 失败（rc=$rc）—— 验证留档不得吞掉失败"
+    echo "  $MARK_FAIL $what 失败（rc=$rc）—— 验证留档不得吞掉失败"
     exit 1
   fi
-  printf '  ✅ %s（rc=0）\n' "$what"
+  printf '  %s %s（rc=0）\n' "$mark" "$what"
 }
+
+
+# ── 登记型助手：**红、但不阻断全闸**（2026-10-05 新增）──────────────────
+# 为什么需要它：`run_tail` 的语义是"rc≠0 ⇒ 当场 exit 1"（阻断式）。但有一档红**性质不同**——
+#   【**设计已定·未落地**】：纸上写了、程序里还没有。它**该红、该被看见**，但它**不是"谁改坏了"**，
+#   所以**不该让全闸停**（先例：`s1_sys_probe2.sh` 的"**另行登记**（现状为红、如实记录）"）。
+# 结局取值表（`STEP_KIND`）：`PASS` 打 ✅ ／ `SKIP` 打 ⏭（未校验）／ `REG` 打 ⚠️（**登记型红**）。
+# ⚠ **如实登记一处缺口**：`tools/step_marker.py` 的 `STATES` 只有 `PASS/SKIP/FAIL`（它自证"只有 PASS 配打 ✅"），
+#   **没有 `REG`** ⇒ `REG` 的 ⚠️ 由**本脚本就地渲染**（**没有**第三个权威载体被发明；
+#   ★ 只取用它的**不变量**：`REG` **不打 ✅**）。★ 这一处"两个渲染处"**如实登记**，不假装统一。
+run_registered() { # run_registered <展示行数> <描述> <命令...>
+  # rc 约定：**0 ⇒ 无事（PASS）**／**1 ⇒ 登记型红（REG，不阻断）**／**2 ⇒ 输入缺失（**失败**，阻断）**
+  #   ★ 为什么 2 要阻断：工具的 `--help` 自述"2 = 输入缺失（**不是通过**）"——
+  #     "读不到"**不许**被折算成"登记一下就过去了"。
+  local n="$1"; shift
+  local what="$1"; shift
+  local out rc=0
+  out="$("$@" 2>&1)" || rc=$?
+  printf '%s\n' "$out" | tail -n "$n" | sed 's/^/  /'
+  # ★★ 守卫自报的 `STATUS=SKIP` 优先（**与 `run_tail` 同源**）：`rc=0` 也可能是"根本没跑"。
+  #   不认它 ⇒ **未校验的步会长成绿勾**（2026-10-03 实测过的假证，同族；那一次改的是 `run_tail`）。
+  #   ★ 为什么写在这里而不是上面那三档注释里：注释不是判据；这里才是折算点。
+  case "$out" in
+    *STATUS=SKIP*)
+      echo "  $MARK_SKIP $what —— **未校验**：守卫自报 \`STATUS=SKIP\`（rc=0 也可能是"根本没跑"）"
+      echo "  （★ 本步 rc=$rc 已折算为 0；★ 它不是「通过」——**未校验 ≠ 通过**）"
+      if [ "$CUR_STEP" -ge 0 ]; then STEP_KIND[$CUR_STEP]="SKIP"; fi
+      return 0 ;;
+  esac
+  if [ "$rc" -eq 1 ]; then
+    echo "  $MARK_REG $what —— **登记型红**：按【设计已定·未落地】登记，**该红、该被看见，但不阻断全闸**"
+    echo "  （★ 本步 rc=$rc 已折算为 0；★ 它不是「未校验」、也不是「通过」——**如实红**）"
+    if [ "$CUR_STEP" -ge 0 ]; then STEP_KIND[$CUR_STEP]="REG"; fi
+    return 0
+  fi
+  if [ "$rc" -ne 0 ]; then
+    echo "  $MARK_FAIL $what 失败（rc=$rc）—— 输入缺失／用法错**不是通过**，验证留档不得吞掉失败"
+    exit 1
+  fi
+  printf '  %s %s（rc=0）\n' "$MARK_PASS" "$what"
+}
+
+
+# ── 步级标记（**只有 PASS 配打 ✅**）──────────────────────────────────
+# 为什么单独一层：见上方 `run_tail` 的第 4 参说明。渲染规则由 `tools/step_marker.py` 持有
+# （它自带 `--self-test`：反例证明"SKIP／FAIL 不打 ✅"这条不变量会红），本脚本只取用它的输出。
+# ★ 2026-10-05 增 `REG`（登记型红）：**收口到 `step_marker.py`**（它是"结局 → 标记"的唯一权威载体）。
+#   此前本脚本就地写过一个 ⚠️ 常量 ⇒ 「标记渲染」有了**两个处** ⇒ 按"一个事实一个权威载体"**收回来**。
+if ! MARK_PASS="$(python3 tools/step_marker.py marker PASS)" \
+   || ! MARK_SKIP="$(python3 tools/step_marker.py marker SKIP)" \
+   || ! MARK_FAIL="$(python3 tools/step_marker.py marker FAIL)" \
+   || ! MARK_REG="$(python3 tools/step_marker.py marker REG)"; then
+  echo "❌ 步级标记渲染失败（tools/step_marker.py）—— 标记不可信时门禁不许继续" >&2
+  exit 1
+fi
 
 # ── 判定器自证（`W-06`：先证明"必失败"真的会失败）─────────────────────
 if [ "${1:-}" = "--self-test" ]; then
   echo "== check.sh 判定器自证（W-06 验证留档管道不吞错）=="
+  # ⚠ 这两条**显式写 PASS**：`run_tail` 现在把第 3 个位置参数当"结局"，不写就会把命令名 `false`
+  #   当成结局吃掉（同一段代码里 `run_tail … false` 会变成"没有命令可跑"）。
   if ( run_tail 1 "注入的必失败命令" false ) >/dev/null 2>&1; then
     echo "  ❌ 自证失败：注入的必失败命令竟被判为通过（判定器是装饰）"
     exit 1
@@ -67,6 +157,59 @@ if [ "${1:-}" = "--self-test" ]; then
     exit 1
   fi
   echo "  ✅ 自证通过：两条注入的必失败命令都被判为失败（rc 显式判定，不依赖 pipefail）"
+  # ── 步级标记自证：**未校验的步不许长成绿勾**（2026-10-03 实测的假证）──────────
+  # ⚠ 判"有没有打 ✅"，只看**标记位**上那两个字符（`  ✅ `），**不**在整段输出里 grep `✅`：
+  #   后者有假阳：失败话术里为指认那个勾而写了 `✅`，`grep -q '✅'` 会把"报错"读成"打了勾"。
+  #   （这正是本项目那条"搜字样 ≠ 认结构"的又一次现形。）
+  echo "== check.sh 步级标记自证（SKIP 不许被读成 ✅）=="
+  _skipout="$( run_tail 3 "假 SKIP 步（命令自报 STATUS=SKIP）" PASS sh -c 'echo STATUS=SKIP; exit 0' 2>&1 )"
+  if printf '%s\n' "$_skipout" | grep -qE '^  ✅ '; then
+    echo "  ❌ 自证失败：未校验的步在标记位上打出了绿勾（只看勾的人会把它读成「过了」）"
+    echo "$_skipout" | sed 's/^/     /'
+    exit 1
+  fi
+  if ! printf '%s\n' "$_skipout" | grep -q "$MARK_SKIP"; then
+    echo "  ❌ 自证失败：未校验的步没有打出 SKIP 标记（$MARK_SKIP）"
+    exit 1
+  fi
+  _passout="$( run_tail 3 "假 PASS 步（真通过）" PASS sh -c 'echo boom; exit 0' 2>&1 )"
+  if ! printf '%s\n' "$_passout" | grep -qE '^  ✅ '; then
+    echo "  ❌ 自证失败：真通过（rc=0）的步竟没在标记位上打绿勾"
+    exit 1
+  fi
+  # ── ★ 反例：**既有调用点的真实形态**（2026-10-03 血泪）──────────────────────
+  # 上面两条反例喂的是 `run_tail … PASS <命令>`——那验的是**函数本身**，**不验**"既有调用点与
+  # 新签名相不相容"。VM 实盘就是这么倒的：既有 `run_tail 4 "…" cargo fmt --all -- --check`
+  # 的第 3 参 `cargo` 被当成结局 ⇒ `exit 2` ⇒ 全量在 ①b 中止，**而那时的自证是绿的**。
+  #
+  # ⚠ 形态要点（不许"顺手改漂亮"，这几处都是踩过的）：
+  #   ① 探针**必须与实盘调用同形**：不给结局参数、第 3 参就是命令名；
+  #   ② 跑一条**必定不存在**的命令（不是 `cargo`）——`cargo` 在不在是本条**测不到**的事
+  #      （那是 ①b 的事）；拿它当探针会把"环境缺 cargo"误判成签名错；
+  #   ③ **两次运行两个读数，一次都不能吞掉 rc**：
+  #        · 病态实现（把 `cargo` 当结局）⇒ rc=**2** 且 stderr 有「未知步结局」；
+  #        · 正确实现 ⇒ 命令跑不起来 ⇒ rc=**非 0**（127），且**没有**那句话。
+  #      只喂"合法结局"那种写法**永远抓不到这个分歧**——那正是当时自证全绿的原因。
+  _shape_rc=0
+  _shape_out="$( run_tail 4 "格式检查（与 CI 同一条命令）" cargo fmt --all -- --check 2>&1 )" || _shape_rc=$?
+  _err1=0
+  _err_out="$( run_tail 4 "格式检查（与 CI 同一条命令）" cargo-no-such-command-xyz fmt --all -- --check 2>&1 )" || _err1=$?
+  if printf '%s\n' "$_err_out" | grep -q '未知步结局'; then
+    echo "  ❌ 自证失败：既有调用形态（第 3 参＝命令名）被当成「未知步结局」"
+    printf '%s\n' "$_err_out" | sed 's/^/     /'
+    exit 1
+  fi
+  if [ "$_err1" -eq 0 ]; then
+    echo "  ❌ 自证失败：跑不起来的命令竟判为通过（判不了 ≠ 过了）"
+    exit 1
+  fi
+  if ! printf '%s\n' "$_shape_out" | grep -q '格式检查（与 CI 同一条命令）'; then
+    echo "  ❌ 自证失败：实盘同形那条**根本没走到判定**（run_tail 把命令名吃掉了）"
+    exit 1
+  fi
+  echo "  ✅ 自证通过：SKIP 步出 $MARK_SKIP 且标记位上**无** ✅；PASS 步标记位上是 ✅；"
+  echo "     既有调用形态（第 3 参＝命令名）**未被当成结局**（同形探针 rc=$_shape_rc，"
+  echo "     缺席命令探针 rc=$_err1 —— 两者都如实非零，且都没有「未知步结局」）"
   exit 0
 fi
 
@@ -94,6 +237,23 @@ step "①b 格式检查（rustfmt）"
 # 而本脚本此前**从不跑** ⇒ 本地十步全绿、**CI 每次 push 都红**（2026-09-28 实测：最近 5 次 run 全 failure，
 # 红的正是"格式检查"：65 处 diff、10 个文件）。格式是最便宜、最先该过的一关，故紧挨 ① 构建。
 run_tail 4 "格式检查（与 CI 同一条命令）" cargo fmt --all -- --check
+
+step "①c 静态检查（clippy，警告即失败，与 CI 同一条命令）"
+# 为什么要有这一步：**①b 那条病的同形第二次**——同一个判定存在两处（CI 一处、本地预演一处），
+#   而"唯一入口"那处没有它。现取（2026-10-06，三处原文各一）：
+#   · CI smoke 作业 `.github/workflows/world-core-gate.yml:98-100`：步名逐字「静态检查（警告即失败）」，
+#     命令逐字 `cargo clippy --all-targets -- -D warnings`；
+#   · 本地预演 `tools/ci_rehearsal.sh:87`：逐字同一条命令；
+#   · 而出厂门禁 `check.sh` 此前**从不跑** ⇒ 本地全绿、**CI 每次 push 都红**
+#     （本步落地前的真实读数：唯一 error `src/channel.rs:653:21 unused_mut`，rc=101）。
+#   ⇒ 本步存在的唯一理由是"**本地能提前撞到 CI 撞到的那面墙**"，故命令**逐字对齐 CI 那一行**
+#     （上引 `world-core-gate.yml:100`）：`cargo clippy --all-targets -- -D warnings`。
+#   ★ 本步**不加** `--locked`：CI 那一行没有它（`ci_rehearsal.sh:87` 也没有）——
+#     加了会造出"CI 不红而本步红"的差，而"与 CI 同一条命令"指的就是上引那一行；
+#     依赖锁定纪律由 ① 的 `cargo build --locked` 承担。
+#     ★ 且 ① 已在 ①c **之前**跑过 `cargo build --locked` ⇒ 锁文件在 ①c 之前就已被证明自洽 ⇒
+#       ①c 不带 `--locked` 也**不会**出现"clippy 顺手改写 `Cargo.lock`"这种"闸自己动树"的副作用。
+run_tail 6 "静态检查（clippy，警告即失败，与 CI 同一条命令）" cargo clippy --all-targets -- -D warnings
 
 step "② 骨架冒烟（沙箱账本：$SB）"
 OUT="$("$BIN" --ontology "$SB/ontology.json" --ledger "$SB/ledger.jsonl" --policy "$SB/policy.json" check)"
@@ -171,6 +331,26 @@ step "⑥ 系统级验收（TC-037–TC-040，真实二进制端到端）"
 run_tail 1 "系统级验收判定器自证" bash tools/system_acceptance.sh --self-test
 run_tail 3 "系统级验收（TC-037–TC-040）" bash tools/system_acceptance.sh
 
+step "⑥b 载体适配器系统级验收（M10：真实二进制／真实内核／真实账本）"
+# 为什么要有这一步（现取，2026-10-06）：`tools/carrier_acceptance.sh` 是**载体适配器（M10）的系统级验收**
+#   （C-01…C-09b 九组判据，真实二进制／真实内核／真实账本）；机器席在 VM 上真跑 ⇒ rc=0、
+#   `== 汇总：通过 28 项，失败 0 项 ==` ＋ `carrier_acceptance: PASS`，0 条 ❌。
+#   **但它在任何门禁里都不被调用**（`check.sh`／`.github/workflows/world-core-gate.yml`／
+#   `tools/ci_rehearsal.sh`／`tools/system_acceptance.sh` 四处**各 0 次**）⇒ **缺口是【接线】不是【能力】**：
+#   它今天真绿，而**回归了没有任何门禁会变红**。★ 与 ①b／①c 同一条病："闸不在门禁里等于没有闸"。
+# ★ 必须**显式传 `$BIN`**（① 刚构建的那个）：该脚本默认先找 `release/` 再找 `debug/`，
+#   而它自带 D-33「被测二进制比源码旧就拒跑」（`StaleBinary`，rc=2）⇒ 传显式路径才不误取陈旧产物。
+# ★ 非 root ⇒ **显式 SKIP**（照 ⑦g 的既有形态；不阻断、也不许读成绿）：C-09 组要
+#   `runuser -u agent`（需 root），缺它时脚本**不是**打 SKIP，而是走 `bad(...)` ⇒ 汇总 rc=1
+#   ——照 `run_tail` 会把"这一步没跑成"当场判成全闸失败。⇒ 前置分岔：有 root 且 `runuser` 在 ⇒ 真跑；否则打 ⏭。
+if [ "$(id -u)" -eq 0 ] && command -v runuser >/dev/null 2>&1; then
+  run_tail 6 "载体适配器系统级验收（M10：真实二进制／真实内核／真实账本）" bash tools/carrier_acceptance.sh "$BIN"
+else
+  echo "  $MARK_SKIP 载体适配器系统级验收（M10：真实二进制／真实内核／真实账本）—— **未校验**：本机非 root 或缺 runuser（C-09 组要 runuser -u agent）"
+  echo "  （★ 这一步**没跑**；★ **未校验 ≠ 通过**。有 root 的机器上它会真跑：绿 ⇒ ✅、红 ⇒ 当场阻断）"
+  if [ "$CUR_STEP" -ge 0 ]; then STEP_KIND[$CUR_STEP]="SKIP"; fi
+fi
+
 echo
 step "⑦ S1 需求验证面补建（第一轮 TC-042/046–052；第二轮 TC-053–TC-075）"
 # 为什么放在这里：R1 的九席独立评审实测指出，SRS §五 声明的一批用例**从未实存**，
@@ -191,9 +371,123 @@ run_tail 8 "契约分册门禁（九册齐·要点齐·依赖列逐边一致）"
 run_tail 1 "表块行宽审计判定器自证" python3 tools/table_width_audit.py --self-test
 run_tail 20 "表块行宽审计（转义感知）" python3 tools/table_width_audit.py "docs/S1-需求/WC-IRS-001-v0.1.md" "docs/S1-需求/WC-SRS-001-v0.1.md" "docs/评审/WC-RV-R1-001-v0.1.md"
 
+echo
+step "⑦b kind 守卫（架构件里的三类话 vs 帧上方法名）"
+# 为什么放在这里：与 ⑦（文档面／规格面）同族——它判的是**架构件里的说法与代码结构是否一致**，
+#   不碰账本、不碰二进制。此前这三条判据**只活在一份仓外的一次性脚本**里
+#   （`D:\Code\_kind_guard_check.py`：不在版本控制、不在任何门禁里）——
+#   按本仓口径「**闸在版本控制之外等于没有闸**」，它红与不红，门禁一样绿。
+# 现在把它搬进仓（`tools/kind_guard.py`，带 `--self-test`）并由本步调用。
+# 判据（三条，条条会红）：①架构件里断言 `kind` 是"七个取值"一族 ⇒ 红；
+#   ②**表头就是 `kind`** 的表里出现账本家族以外的家族（帧上方法名）⇒ 红；
+#   ③断言"四类不回行" ⇒ 红（**认结构不认字样**：先剥掉引号内字样再匹配）。
+# 扫描根＝本仓的兄弟目录「语义世界-架构」（脚本自解析；`WC_ARCH_DIR` 可覆盖）。
+# ⚠ 那个目录**在 VM 上不存在**（架构夹在工作区、不进仓）⇒ 本步在 VM 上以 `--allow-missing`
+#   **显式打印"未校验"并 rc=0**——不是"通过"，是"没跑"。它不是本步独有的毛病：
+#   仓里凡依赖 VM 上没有的文件的判据，在 VM 上都只是"没跑"。
+run_tail 1 "kind 守卫自证（每条判据各造反例，反例必红；短路判据必红）" python3 tools/kind_guard.py --self-test
+# 结局由守卫自己报（`STATUS=`）：根不在 ⇒ SKIP（打 ⏭，**不打 ✅**），根在且无红 ⇒ PASS
+run_tail 12 "kind 守卫（架构件：三类话 vs 帧上方法名）" SKIP python3 tools/kind_guard.py --allow-missing
+
 # 2026-09-27 修（W-06）：本步原先登记的三类噪声里，(c) `WC-SQAP-001: command not found`
 #   已**在源头消除**（`s1_sys_probe2.sh` 描述串内的反引号改成字面词，不再做命令替换）；
 #   (a)(b) 两类仍属无害噪声、**不改判据强度**，故保留。
+
+echo
+step "⑦c 两件一致性守卫（ontology.json × policy.json：C-01…C-07）"
+# 为什么放在这里：与 ⑦b 同族——都判**仓内的静态件**（不碰账本、不碰二进制）；
+#   ⑦b 判"架构件里的说法与代码结构一不一致"，⑦c 判"**两件法律彼此对不对得上**"。
+# 为什么不是重复造闸：`src/lib.rs` 的 `World::open` **自己逐字声明了射程**——
+#   「⚠️ 射程（如实声明）：只核**名字集**与 `kind`」⇒ 它只判**两向里的一向**（policy → ontology）。
+#   反向（C-03）／动作两层三样（C-04）／许可条文的键（C-05）／`writes` 与 `subjects.allow`（C-06）／
+#   `listeners` 与 `subjects.allow`（C-07）**此前全无人判**。
+#   代价是具体的：`policy.json` `subjects._why_core` **自己记着**「`world://core` 是 `writes` 里唯一
+#   被授权可写任意主体的主体，却不在本白名单内 ⇒ **出厂策略自身不自洽**」——那条不自洽当时是
+#   **被人读出来的**，不是被闸抓出来的。本步就是把那一类变成**会红**。
+# 判据面：见 `tools/cross_contract.py` 文件头；`--self-test` 每条各造反例＋正控＋短路验红。
+# ★ 结局由守卫自己报（`STATUS=`）：三条不许混 ——
+#   · 有红 ⇒ rc=1，本步失败（失败信息**点名是哪两件在哪一格矛盾**）；
+#   · 无红但有**判不了的**（缺标的物）⇒ `STATUS=SKIP`（打 ⏭，**不是 ✅**）——★ 不许报绿；
+#   · 本套都可判且全绿 ⇒ `STATUS=PASS`。
+# ★★ **本步的 ✅ 是"判过且对"，不是"没人判"**（2026-10-05 Lead 裁后拆套；下方 ⑦d 是另一件事）：
+#   C-01…C-07 **七条今天全部判得了**，现跑 **0 红**，且每条都有反例证明**它会红**（`--self-test`）。
+run_tail 1 "两件一致性守卫自证（每条判据各造反例，反例必红；短路判据必红）" python3 tools/cross_contract.py --self-test
+run_tail 16 "两件一致性守卫（C-01…C-07：两件不许互相矛盾）" python3 tools/cross_contract.py --set cross
+
+echo
+step "⑦d 实例地址归属（口径①：实例地址只许落在实例位键下，C-08）"
+# 为什么与 ⑦c **分两步**（2026-10-05 Lead 裁）：
+#   ★ "7 条【判过且对】"与"1 条【判不了】"**是两件事**。混在一步里 ⇒ **那 7 条的绿会被那 1 条的 ⏭ 吞掉**；
+#     反过来，**⏭ 也可能被人读成 ❌** ⇒ **两个方向的误读都会发生**。
+#   ⇒ **一件事一个读数**：⑦c 报 7 条，⑦d 报 1 条。
+# ★ 硬底线：**"判不了"不许显示成 ✅** —— 所以本步今天**恒为 ⏭**。
+# ⚠ **现取（2026-10-05）：本步 ⏭，不是 ✅** —— 标的物 `ontology._permissions._instance_keys` **今天不在**
+#   （`标准-语义世界-本体与协议-v0.1.md` §5 第 2 条说它"必填"；`world-core` 全树零命中）
+#   ⇒ 那是"**判不了**"，**不许**算通过。★ 标的一落地，本步**自动转 ✅**（无需改本步）。
+# 判据 C-08 的反例已证"标的一在、它就红"（`--self-test` 里那条 + ⑦c 的自证步）。
+run_tail 12 "实例地址归属（口径①，C-08）" python3 tools/cross_contract.py --set instance
+
+echo
+step "⑦e 授权路判据（本体声称的路 ↔ src/ 里有没有那条路）"
+# 为什么放在这里：与 ⑦c／⑦d 同族——都判"**纸上写的与程序里做的**一不一致"；
+#   ⑦c 判"两件法律彼此对不对得上"，⑦d 判"实例地址归属"，⑦e 判"**本体声称的授权路，程序里有没有**"。
+# 它盯的那件事（逐字）：本体 `_permissions._grant_via_ledger` 说"**改一次授权 ＝ 落一条事件**"
+#   （逐字见 `ontology.json` 该键），而 `src/lib.rs` 的判定**读的是本体** ⇒ **那条路纸上有、程序里没有**。
+# 判据（`tools/grant_path_guard.py`，三条，可自证）：G-01 声明在不在（不在 ⇒ **SKIP，不算绿**）／
+#   G-01b 有没有声称"走账本事件"／G-02 `src/` 里有没有读那张格的代码（**没有 ⇒ 红**）／
+#   G-03 授权判定的读法是否唯一。
+# ★★ 接法是【**登记型**】：红了 ⇒ 打 ⚠️ ＋ **不阻断全闸**（用 `run_registered`，不是 `run_tail`）。
+#   理由：它红的原因是【**设计已定·未落地**】—— **不是"谁改坏了"** ⇒ 该红、该被看见，但不该让全闸停
+#   （先例：`s1_sys_probe2.sh` 的"另行登记（现状为红、如实记录）"）。★ 若日后要它阻断，改回 `run_tail` 即可。
+# ★ 退出码约定（工具自述）：`0` 绿／SKIP（**SKIP 会显式打印，不算绿**）；`1` 有红；`2` **输入缺失＝不是通过**
+#   ⇒ ★ `run_registered` 只对 **rc=1** 折算为登记；**rc=2 仍然阻断**。
+run_registered 14 "授权路判据（本体声称的路 ↔ src/ 里有没有那条路）" python3 tools/grant_path_guard.py
+
+echo
+step "⑦f 值形状判据（落进账本的每一个值，必须有【已声明的形状载体】）"
+# 为什么放在这里：与 ⑦c／⑦d／⑦e 同族——都判"**纸上写的与程序里做的**一不一致"；
+#   ⑦f 判的是"**值**落在哪儿"：它必须落在 `_objects.<类型>.fields` 声明过的那一格上。
+# 它盯的那件事（逐字）：`ontology.json` 的 `_objects.notice` 只说「`payload` 的形状**本体今天不声明它**」；
+#   而 `src/readmodel.rs` 对通告是 `"notice" => self.notices += 1,` ⇒ **只计数、不折叠**；
+#   同件文档另写「**可选格**（`to`/`trace`/`params`/`payload`）**不进** `DeclaredCells`」⇒ **借它连"格"都不算**。
+#   ⇒ **谁都能塞、没人判形状** ⇒ 那是"**套壳最容易回来的地方**"。
+# 判据（`tools/value_shape_guard.py`，四条，可自证）：J1-01 类型已声明／J1-02 字段已声明／
+#   J1-03 值合声明类型（含 `enum(...)` 越界）／J1-04 **通告不许带非空 `payload`**。
+# ★★ 接法是【**登记型**】：红了 ⇒ 打 ⚠️ ＋ **不阻断全闸**（用 `run_registered`，不是 `run_tail`）。
+#   理由与 ⑦e 同：存量红的原因是【**设计已定·未落地**】——那批值本来就借在没形状的口袋里，
+#   **不是"谁改坏了"** ⇒ 该红、该被看见，但不该让全闸停。
+# ★ 退出码约定（工具自述）：`0` 绿／SKIP（**SKIP 会显式打印 `STATUS=SKIP`，不算绿**）；`1` 有红；`2` **输入缺失＝不是通过**
+#   ⇒ ★ `run_registered` 只对 **rc=1** 折算为登记；**rc=2 仍然阻断**。
+run_tail 1 "值形状判据自证（五个反例必红、两个正控必绿、不适用必 SKIP）" python3 tools/value_shape_guard.py --self-test
+run_registered 20 "值形状判据（值必须有已声明的形状载体；通告不许当口袋）" python3 tools/value_shape_guard.py --ontology ontology.json --ledger "$SB/ledger.jsonl"
+
+echo
+step "⑦g 口属主判据（盘上那个口的属主 ↔ 法律里那条的 uid）"
+# 为什么放在这里：与 ⑦e／⑦f 同族——都判"**纸上写的与机器上做的**一不一致"。
+# 它盯的那件事（逐字，见 `tools/socket_uid_guard.py` 件头）：
+#   `RuntimeDirectory=` 的**递归 chown** 会把 `/run/world-core/*.sock` 的属主**盖回**服务的 `User=`，
+#   而法律 `channel.json` 的 `listeners` 说那个口属于别的 uid（如 `world://presence/omarchy` ⇒ 963）。
+#   ⇒ 兑现的写法是 `ExecStartPre=+/bin/chown …`；而**"配了"不等于"生效"**，
+#   且**最狠的一种是沉默**——法律写一个属主、盘上是另一个，链路一句警告都不打。
+# 判据（三条，可自证）：S-01 盘上的口在法律里有人认／S-02 uid **逐字相等**／S-03 法律列的口都在盘上。
+# ★★ 接法是【**登记型**】（与 ⑦e／⑦f 同）：该红、该被看见，但**不阻断全闸**。
+# ★ 退出码约定（工具自述）：`0` 绿／SKIP（**SKIP 会显式打印，不算绿**）；`1` 有红；`2` **输入缺失＝不是通过**
+#   ⇒ ★ `run_registered` 只对 **rc=1** 折算为登记；**rc=2 仍然阻断**（读不到不许折算成通过）。
+run_tail 1 "口属主判据自证" python3 tools/socket_uid_guard.py --self-test
+# ★★ 本步的输入是【机器面】的（`/etc/world-core/channel.json` ＋ `/run/world-core`），
+#   而 `check.sh` 自己只用一次性 `mktemp` 沙箱（**沙箱里没有 `/etc`**）。
+#   ⇒ 不设前置就喂机器路径：在没有渲染物的机器上守卫返 **rc=2**，
+#   而 `run_registered` 对 rc=2 是**阻断**（"读不到不许折算成通过"）⇒ **全闸当场中止、结论行都打不出来**。
+#   ★ 实测撞到过（审计 `G-03`）。处置＝**显式分岔**：
+#     有机器面 ⇒ 真跑（登记型）；没有 ⇒ **打 ⏭ 并写明"未校验"**，**不阻断**。
+#   ★ 两条路都不许把"没跑"读成"过了"：前者 rc=1 打 ⚠️，后者打 ⏭；**只有 rc=0 才是 ✅**。
+if [ -r /etc/world-core/channel.json ] && [ -d /run/world-core ]; then
+  run_registered 12 "口属主判据（盘上那个口 ↔ 法律里那条 uid）" python3 tools/socket_uid_guard.py --channel /etc/world-core/channel.json --rundir /run/world-core
+else
+  echo "  $MARK_SKIP 口属主判据（盘上那个口 ↔ 法律里那条 uid）—— **未校验**：本机没有 /etc/world-core/channel.json 或 /run/world-core"
+  echo "  （★ 这一步**没跑**；★ **未校验 ≠ 通过**。有渲染物的机器上它会真跑，红了打 ⚠️、不阻断）"
+  if [ "$CUR_STEP" -ge 0 ]; then STEP_KIND[$CUR_STEP]="SKIP"; fi
+fi
 
 echo
 step "⑧ 规格层守卫（OpenSpec 层）"
@@ -237,6 +531,28 @@ run_tail 12 "机核层守卫（WC-ATOM-001 §二 A-1／A-2／A-4：单意图／�
 # 现在：① 位置在**全部步骤之后**；② 清单来自 `step()` 累积的 `STEPS`——加一步自动进清单；
 #   ③ 步数由 `${#STEPS[@]}` 现算，不写死（skill §八：一个事实只有一个权威载体，数值一律现算）。
 echo
+# 结论行原来对每一步都打 `✅`——**SKIP 的步因此在结论里也长成绿的**（2026-10-03 实测的假证）。
+# 现在：标记由 `STEP_KIND` 现取（`step_marker.py` 渲染），**只有 PASS 配打 ✅**；
+#   ⏭ 的步如实带一句"**未校验**"。
+# ⚠ 首行文案**不改**（`docs/证据/EV-009.md` 等件逐字抄过它；改了那些抄件当场过期）——
+#   与既有步的判据/文案"一字不动"同一条纪律；**新增的信息一律另起一行**。
 echo "== 结论：全通过（本脚本实跑的步骤，逐条如下）=="
-for s in "${STEPS[@]}"; do printf '   ✅ %s\n' "$s"; done
+_skipped=0
+_registered=0
+for _i in "${!STEPS[@]}"; do
+  case "${STEP_KIND[$_i]}" in
+    SKIP) printf '   %s %s（**未校验**——这一步只是没跑）\n' "$MARK_SKIP" "${STEPS[$_i]}"; _skipped=$((_skipped + 1)) ;;
+    REG)  printf '   %s %s（**登记型红**——该红、该被看见；按【设计已定·未落地】登记，**不阻断全闸**）\n' "$MARK_REG" "${STEPS[$_i]}"; _registered=$((_registered + 1)) ;;
+    *)    printf '   %s %s\n' "$MARK_PASS" "${STEPS[$_i]}" ;;
+  esac
+done
 printf '   共 %d 步（由 STEPS 长度现算，不写死）\n' "${#STEPS[@]}"
+if [ "$_skipped" -gt 0 ]; then
+  printf '   其中**未校验** %d 步 ⇒ 本行的"全通过"**不含**它们（未校验 ≠ 通过）\n' "$_skipped"
+fi
+# ★ 2026-10-05 增：**登记型红**单独报一行（★ 新增信息一律另起一行，首行文案一字不动）。
+#   为什么必须单独报：登记型红的 `rc` 被折算成 0 ⇒ 若不单列，读者会把它读成"这一步过了"。
+#   ★ 三档**不许混**：⏭＝**没跑**（未校验）／⚠️＝**跑了、判了、如实红**（设计已定·未落地）／✅＝**通过**。
+if [ "$_registered" -gt 0 ]; then
+  printf '   其中**登记型红** %d 步（⚠️）⇒ 本行的"全通过"**不含**它们（如实红 ≠ 通过；它们是【设计已定·未落地】，不是"谁改坏了"）\n' "$_registered"
+fi

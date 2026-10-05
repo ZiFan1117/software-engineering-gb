@@ -65,10 +65,10 @@
   ✅ 门禁失败路径 / 静态墙 / 单写者 / 检查点 / 通道身份 / 错误码契约
 
 ── ④ 投影与同源核对（REQ-F-018/019/020）──────────────────
-  语言投影首行: #world-core projection=language world=1 vocab=fnv1a64:4bf7b75573fee475 last_seq=3 state=fnv1a64:609445ce847cadd9
-  视觉投影首行: #world-core projection=visual world=1 vocab=fnv1a64:4bf7b75573fee475 last_seq=3 state=fnv1a64:609445ce847cadd9
+  语言投影首行: #world-core projection=language world=1 vocab=fnv1a64:6a96abfa9a969462 last_seq=3 state=fnv1a64:609445ce847cadd9
+  视觉投影首行: #world-core projection=visual world=1 vocab=fnv1a64:6a96abfa9a969462 last_seq=3 state=fnv1a64:609445ce847cadd9
   == world-core project check ==
-    词表 : fnv1a64:4bf7b75573fee475（世界版本 1）
+    词表 : fnv1a64:6a96abfa9a969462（世界版本 1）
     状态 : last_seq=3 指纹=fnv1a64:609445ce847cadd9
     同源 : ✅ 语言投影与视觉投影一致（同一读模型 + 同一词表）
 

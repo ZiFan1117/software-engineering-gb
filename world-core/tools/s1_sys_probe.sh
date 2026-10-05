@@ -264,7 +264,7 @@ o["families"]["audit"] = collections.OrderedDict([
     ("required", ["scope", "result"]),
     ("optional", []),
 ])
-o["concepts"]["audit"] = {"fields": {"result": "enum(pass,fail)"}}
+o["_objects"]["audit"] = {"fields": {"result": "enum(pass,fail)"}}
 json.dump(o, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY
 chmod 600 "$SB/ontology-ext.json"
@@ -430,7 +430,7 @@ python3 - "$SB/ontology.json" "$SB/ontology-collide.json" <<'PY'
 import json, sys, collections
 src, dst = sys.argv[1], sys.argv[2]
 o = json.load(open(src, encoding="utf-8"), object_pairs_hook=collections.OrderedDict)
-o["concepts"]["body-fake"] = {"fields": {"body": "string"}}
+o["_objects"]["body-fake"] = {"fields": {"body": "string"}}
 json.dump(o, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY
 chmod 600 "$SB/ontology-collide.json"
@@ -461,7 +461,12 @@ python3 - "$SB/ontology.json" "$SB/ontology-vocab.json" <<'PY'
 import json, sys, collections
 src, dst = sys.argv[1], sys.argv[2]
 o = json.load(open(src, encoding="utf-8"), object_pairs_hook=collections.OrderedDict)
+# ⚠ 两处**都**改：`concepts` 是**身份**（非 `_` 键，参与 vocab_hash）、
+#   `_objects` 是**读的权威**（`_` 键，不参与身份）。只改 `_objects` ⇒ hash 不变，
+#   本判据会假红（"改语义 hash 不变"其实是因为改的那一处本来就不参与身份）。
+#   两处讲的是同一条语义（装载器优先读 `_objects`、缺则退回 `concepts`）。
 o["concepts"]["job"]["fields"]["status"] = "enum(todo,doing,done,cancelled)"
+o["_objects"]["job"]["fields"]["status"] = "enum(todo,doing,done,cancelled)"
 json.dump(o, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY
 chmod 600 "$SB/ontology-vocab.json"
@@ -481,16 +486,23 @@ if [ ! -f tools/visual_layout_audit.py ]; then
   bad "① 缺 tools/visual_layout_audit.py（独立审计脚本）——用例不可执行"
 else
   W project visual >"$SB/sample_normal.txt" 2>/dev/null
-  # 为什么换成 `world://job/nl` ＋ `status`：本样本要的是"**值里含换行/制表符**"（编号 ① 与
-  # 样本 [newline]），故不能再写 `world://sys/nl` ＋ `esc` 那两个没声明过的名字。
-  # 出厂本体里字段只有两格：`notice.muted`（bool）与 `job.status`（`enum(todo,doing,done)` 的**说明文字**）。
-  # `job.status` 的取值是**字符串**，与"值里带 \n／\t"同属 JSON 字符串这一类 —— 故取它。
-  # ⚠ 如实说清限额：`status` 的说明文字里列了三个枚举值，而这个样本的值不在那三个里；
-  #   本体**刻意不解释**字段的取值说明（`src/ontology.rs` 加载 `concepts` 的口径 2：那些文字
-  #   是自由文本、不是机器 schema），所以机器上查不出这一层——这一层是**已知的口径缺口**，
-  #   不因本行而新增，也不假装已闭合。为了保住这条样本的强度，宁可让它落在"已声明字段 + 未声明的取值"上。
+  # ── ★ 本行**本批被反转**（判据加强，不是改松）───────────────────────────────
+  # 原写法：往 `world://job/nl#status` 写 **不在枚举里** 的值 `"a\nb\tc"`，并断言 rc=0
+  #   （当时的登记口径逐字：「本体刻意不解释字段的取值说明……那些文字是自由文本、不是机器 schema」）。
+  # 现写法：`enum(...)` 是**闭集**（本批把字段的**值**从"自由文本"升级成"机器可读"）⇒
+  #   ① **越界值必须红**（rc=2）——这不是新增缺陷，而是原来那条"现状为红、已登记"的口径被**合上**；
+  #   ② **合法值必须绿**（rc=0）——防"什么都拒"的假绿。
+  # ⚠️ 连带后果（如实登记）：**含换行/控制字符的值**再也进不了 `job.status`（枚举闭集不许它）⇒
+  #   样本 [newline] 改用 `notice.payload`（出厂 `notice` 家族的可选格）。
+  #   这不是"少覆盖了一格"：样本要验的是**渲染层**（`visual_layout_audit.py` 的
+  #   `esc = "a\\nb\\tc"` 合同 5：换行/制表符必须被**转义**），与它落在哪个字段无关；
+  #   而"字段的取值闭集"这一半现在由 ① 直接判。
   W append change '{"subject":"world://job/nl","path":"status","before":null,"after":"a\nb\tc"}' >/dev/null 2>&1
-  assert_rc "① 含换行/控制字符的值：追加成功（rc=0）" 0 "$?"
+  assert_rc '① 越界枚举值（a\nb\tc 不在 enum(todo,doing,done) 里）⇒ **必须红**（rc=2）' 2 "$?"
+  W append change '{"subject":"world://job/nl","path":"status","before":null,"after":"doing"}' >/dev/null 2>&1
+  assert_rc '①b 合法枚举值（doing）⇒ 必须绿（rc=0；防「什么都拒」）' 0 "$?"
+  W append notice '{"type":"s1.newline","subject":"world://notice/nl","payload":{"esc":"a\nb\tc"}}' >/dev/null 2>&1
+  assert_rc '①c 含换行/控制字符的值（落在 notice.payload 上）⇒ 追加成功（rc=0）' 0 "$?"
   W project visual >"$SB/sample_newline.txt" 2>/dev/null
   : >"$SB/empty.jsonl"
   chmod 600 "$SB/empty.jsonl"

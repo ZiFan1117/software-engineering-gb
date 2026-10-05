@@ -106,8 +106,12 @@ if _gov_delta.is_file():
     GOV = [ln[len("### Requirement:"):].strip()
            for ln in _gov_delta.read_text(encoding="utf-8", errors="replace").split("\n")
            if ln.startswith("### Requirement:")]
+# 前缀**按需加**：源标题（delta 的 `### Requirement:`）本身可能已经带这个标记
+# —— 硬前置过一次，实测 §三 五行全成「〔无号·待流程侧增补〕〔无号·待流程侧增补〕…」。
+# 规矩：**标记只此一处、且由生成器去重**；源标题改回不带标记时也照旧成立。
 for i, t in enumerate(GOV, 1):
-    L.append("| %d | 〔无号·待流程侧增补〕%s | 无号（待流程侧增补） |" % (i, t))
+    _pfx = "" if t.startswith("〔无号·待流程侧增补〕") else "〔无号·待流程侧增补〕"
+    L.append("| %d | %s%s | 无号（待流程侧增补） |" % (i, _pfx, t))
 L.append("")
 # ── 在办 change 引入的能力承诺（**主规格树里还没有这个能力**）──────────────
 # 为什么要有这一节：判据④ 只扫主规格树（`openspec/specs/**/spec.md`），

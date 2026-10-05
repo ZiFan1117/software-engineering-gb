@@ -419,3 +419,130 @@ fn l06_the_factory_config_really_carries_the_four_numbers() {
         lim.idle_timeout_ms
     );
 }
+
+// ────────────────── l07 · 身份映射只许有一处权威（渲染物 ⊆ 法律）──────────────────
+//
+// 判的是什么：**受理路径只读渲染物**（`serve` 从继承来的 fd 取路径 → `ChannelConfig::load`
+// → `listener_for`），而法律那份 `listeners` 在运行路径上零读者 ⇒ 渲染物事实上是**第二在册**。
+// `ChannelConfig::load_checked` 就是那句话的执行体：渲染物每一条都要能在法律里解析到。
+//
+// 对账键是 **(socket, actor) 同时相同**——只对 socket 不够。
+// 反例的形态＝**往渲染物里加一行映射**（真实违规形态），不是造畸形 JSON。
+
+fn write_json(p: &Path, v: &Value) {
+    std::fs::write(p, serde_json::to_string_pretty(v).unwrap()).unwrap();
+}
+
+/// 在册表（法律）夹具：一条口 → 一个主体。
+fn law_one(sock: &Path, actor: &str) -> Value {
+    json!({
+        "policy": 1,
+        "listeners": [ { "socket": sock.to_str().unwrap(), "actor": actor, "owner": "someone" } ]
+    })
+}
+
+/// 渲染物夹具：与 `law_one` 对得上的一条。
+fn render_one(sock: &Path, actor: &str, uid: u32) -> Value {
+    json!({
+        "channel": 1,
+        "listeners": [ { "socket": sock.to_str().unwrap(), "actor": actor, "uid": uid } ]
+    })
+}
+
+#[test]
+fn l07_the_render_is_checked_against_the_law_before_it_is_used() {
+    let d = tmpdir("l07");
+    let sock = d.join("world.sock");
+    let law = d.join("policy.json");
+    let render = d.join("channel.json");
+
+    // ── 正控：渲染物与在册逐字对得上 ⇒ 必须过 ──
+    write_json(&law, &law_one(&sock, "world://core"));
+    write_json(&render, &render_one(&sock, "world://core", 965));
+    let conf = channel::ChannelConfig::load_checked(&render, &law)
+        .expect("正控：渲染物的每一条都在在册里 ⇒ 必须放行");
+    assert!(
+        conf.listener_for(&sock).is_some(),
+        "正控：放行之后必须还能按路径找到那条绑定"
+    );
+
+    // ── 反例 A：渲染物里凭空多一行法律里没有的映射 ⇒ 必须红，且点名那一条 ──
+    let ghost = d.join("ghost.sock");
+    write_json(
+        &render,
+        &json!({
+            "channel": 1,
+            "listeners": [
+                { "socket": sock.to_str().unwrap(), "actor": "world://core", "uid": 965 },
+                { "socket": ghost.to_str().unwrap(), "actor": "world://ghost", "uid": 965 }
+            ]
+        }),
+    );
+    let e = channel::ChannelConfig::load_checked(&render, &law).unwrap_err();
+    assert!(
+        e.contains("ext.world.Channel.UndeclaredListener"),
+        "反例 A：账外口必须点名 `UndeclaredListener`；实得：{e}"
+    );
+    assert!(
+        e.contains(ghost.to_str().unwrap()),
+        "反例 A：必须点名是哪一条口；实得：{e}"
+    );
+
+    // ── 反例 B：socket 对得上而 **actor 不同** ⇒ 仍必须红 ──
+    //    （这一条把"对账键"钉死成 (socket, actor)；只对 socket 就会漏掉"换个身份"。）
+    write_json(
+        &render,
+        &json!({
+            "channel": 1,
+            "listeners": [ { "socket": sock.to_str().unwrap(), "actor": "world://not-core", "uid": 965 } ]
+        }),
+    );
+    let e = channel::ChannelConfig::load_checked(&render, &law).unwrap_err();
+    assert!(
+        e.contains("ext.world.Channel.UndeclaredListener"),
+        "反例 B：同一个口换个身份也是账外口；实得：{e}"
+    );
+
+    // ── 反例 C：**基准缺失** ⇒ 必须红（不许把"没有在册表"读成"没有账外口"）──
+    write_json(&law, &json!({ "policy": 1 }));
+    write_json(&render, &render_one(&sock, "world://core", 965));
+    let e = channel::ChannelConfig::load_checked(&render, &law).unwrap_err();
+    assert!(
+        e.contains("ext.world.Channel.NoDeclaredListeners"),
+        "反例 C：法律里没有 `listeners` ⇒ 必须点名 `NoDeclaredListeners`；实得：{e}"
+    );
+
+    // ── 正控二：修回去 ⇒ 必须回绿（证明上面几条红**不是因为环境坏了**）──
+    write_json(&law, &law_one(&sock, "world://core"));
+    assert!(
+        channel::ChannelConfig::load_checked(&render, &law).is_ok(),
+        "正控二：把法律修回去之后必须重新放行"
+    );
+
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn l08_the_factory_law_really_declares_every_rendered_identity() {
+    // 出厂面：**法律里必须真的有在册表**，而且 `declared_listeners` 读得出来。
+    // 只钉关系、不复述条数（条数的权威载体是 policy.json 本身）。
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let law = root.join("policy.json");
+    let got = channel::declared_listeners(&law).expect("出厂法律必须有 listeners 段");
+    assert!(
+        got.iter().any(|d| d.actor == "world://core"),
+        "出厂法律里必须有一条绑定到 world://core（内核自己的口）"
+    );
+    assert!(
+        got.iter().any(|d| d.actor == "world://presence/omarchy"),
+        "界面自己的口（world://presence/omarchy）必须在法律的在册表里——\
+         新身份靠新口给出，而口→身份只能有一处权威"
+    );
+    // 每一条都得有 socket 与 actor（形状判据；空串不算）。
+    for d in &got {
+        assert!(
+            !d.socket.as_os_str().is_empty() && !d.actor.is_empty(),
+            "在册表里不许出现空的 socket 或 actor"
+        );
+    }
+}

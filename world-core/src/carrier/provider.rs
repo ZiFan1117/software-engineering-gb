@@ -75,7 +75,16 @@ pub trait Provider {
     /// 执行器名（与执行清单里的 `provider` 字段对应）。
     fn name(&self) -> &'static str;
 
-    /// 该执行器提供的能力名（启动期自检用）。
+    /// 该执行器提供的**语义层能力名**——与本体 `_interfaces`、`cap.d` 的 `capability`
+    /// **同一套词表**。
+    ///
+    /// ★ **不是设备名**：设备词（"怎么实现"）是 [`Provider::name`] 那一栏的事。
+    /// ★ 本方法的返回值**会被读**：`cap.d` 里 `provider = 我` 的每一项，其 `capability`
+    /// 必须在下面这个清单里找得到，否则拒不动手——判据见
+    /// [`crate::carrier::providers::cross_check`]。
+    ///
+    /// （旧注写"启动期自检用"，而当时它在 `src/**` 里**零调用点**：
+    /// 那句描述的是一个**没有发生过的事**，2026-10-04 订正。）
     fn capabilities(&self) -> Vec<&'static str>;
 
     /// 执行一个动词。实现**必须**：入参无歧义、返回结构化、失败类型化。

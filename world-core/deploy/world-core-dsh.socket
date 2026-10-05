@@ -1,0 +1,39 @@
+[Unit]
+Description=世界核心 · DSH 的接入（**一个口一个身份**：本口只属于 world://agent/dsh）
+Documentation=man:systemd.socket(5)
+PartOf=world-core.service
+
+[Socket]
+# ★ 与内核的写入总线（world-core.socket）**分属两个口**：
+#   内核那个口是 world://core，本口是 world://agent/dsh。
+#   为什么不复用内核口：复用就等于 DSH 拿内核的身份 ⇒「越权必拒」当场变成空话
+#   （它拿的就是内核的许可）。「一个口一个身份」这条口径写在 world-core.socket 的注释里。
+ListenStream=/run/world-core/dsh.sock
+
+# ★★ 同类修正（2026-10-05，同批）：`Service=` **必须显式写**。
+#   ★ 本单元**从未安装过**（`dsh` 身份今天还没建、它不在 `install.sh` 的 `UNITS=` 里）⇒ **本条无现场读数**；
+#     加它是因为**同一条成因已经在 `world-core-omarchy.socket` 上实打实发生过**：
+#     `Socket service world-core-<名>.service not loaded, refusing.` ⇒ 口建不出来。
+#   ★ 同一口径：**每个 `.socket` 要么与某 `.service` 同名，要么显式给 `Service=`。**
+Service=world-core.service
+
+# ⚠️ uid 口径（如实登记）：`dsh` 这个 uid **今天没有权威载体**（仓里不存在），
+#   故本口**不引入新 uid**——**用与内核同一个 uid 跑，身份区分不靠 uid**。
+#   ⇒ SocketMode／SocketUser／SocketGroup **照 world-core.socket 的值来**（0600 ＋ world-core）：
+#     `SocketMode=0600`（只许属主连），`SocketUser`／`SocketGroup` 与内核单元一致。
+#   ⇒ ★ 由此产生的**弱化**必须说清：今天"DSH 是谁"靠的是
+#     「**协议里的自我标识（`actor`）＋ 许可**」，**不是内核强制的隔离**。
+#     一个自称别的 `actor` 的客户端，**内核这一层挡不住**。
+#     ⇒ 补上 `uid` 那一格之前，**不许对外声称"身份是内核强制的"**。
+SocketMode=0600
+SocketUser=world-core
+SocketGroup=world-core
+Accept=no
+# 服务重启期间保留排队中的请求（默认即 no = 不丢弃）
+FlushPending=no
+# ★ `FileDescriptorStorePreserve=no` **已删**（Lead 裁 2026-10-05）：
+#   本机 systemd 判它 `Unknown key 'FileDescriptorStorePreserve' in section [Socket], ignoring.`
+#   ⇒ **这份声明没有执行体**，只会刷日志噪音；★信息已登记，不丢。
+
+[Install]
+WantedBy=sockets.target

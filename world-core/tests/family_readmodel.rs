@@ -33,6 +33,19 @@
 //! | `h06` | `State::apply_declared` 的空表拒绝改成默默放行 ⇒ `h06` 红 |
 //! | `h07` | `Ontology::family_required` 把 `optional` 也并进"必填格" ⇒ `h07` 红；`ontology.json` 被就地改动 ⇒ `h07` 的**词表身份**断言红 |
 //!
+//! ## ★ 3.3 撤回（`r01`–`r06`）的反例面（逐条在 VM 上做过，原始输出见交付回执）
+//!
+//! 口径一句话：**撤回＝过户不落账；序号是账本的，效果才是撤回的对象。**
+//!
+//! | 断言 | 短路它声称的那一步 ⇒ 必须红 |
+//! |---|---|
+//! | `r01` | 把 `State::apply_change` 的 `before` 核对改成**容错跳过**（`Some(_) => {}`）⇒ ① 的"撤回**前**必须拒"当场绿 ⇒ `r01` 红（**绝不用松校验换"能折叠"**） |
+//! | `r02` | 把被撤回的那条**从账本里删掉**（而不是撤回）⇒ `r02` ① 红（账本行数变了、id 不在了）：**那是删除，不是撤回** |
+//! | `r03` | 把 `State::scan_retractions` 的三条存在性／重复／对象检查短路（`if false`）⇒ `r03` 红（三条错码都没了） |
+//! | `r04` | 把撤回**只放进内存**（不落账本行）⇒ `r04` ① 红（文件里没有 `retract_seq` 那一行）；② 又用**另一个进程**读回，钉住"它不是内存里的一层壳" |
+//! | `r05` | 把 `fold_declared` 里的"被撤回 ⇒ `advance_only`"整段删掉 ⇒ 被撤回的那条效果照旧落账（`true`）⇒ `r05` 红 |
+//! | `r06` | 往 `State::to_json` 里**加一个键**（把撤回事实塞进规范形式）⇒ `r06` 的"顶层键恰为五个"与"与改动前逐字节相同"两条**同时红** |
+//!
 //! ## 诚实边界（不许读成"已完备"）
 //!
 //! - **命令这一级也接上了**（2026-09-28）：装配处（`src/lib.rs::read_model`）把"已声明格"
@@ -46,13 +59,13 @@
 //!   在读法侧的回答是"**要连读法一起加**"：只加本体的家族，读模型**拒**（`h02` ③ 即此）。
 
 use serde_json::{json, Value};
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use world_core::ontology::Ontology;
-use world_core::readmodel::{DeclaredCells, State};
+use world_core::readmodel::{DeclaredCells, State, RETRACT_PATH};
 use world_core::{event, World};
 
 // ────────────────────────── 夹具 ──────────────────────────
@@ -113,7 +126,7 @@ fn add_pure_extension(v: &mut Value) {
         "required": ["scope", "result"],
         "optional": []
     });
-    v["concepts"]["audit"] = json!({ "fields": { "result": "enum(pass,fail)" } });
+    v["_objects"]["audit"] = json!({ "fields": { "result": "enum(pass,fail)" } });
 }
 
 /// 出厂法律的"已声明必填格"清单——读模型侧要的那份**纯数据**（`REQ-F-032`）。
@@ -599,7 +612,7 @@ fn h06_an_empty_declared_cell_list_is_not_read_as_lenient() {
 ///
 /// 这一条独立读文件、独立比对（不与 `Ontology::load` 共用那一次解析），
 /// 于是"清单从哪来"这件事有两个独立来源对得上；顺带把**出厂本体的身份**钉住
-/// （它的 `fnv1a64:4bf7b75573fee475` 被多份文档写死 ⇒ 就地从改它＝契约变更，须人批）。
+/// （它的 `fnv1a64:6a96abfa9a969462` 被多份文档写死 ⇒ 就地从改它＝契约变更，须人批）。
 #[test]
 fn h07_the_declared_inventory_is_mechanically_enumerable() {
     let ont = Ontology::load(&factory_ontology()).unwrap();
@@ -661,22 +674,66 @@ fn h07_the_declared_inventory_is_mechanically_enumerable() {
         "出厂本体：三家族必填格 3／4／2"
     );
 
-    // ③ concepts（世界里的实体与字段）同样可枚举
-    assert_eq!(ont.known_entities(), vec!["job", "notice"]);
+    // ③ 对象（世界里的类型与字段）同样可枚举
+    // ★ **有意更新的断言**（与上面那句身份字面量同族，**不是放宽**）：本批给本体加了
+    //   **统一类型** `presence`（在场者：`name`／`category`／`state`／`did`／`last_seen`）
+    //   ⇒ 声明清单**确实变宽了**；判据一字未改，仍是"清单能机械枚举、且与出厂本体原文逐字一致"。
+    // ★ **同族，再一次**：本批又加了 `surface`（面）／`cell`（格）／`port`（口）三类……
+    //   ⇒ 清单**又**变宽了（`right` 一侧跟着走），**判据仍一字未改**。
+    //   ⚠ 如实登记：本条与上面那条一样，**只钉"清单能机械枚举"**；它**不证明**新类型
+    //   有任何执行体（`world://surface|cell|port` 在 `src/**/*.rs` 里 0 命中，
+    //   见 `评审-切面-渲染协议-2026-10-05.md`）—— **"声明了"与"在用"是两件事。**
+    assert_eq!(
+        ont.known_entities(),
+        vec!["cell", "job", "notice", "port", "presence", "surface"]
+    );
+    // ★ **有意更新的断言**（与上面那句身份字面量同族，**不是放宽**）：
+    //   `notice` 的**声明清单**多了 `retract_seq: integer` —— **"清单条目数"是与"身份"并列的
+    //   另一种「派生量」**：改本体（法律面）会同时挪动两者，**每一种都在自己的地方被钉着**。
+    //   ⇒ 这里跟着新清单走（清单确实变宽了，判据仍是"清单能机械枚举、且与出厂本体原文逐字一致"）。
     assert_eq!(
         ont.declared_fields("notice"),
-        Some(&BTreeSet::from(["muted".to_string()])),
-        "书 §5.3 逐字『世界的边界由声明定』：世界里有什么，由 concepts 定"
+        Some(&BTreeMap::from([
+            ("muted".to_string(), "bool".to_string()),
+            ("retract_seq".to_string(), "integer".to_string())
+        ])),
+        "书 §5.3 逐字『世界的边界由声明定』：世界里有什么，由对象节定"
     );
+    // ★ **同族，再一次**：`job` 的声明清单多了「**当前这一步**」那一族
+    //   （`step`／`steps_total`／`step_label`）＋ `retract_seq`
+    //   —— 依据：那一格**已经被重复使用**（`case.step` 借 `notice.payload` 用过 7 次），
+    //   按书·总则第八节「本体**只应收下已被重复使用的东西**」⇒ **该收**。
+    //   而它**必须有一个已声明的载体**才读得出来（`notice.payload` 只计数不折叠，读不出来）。
+    //   ⇒ 清单变宽，**判据仍一字未改**。
     assert_eq!(
         ont.declared_fields("job"),
-        Some(&BTreeSet::from(["status".to_string()]))
+        Some(&BTreeMap::from([
+            ("status".to_string(), "enum(todo,doing,done)".to_string()),
+            ("step".to_string(), "integer".to_string()),
+            ("steps_total".to_string(), "integer".to_string()),
+            ("step_label".to_string(), "string".to_string()),
+            ("retract_seq".to_string(), "integer".to_string())
+        ]))
+    );
+    assert_eq!(
+        ont.declared_fields("presence"),
+        Some(&BTreeMap::from([
+            ("name".to_string(), "string".to_string()),
+            ("category".to_string(), "string".to_string()),
+            (
+                "state".to_string(),
+                "enum(installed,registered,running,stopped,retired)".to_string()
+            ),
+            ("did".to_string(), "array(string)".to_string()),
+            ("last_seen".to_string(), "integer  # UNIX 秒".to_string())
+        ])),
+        "在场者（本批新增的统一类型）也必须能从本体原文逐格枚举"
     );
 
     // ④ 出厂本体的**身份**（改本体＝改法律＝契约变更，须人批）
     assert_eq!(
         ont.vocab_hash(),
-        "fnv1a64:4bf7b75573fee475",
+        "fnv1a64:6a96abfa9a969462",
         "出厂本体的词表身份被多份文档写死；就地改它必须走契约变更"
     );
 }
@@ -749,3 +806,637 @@ fn h08_every_declared_envelope_field_is_covered_and_the_coverage_is_load_bearing
         "同一条行在**完整**覆盖表下必须被拒（否则①②的对照不成立）"
     );
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// 3.3 ★ **撤回**（过户不落账）—— `r01`–`r06`
+//
+// ★ 一句话口径：**撤回＝过户不落账；序号是账本的，效果才是撤回的对象。**
+//
+// ## 撤回事实长什么样（不新增事件家族、不动法律、不动 `to_json`）
+//
+// 它就是一条**普通的 `change`**：`body.path = retract_seq`（出厂本体在 `notice.fields` 里
+// 逐字声明过这一格）、`body.after` ＝ **被撤回的那条账本序号**、信封 `actor` ＝ 谁撤的、
+// 信封 `trace` ＝ 因为什么（本体对 `trace` 的逐字定义是「因果：引发本条的那条事件的 id」）。
+//
+// ## 语料分两种（**两条都是踩出来的教训**）
+//
+// - **"能读、只是折叠不了"**（`r01`–`r04`）：先一条正常 `change`，再一条**谎称旧值**的 `change`。
+//   ★ **第 13 轮起，第二条再也进不来**：写入侧新增旧值核对
+//   （`ext.world.World.BeforeMismatch`，`src/lib.rs::World::check_before`）⇒ 走唯一写入口会被当场拒。
+//   故夹具改为**手造一行并补上正确的摘要链**（`append_raw_with_chain`）——它模拟的正是
+//   「账本被写入侧之外的东西改过」这一种形态，也就是读侧那道墙**今天唯一的对手**。
+//   ⚠️ **不许**图省事写一行不带 `chain` 的裸 JSON：那会让账本变成"部分有链、部分没有"，
+//   `open` 先以 `ext.world.Ledger.MixedChain` 拒开 ⇒ "折叠不了"这个病因**根本没被量到**，
+//   判据就成了装饰（`tests/ontology_elements.rs::m20` 上一版就是这么倒的）。
+// - **全部可折叠**（`r05`／`r06`）：一条**真发生过**的改动（`false→true`）被撤回
+//   ⇒ 世界现在的值是 `false`，而"撤回前"的值是 `true` ⇒ 判据锋利。
+// ══════════════════════════════════════════════════════════════════════════
+
+/// 跑一次 `world-core`（被测二进制），返回 `(rc, stdout, stderr)`。
+fn run_wc(args: &[String]) -> (i32, String, String) {
+    let bin = env!("CARGO_BIN_EXE_world-core");
+    let out = Command::new(bin)
+        .args(args)
+        .output()
+        .expect("跑得起来 world-core");
+    (
+        out.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out.stdout).to_string(),
+        String::from_utf8_lossy(&out.stderr).to_string(),
+    )
+}
+
+/// 夹具的公共参数：`--ontology … --policy … --ledger …`。
+fn base_args(ledger: &Path) -> Vec<String> {
+    vec![
+        "--ontology".into(),
+        factory_ontology().display().to_string(),
+        "--policy".into(),
+        factory_policy().display().to_string(),
+        "--ledger".into(),
+        ledger.display().to_string(),
+    ]
+}
+
+/// `world-core append <kind> <body> [actor] [--trace <id>]`：**走唯一写入口**落一条事件。
+///
+/// 返回落笔的那条事件（`append` 的 stdout 就是它）。
+fn cli_append(ledger: &Path, kind: &str, body: Value, actor: &str, trace: Option<&str>) -> Value {
+    let mut a = base_args(ledger);
+    a.push("append".into());
+    a.push(kind.into());
+    a.push(serde_json::to_string(&body).unwrap());
+    a.push(actor.into());
+    if let Some(t) = trace {
+        a.push("--trace".into());
+        a.push(t.into());
+    }
+    let (rc, out, err) = run_wc(&a);
+    assert_eq!(rc, 0, "夹具：`append {kind}` 必须成功；stderr={err}");
+    serde_json::from_str(out.trim())
+        .unwrap_or_else(|e| panic!("`append` 的 stdout 必须是那条事件的 JSON：{e}\n{out}"))
+}
+
+/// `world-core state [--json] [--retracted]`。
+fn cli_state(ledger: &Path, extra: &[&str]) -> (i32, String, String) {
+    let mut a = base_args(ledger);
+    a.push("state".into());
+    for x in extra {
+        a.push((*x).into());
+    }
+    run_wc(&a)
+}
+
+/// 一条 `change` 的信纸（`muted` 那格；夹具里反复用）。
+fn muted(before: Value, after: Value) -> Value {
+    event::change_body("world://notice/n-1", "muted", before, after)
+}
+
+/// 一条**撤回事实**的信纸：`path = retract_seq`、`after = 被撤回的 seq`。
+fn retract_body(target: u64) -> Value {
+    event::change_body(
+        "world://notice/n-1",
+        RETRACT_PATH,
+        json!(null),
+        json!(target),
+    )
+}
+
+/// 从账本文件里读回全部事件（**与 CLI 同一条路**：`World::open_readonly` → `read_all`）。
+fn read_back(ledger: &Path) -> Vec<Value> {
+    let w = World::open_readonly(&factory_ontology(), ledger, &factory_policy()).unwrap();
+    w.ledger().read_all().unwrap()
+}
+
+/// 往账本**末尾**追加一条**手造**的原始行，并给它算一条**正确的摘要链**。
+///
+/// 摘要算法取自 [`world_core::ledger::event_chain`]（**与写入侧同源**，不是抄一份）。
+/// 为什么必须算链：手写一行而不补链 ⇒ 账本"部分有链、部分没有" ⇒ `open` 先以
+/// `ext.world.Ledger.MixedChain` 拒开 ⇒ **判错了病因**（本文件的 `write_ledger` 干脆全行去链，
+/// 那是"整本无链"的合法形态；此处既有的行**有**链，故必须补）。
+fn append_raw_with_chain(lp: &Path, mut ev: Value) {
+    let prev = fs::read_to_string(lp)
+        .ok()
+        .and_then(|t| t.lines().last().map(str::to_string))
+        .and_then(|l| serde_json::from_str::<Value>(&l).ok())
+        .and_then(|v| v.get("chain").and_then(Value::as_str).map(str::to_string))
+        .unwrap_or_else(|| world_core::ledger::CHAIN_GENESIS.to_string());
+    let chain = world_core::ledger::event_chain(&prev, &ev).unwrap();
+    ev.as_object_mut()
+        .unwrap()
+        .insert("chain".into(), json!(chain));
+    let mut text = fs::read_to_string(lp).unwrap();
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&serde_json::to_string(&ev).unwrap());
+    text.push('\n');
+    fs::write(lp, text).unwrap();
+}
+
+/// **手造一条"谎称旧值"的 `change`**（★**第 13 轮起不再走唯一写入口**：写入侧会当场拒它）。
+///
+/// 为什么这个夹具必须存在：读侧那道墙（`ext.world.ReadModel.BeforeMismatch`）的对手，
+/// 今天**只剩**"账本被写入侧之外的东西改过"这一种形态（真实账本 `seq=13` 就是当年那一格：
+/// 事件称 `before=null`，而折叠出的当前值是 `false`）。
+/// 手造就必须**补上正确的摘要链**（否则先以 `MixedChain` 拒开 ⇒ 判错病因）。
+fn append_lying_before(lp: &Path, seq: u64, id: &str) -> String {
+    let mut bad = event::new_event(
+        seq,
+        "change",
+        "world://core",
+        muted(json!(true), json!(true)), // 谎称旧值是 true（真旧值是 false）
+    );
+    bad.as_object_mut().unwrap().insert("id".into(), json!(id));
+    append_raw_with_chain(lp, bad);
+    id.to_string()
+}
+
+/// **"能读、只是折叠不了"那一格**：一条正常 `change` ＋ 一条**谎称旧值**的 `change`。
+///
+/// ★ 第一条走唯一写入口（带链）；第二条**手造 ＋ 补链**——理由见上。
+///
+/// 返回 `(账本路径, 坏行的 id)`。
+fn ledger_with_a_lying_before(dir: &Path) -> (PathBuf, String) {
+    let lp = dir.join("bad.jsonl");
+    cli_append(
+        &lp,
+        "change",
+        muted(json!(null), json!(false)),
+        "world://core",
+        None,
+    );
+    let id = append_lying_before(&lp, 2, "e-lying-before-2");
+    (lp, id)
+}
+
+/// **r01｜追加一条撤回指向坏 `seq` ⇒ 重新折叠成功**。
+///
+/// ★ **反例**：把 `before` 校验改成"容错跳过"也能折叠 ⇒ 本用例 ① 当场红
+/// （**绝不用松校验换"能折叠"**：那两条在结论上是相反的——一条是"这条不算数"，
+/// 另一条是"这条算数，只是我不查了"）。
+#[test]
+fn r01_a_retraction_of_the_bad_seq_makes_the_ledger_foldable_again() {
+    let dir = tmpdir("r01");
+    let (lp, bad_id) = ledger_with_a_lying_before(&dir);
+
+    // ① 撤回**之前**：拒折叠，且**病因必须是 `BeforeMismatch`**（不是摘要、不是缺格）
+    let (rc0, _o0, e0) = cli_state(&lp, &["--json"]);
+    assert_eq!(rc0, 2, "坏账本必须拒折叠（rc=2）；stderr={e0}");
+    assert!(
+        e0.contains("ext.world.ReadModel.BeforeMismatch"),
+        "拒绝的**病因**必须是「旧值不符」，实得：{e0}"
+    );
+
+    // ② 追加一条**撤回事实**指向那条坏 `seq`（走唯一写入口；账本里的旧行**一个字节都没动**）
+    cli_append(
+        &lp,
+        "change",
+        retract_body(2),
+        "world://core",
+        Some(&bad_id),
+    );
+
+    // ③ 撤回**之后**：同一本账本**折得开**了，且值是"**从来没变过**"的那个 `false`
+    let (rc1, o1, e1) = cli_state(&lp, &["--json"]);
+    assert_eq!(
+        rc1, 0,
+        "撤回之后必须折得开（rc=0）；stderr={e1}\nstdout={o1}"
+    );
+    let v: Value = serde_json::from_str(o1.trim()).expect("`state --json` 必须是 JSON");
+    assert_eq!(
+        v["objects"]["world://notice/n-1"]["muted"],
+        json!(false),
+        "撤回撤的是那条的**效果** ⇒ 当前值回到 `seq=1` 之后的 `false`：{o1}"
+    );
+    assert_eq!(
+        v["last_seq"],
+        json!(3),
+        "**序号是账本的**：撤回让 `last_seq` 推到 3（被撤回的那条**没有被跳过**）：{o1}"
+    );
+    assert_eq!(
+        v["seen"],
+        json!(1),
+        "**效果才是撤回的对象**：3 条里只有 1 条的效果落了账：{o1}"
+    );
+
+    // ④ 反假：撤回**不许**截断账本
+    assert_eq!(
+        fs::read_to_string(&lp).unwrap().lines().count(),
+        3,
+        "撤回**不许**截断账本（禁的那条作弊路）"
+    );
+}
+
+/// **r02｜坏 `seq` 仍可见，并带「已撤回」标记**。
+///
+/// ★ **反例**：它从账本消失 ⇒ 红（**那是删除，不是撤回**）。
+#[test]
+fn r02_the_retracted_seq_stays_in_the_ledger_and_carries_a_retracted_mark() {
+    let dir = tmpdir("r02");
+    let (lp, bad_id) = ledger_with_a_lying_before(&dir);
+    cli_append(
+        &lp,
+        "change",
+        retract_body(2),
+        "world://core",
+        Some(&bad_id),
+    );
+
+    // ① **账本里那条一个字节都没少**：`seq=2` 与它的 `id` 都还在
+    let raw = fs::read_to_string(&lp).unwrap();
+    assert!(
+        raw.contains("\"seq\":2"),
+        "被撤回的那条必须仍在账本里（撤回不是删除）：\n{raw}"
+    );
+    assert!(
+        raw.contains(&bad_id),
+        "**同一条**（按 `id`）必须还在账本里：\n{raw}"
+    );
+    assert_eq!(raw.lines().count(), 3, "账本只许追加：\n{raw}");
+
+    // ② 事件面（`read`）也不隐藏它——"可见"不是靠新读法挑着给
+    let mut a = base_args(&lp);
+    a.push("read".into());
+    a.push("2".into());
+    let (rc_r, out_r, err_r) = run_wc(&a);
+    assert_eq!(rc_r, 0, "`read` 必须成功；stderr={err_r}");
+    assert!(
+        out_r.contains(&bad_id) && out_r.contains("\"seq\":2"),
+        "`read` 必须照样打印被撤回的那条：\n{out_r}"
+    );
+
+    // ③ **撤回标记**：`state --retracted` 点名它（序号 ＋ 撤的人 ＋ 因为什么）
+    let (rc_s, out_s, err_s) = cli_state(&lp, &["--retracted"]);
+    assert_eq!(rc_s, 0, "`state --retracted` 必须成功；stderr={err_s}");
+    assert!(
+        out_s.contains("已撤回") && out_s.contains("seq=2"),
+        "`state --retracted` 必须点名「seq=2 已撤回」：\n{out_s}"
+    );
+    assert!(
+        out_s.contains("world://core") && out_s.contains(&bad_id),
+        "标记里必须带得出**谁撤的**与**因为什么**：\n{out_s}"
+    );
+}
+
+/// **r03｜撤回不存在的 `seq` ／ 撤回已撤回的 ⇒ 红**（＋本层另立的两条边界）。
+///
+/// ★ **反例**：把这三条检查短路 ⇒ 这里三条错码全不见 ⇒ 红。
+#[test]
+fn r03_retracting_a_missing_or_already_retracted_seq_is_refused_by_name() {
+    // ① 撤回一条账本里**没有**的 `seq`
+    let d1 = tmpdir("r03a");
+    let lp1 = d1.join("l.jsonl");
+    cli_append(
+        &lp1,
+        "change",
+        muted(json!(null), json!(false)),
+        "world://core",
+        None,
+    );
+    cli_append(&lp1, "change", retract_body(99), "world://core", None);
+    let (rc1, _o1, e1) = cli_state(&lp1, &["--json"]);
+    assert_eq!(rc1, 2, "撤回不存在的 seq 必须拒（rc=2）；stderr={e1}");
+    assert!(
+        e1.contains("ext.world.ReadModel.RetractTargetUnknown"),
+        "必须点名 `RetractTargetUnknown`，实得：{e1}"
+    );
+
+    // ② 撤回**已撤回**的（同一条 `seq` 撤两次）
+    let d2 = tmpdir("r03b");
+    let (lp2, bad_id) = ledger_with_a_lying_before(&d2);
+    cli_append(
+        &lp2,
+        "change",
+        retract_body(2),
+        "world://core",
+        Some(&bad_id),
+    );
+    cli_append(&lp2, "change", retract_body(2), "world://core", None);
+    let (rc2, _o2, e2) = cli_state(&lp2, &["--json"]);
+    assert_eq!(rc2, 2, "撤回已撤回的必须拒（rc=2）；stderr={e2}");
+    assert!(
+        e2.contains("ext.world.ReadModel.RetractAlreadyRetracted"),
+        "必须点名 `RetractAlreadyRetracted`，实得：{e2}"
+    );
+
+    // ③（本层另立的边界）撤回的是一条**撤回事实**本身
+    let d3 = tmpdir("r03c");
+    let (lp3, bad_id3) = ledger_with_a_lying_before(&d3);
+    cli_append(
+        &lp3,
+        "change",
+        retract_body(2),
+        "world://core",
+        Some(&bad_id3),
+    );
+    cli_append(&lp3, "change", retract_body(3), "world://core", None); // seq=3 是那条撤回事实
+    let (rc3, _o3, e3) = cli_state(&lp3, &["--json"]);
+    assert_eq!(rc3, 2, "撤回一条**撤回事实**必须拒（rc=2）；stderr={e3}");
+    assert!(
+        e3.contains("ext.world.ReadModel.RetractTargetNotAnEffect"),
+        "必须点名 `RetractTargetNotAnEffect`，实得：{e3}"
+    );
+
+    // ④（本层另立的边界）`after` 不是正整数 ⇒ `RetractMalformed`，**不许**降级成"当它不是撤回事实"。
+    //    这一格写入侧会按本体声明的 `integer` 拦住（`after=null` ⇒ `BadFieldValueType`）
+    //    ⇒ 只能**手造**那一行；手造就必须**补上正确的摘要链**（否则先以 `MixedChain` 拒开 ⇒ 判错病因）。
+    let d4 = tmpdir("r03d");
+    let lp4 = d4.join("l.jsonl");
+    cli_append(
+        &lp4,
+        "change",
+        muted(json!(null), json!(false)),
+        "world://core",
+        None,
+    );
+    let mut malformed = event::new_event(
+        2,
+        "change",
+        "world://core",
+        event::change_body("world://notice/n-1", RETRACT_PATH, json!(null), Value::Null),
+    );
+    malformed
+        .as_object_mut()
+        .unwrap()
+        .insert("id".into(), json!("e-malformed-2"));
+    append_raw_with_chain(&lp4, malformed);
+    let (rc4, _o4, e4) = cli_state(&lp4, &["--json"]);
+    assert_eq!(rc4, 2, "形状坏的撤回必须拒（rc=2）；stderr={e4}");
+    assert!(
+        e4.contains("ext.world.ReadModel.RetractMalformed"),
+        "必须点名 `RetractMalformed`——**不许**静默读成「它不是撤回事实」，实得：{e4}"
+    );
+}
+
+/// **r04｜撤回本身也进账本**。
+///
+/// ★ **反例**：只改内存／只改投影（账本里没有那一行）⇒ ① 红；
+/// ② 再从**另一个进程**读回同一份账本，钉住"它不是内存里的一层壳"。
+#[test]
+fn r04_the_retraction_itself_is_in_the_ledger_not_only_in_memory() {
+    let dir = tmpdir("r04");
+    let lp = dir.join("l.jsonl");
+    // 第一条与那条**撤回事实**走唯一写入口（都带链）；中间那条**谎称旧值**的只能手造 ＋ 补链
+    // （第 13 轮起写入侧会拒它——见 `append_lying_before` 的文档）。
+    cli_append(
+        &lp,
+        "change",
+        muted(json!(null), json!(false)),
+        "world://core",
+        None,
+    );
+    let bad_id = append_lying_before(&lp, 2, "e-lying-before-2");
+    cli_append(
+        &lp,
+        "change",
+        retract_body(2),
+        "world://core",
+        Some(&bad_id),
+    );
+
+    // ① **账本文件里真有一条撤回事实**（`path=retract_seq` 且 `after=2`）
+    let raw = fs::read_to_string(&lp).unwrap();
+    assert_eq!(
+        raw.lines().count(),
+        3,
+        "撤回本身也进账本：3 条（2 条效果 ＋ 1 条撤回事实）：\n{raw}"
+    );
+    assert!(
+        raw.contains(RETRACT_PATH) && raw.contains("\"after\":2"),
+        "撤回事实必须落在**账本**里：\n{raw}"
+    );
+
+    // ② **换一个进程**（新的一次 CLI 调用）照样折得出来 ⇒ 它读的是账本，不是内存
+    let (rc, out, err) = cli_state(&lp, &["--json"]);
+    assert_eq!(rc, 0, "stderr={err}");
+    let v: Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(
+        v["seen"],
+        json!(1),
+        "撤回事实**不进 `seen`**（它不是被折叠的那一条）：{out}"
+    );
+    assert_eq!(
+        v["last_seq"],
+        json!(3),
+        "但**序号照旧推到 3**（过户）：{out}"
+    );
+    // ③ 库侧同一条口径（`World::read_model` 就是 CLI 那条路）
+    let w = World::open_readonly(&factory_ontology(), &lp, &factory_policy()).unwrap();
+    let st = w.read_model().unwrap();
+    assert_eq!(
+        st.retracted().keys().copied().collect::<Vec<u64>>(),
+        vec![2],
+        "库侧必须答得出「哪一条被撤回」"
+    );
+}
+
+/// **r05｜撤回后不许回放旧数**。
+///
+/// 语料**全部可折叠**：一条**真发生过**的改动（`false→true`）被撤回 ⇒
+/// 世界现在的值是 `false`——**不是** `true`（那不叫"回放旧数"，那叫"撤回没生效"）。
+#[test]
+fn r05_a_retracted_effect_is_not_replayed_as_the_current_value() {
+    let dir = tmpdir("r05");
+    let lp = dir.join("l.jsonl");
+    cli_append(
+        &lp,
+        "change",
+        muted(json!(null), json!(false)),
+        "world://core",
+        None,
+    );
+    let second = cli_append(
+        &lp,
+        "change",
+        muted(json!(false), json!(true)),
+        "world://core",
+        None,
+    );
+
+    // 正控：撤回**之前**那条改动**是生效的**（否则下面那条红说明不了什么）
+    let (rc0, out0, _e0) = cli_state(&lp, &["--json"]);
+    assert_eq!(rc0, 0);
+    let v0: Value = serde_json::from_str(out0.trim()).unwrap();
+    assert_eq!(
+        v0["objects"]["world://notice/n-1"]["muted"],
+        json!(true),
+        "正控：撤回前那条改动必须**生效**：{out0}"
+    );
+
+    // 撤回它
+    cli_append(
+        &lp,
+        "change",
+        retract_body(2),
+        "world://core",
+        Some(second["id"].as_str().unwrap()),
+    );
+
+    // ① `state`（人读形态）不许回放被撤回的那个值
+    let (rc1, out1, err1) = cli_state(&lp, &[]);
+    assert_eq!(rc1, 0, "stderr={err1}");
+    assert!(
+        out1.contains("world://notice/n-1#muted = false"),
+        "撤回后**当前的**值必须是 `false`：\n{out1}"
+    );
+    assert!(
+        !out1.contains("#muted = true"),
+        "被撤回的 `true` 不许出现在「现在的值」那一行：\n{out1}"
+    );
+
+    // ② 界面唯一读路径（视觉投影）也不许回放
+    let mut a = base_args(&lp);
+    a.push("project".into());
+    a.push("visual".into());
+    let (rc2, out2, err2) = run_wc(&a);
+    assert_eq!(rc2, 0, "`project visual` 必须成功；stderr={err2}");
+    assert!(
+        out2.contains("muted = false"),
+        "投影必须给**撤回后**的值：\n{out2}"
+    );
+    assert!(
+        !out2.contains("muted = true"),
+        "投影不许回放被撤回的值：\n{out2}"
+    );
+}
+
+/// **r06｜★正控：撤回不改变世界现在什么样，且撤回事实不进规范形式**。
+///
+/// ## 这一条钉的是两件事
+///
+/// ① **撤回不改变世界现在什么样**：被撤回的那条效果不落账 ⇒ 世界现在的样子
+///    ＝「**那条记录从没写进来过**」的样子。可判形态：`objects` ＋ `acts`／`notices`／`seen`
+///    与被撤回那条之前的前缀**逐字节相同**（差**只有** `last_seq` 一格）。
+/// ② **撤回事实不进规范形式**：把"谁撤的／因为什么"换掉（同一个目标 `seq`）⇒
+///    规范形式与状态指纹**一字不变**。
+///
+/// ## ⚠️ 一处**如实登记的读法差异**（不许把没做到写成做到）
+///
+/// 任务书的字面是「**撤回前后，`state --json` 的规范形式与状态指纹逐字节相同**」。
+/// **字面照读不可能成立**，理由是可核的：`to_json` 的规范形式含 `last_seq` 与 `seen`，
+/// 而**追加任何一条事件**都必须过连线自检（[`State::check_next`]）并把 `last_seq` 推上去
+/// ⇒ 两本"相差一条事件"的账本**不可能**给出逐字节相同的规范形式。
+/// ⇒ 本用例落的是它**最强的可判真形态**：**除 `last_seq`（那一格是"账本的"）之外逐字节相同**，
+/// 另加②那条独立断言把"撤回事实不进规范形式"钉死。
+/// ③ **与改动前逐字节相同**（金标）：金标值是**本批改动前**的部署件在同一个夹具上的
+///    原始输出（`state --json` ＋ 指纹），钉住"`to_json`／`digest` 一个字未动"。
+#[test]
+fn r06_retraction_does_not_change_the_world_now_and_stays_out_of_the_canonical_form() {
+    // ── ① 撤回不改变世界现在什么样 ────────────────────────────────────────
+    let d1 = tmpdir("r06a");
+    let (lp1, bad_id) = ledger_with_a_lying_before(&d1);
+    cli_append(
+        &lp1,
+        "change",
+        retract_body(2),
+        "world://core",
+        Some(&bad_id),
+    );
+    let evs = read_back(&lp1);
+    assert_eq!(
+        evs.len(),
+        3,
+        "夹具：3 条（1 条有效 ＋ 1 条坏 ＋ 1 条撤回事实）"
+    );
+    let now = State::fold(&evs).expect("撤回之后必须折得开");
+    // "那条坏记录还没写进来时，世界现在什么样"——它就是这条撤回要恢复的样子
+    let reference = State::fold(&evs[..1]).expect("前缀必须折得开");
+    assert_eq!(
+        now.get("world://notice/n-1", "muted"),
+        reference.get("world://notice/n-1", "muted"),
+        "撤回不改变世界现在什么样"
+    );
+    let (mut a, mut b) = (now.to_json(), reference.to_json());
+    assert_eq!(
+        b["objects"], a["objects"],
+        "效果面（objects）必须逐字节相同"
+    );
+    assert_eq!(b["seen"], a["seen"], "`seen`（已折叠条数）必须相同");
+    assert_eq!(b["acts"], a["acts"], "`acts` 必须相同");
+    assert_eq!(b["notices"], a["notices"], "`notices` 必须相同");
+    // ★ 只归一化 `last_seq`——**序号是账本的**，它不是"世界现在什么样"那一半。
+    b["last_seq"] = json!(0);
+    a["last_seq"] = json!(0);
+    assert_eq!(b, a, "除 `last_seq`（账本的）之外，规范形式必须逐字节相同");
+
+    // ── ② 撤回事实不进规范形式：换掉"谁撤的／因为什么" ⇒ 一字不变 ────────────
+    let d2 = tmpdir("r06b");
+    let (lp2, bad_id2) = ledger_with_a_lying_before(&d2);
+    cli_append(
+        &lp2,
+        "change",
+        retract_body(2),
+        "world://core",
+        Some(&bad_id2),
+    );
+    let (_, o1, _) = cli_state(&lp1, &["--json"]);
+    let (_, o2, _) = cli_state(&lp2, &["--json"]);
+    assert_eq!(
+        o1, o2,
+        "两本**只差撤回事实的 actor／trace**的账本，`state --json` 必须一字不差"
+    );
+
+    // ── ③ 与**改动前**逐字节相同（金标）──────────────────────────────────
+    let d3 = tmpdir("r06c");
+    let lp3 = d3.join("l.jsonl");
+    cli_append(
+        &lp3,
+        "change",
+        muted(json!(null), json!(false)),
+        "world://user",
+        None,
+    );
+    cli_append(
+        &lp3,
+        "act",
+        event::act_body("notice.mute", "do", "r1", json!({})),
+        "world://user",
+        None,
+    );
+    cli_append(
+        &lp3,
+        "notice",
+        event::notice_body("muted", "world://notice/n-1", json!({})),
+        "world://user",
+        None,
+    );
+    let (rc, out, err) = cli_state(&lp3, &["--json"]);
+    assert_eq!(rc, 0, "stderr={err}");
+    assert_eq!(
+        out.trim(),
+        GOLDEN_STATE_JSON,
+        "`state --json` 的规范形式必须与**本批改动前**的部署件逐字节相同（`to_json` 一个字未动）"
+    );
+    let (_, human, _) = cli_state(&lp3, &[]);
+    assert!(
+        human.contains("指纹 : fnv1a64:0a7540b3bdf42d6b"),
+        "状态指纹也必须与改动前逐字节相同：\n{human}"
+    );
+    // 规范形式里**没有**撤回字样，且顶层键集合恰为那五个
+    let v: Value = serde_json::from_str(out.trim()).unwrap();
+    let keys: Vec<String> = v
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .map(str::to_string)
+        .collect();
+    assert_eq!(
+        keys,
+        vec!["acts", "last_seq", "notices", "objects", "seen"],
+        "撤回事实不进规范形式 ⇒ 顶层键集合恰为这五个：{out}"
+    );
+    assert!(
+        !out.contains("retract"),
+        "规范形式里不许出现撤回字样：{out}"
+    );
+}
+
+/// **本批改动前**的部署件（`/usr/bin/world-core`，2026-10-03 17:59 那一个）在
+/// 「一条 `change`（`muted`：首见 → `false`）＋ 一条 `act` ＋ 一条 `notice`」上的
+/// `state --json` **原始输出**（逐字节抄回，未做任何推算）。
+///
+/// 为什么把它冻成字面量：**"撤回没改规范形式"这句话要能红**——把 `to_json` 加一个键，
+/// 或者把 `digest` 的输入换掉，这里当场不等。
+const GOLDEN_STATE_JSON: &str = r#"{"acts":1,"last_seq":3,"notices":1,"objects":{"world://notice/n-1":{"muted":false}},"seen":3}"#;

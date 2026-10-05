@@ -110,7 +110,7 @@ fn add_pure_extension(v: &mut Value) {
         "required": ["scope", "result"],
         "optional": []
     });
-    v["concepts"]["audit"] = json!({ "fields": { "result": "enum(pass,fail)" } });
+    v["_objects"]["audit"] = json!({ "fields": { "result": "enum(pass,fail)" } });
 }
 
 fn flags_of(ev: &Value) -> Vec<String> {
@@ -514,7 +514,7 @@ fn x01_an_extension_item_colliding_with_a_core_field_is_refused_at_load() {
 
     // 反例①：扩展项里再叫 `body`（与信封字段同名）
     let collide_field = write_ontology(&dir, "collide-field.json", |v| {
-        v["concepts"]["body-fake"] = json!({ "fields": { "body": "string" } });
+        v["_objects"]["body-fake"] = json!({ "fields": { "body": "string" } });
     });
     let e = Ontology::load(&collide_field).expect_err("扩展项与核心字段重名必须被拒");
     assert!(
@@ -532,7 +532,7 @@ fn x01_an_extension_item_colliding_with_a_core_field_is_refused_at_load() {
 
     // 反例②：实体名本身与核心字段同名
     let collide_entity = write_ontology(&dir, "collide-entity.json", |v| {
-        v["concepts"]["body"] = json!({ "fields": { "whatever": "string" } });
+        v["_objects"]["body"] = json!({ "fields": { "whatever": "string" } });
     });
     let e2 = Ontology::load(&collide_entity).expect_err("实体名与核心字段重名必须被拒");
     assert!(

@@ -7,6 +7,15 @@
 //! | `backlight` | 读/写背光设备 | 不校验"该不该调"——调之前门禁已经裁决过 |
 //! | `package` | 调包管理器；高危动词前先做载体撤销点 | 不做"要不要确认"的判断——那是清单的 `confirm` 栏 |
 //! | `job` | 起长任务；完工后**回写一条结果事件** | 不自己维护"待办清单"——状态由账本折叠算出 |
+//!
+//! ## ★ 执行器的名字分两栏，不许混
+//!
+//! [`Provider::name`] 是**实现词／设备词**（`backlight`／`package`／`job`）——回答"**怎么实现**"；
+//! [`Provider::capabilities`] 是**语义层的名字**（`notice.mute`／`ledger.compact`／`job.start`）——
+//! 回答"**叫什么**"，与本体 `_interfaces`、`cap.d` 的 `capability` 同一套词表。
+//!
+//! 这两栏一旦混用，`cap.d` 与执行器就会**各有一个合法名字、却对不上**，而这一格
+//! 在 2026-10-04 之前**从来没有任何调用点读过**（详见 [`cross_check`]）。
 
 use crate::carrier::provider::{Outcome, Provider};
 use serde_json::{json, Value};
@@ -102,8 +111,10 @@ impl Provider for Backlight {
         "backlight"
     }
 
+    /// **语义层的名字**（**不是**设备名）：它在本体 `_interfaces` 里叫 `notice.mute`。
+    /// 设备词（"怎么实现"）写在 [`Provider::name`] 那一栏（`backlight`）。
     fn capabilities(&self) -> Vec<&'static str> {
-        vec!["brightness.set"]
+        vec!["notice.mute"]
     }
 
     fn call(&self, verb: &str, params: &Value) -> Result<Value, String> {
@@ -203,8 +214,10 @@ impl Provider for Package {
         "package"
     }
 
+    /// **语义层的名字**（**不是**设备名）：它在本体 `_interfaces` 里叫 `ledger.compact`。
+    /// 设备词（"怎么实现"）写在 [`Provider::name`] 那一栏（`package`）。
     fn capabilities(&self) -> Vec<&'static str> {
-        vec!["package.install"]
+        vec!["ledger.compact"]
     }
 
     /// 载体撤销点：记下当前包清单。做不到就报错（**不假装撤得回去**）。
@@ -342,6 +355,8 @@ impl Provider for Job {
         "job"
     }
 
+    /// **语义层的名字**（**不是**设备名）：与 `cap.d/job.start.json` 的 `capability` 同名。
+    /// 设备词（"怎么实现"）写在 [`Provider::name`] 那一栏（`job`）。
     fn capabilities(&self) -> Vec<&'static str> {
         vec!["job.start"]
     }
@@ -497,6 +512,60 @@ impl Registry {
     }
 }
 
+/// ★ **执行清单声明的能力 ↔ 执行器自报的能力：对账**（2026-10-04 立）。
+///
+/// ## 它补的是哪一格（**"从来没人读过的那一格"**）
+///
+/// [`Provider::capabilities`] 自契约建立起就在，但**在 `src/**` 里零调用点**——
+/// 当时 `.capabilities()` 的全部命中都是 `policy.capabilities()`（门禁那一份），
+/// **不是执行器这一份**。后果是：清单说"这项能力交给 `backlight` 干"，
+/// 而 `backlight` 自己说"我能干的是另一件事"，**两句话可以永远并存，没有任何东西会因此变红**。
+///
+/// ## 判据（**会红**）
+///
+/// `cap.d` 里 `provider = P` 的那一项，其 `capability`（**语义层的名字**）必须出现在
+/// `P.capabilities()` 里。两边**各有一个合法名字、却不是同一个** ⇒ 红。
+///
+/// ★ **反例的形态是"两套词表撞车"，不是拼写错**：`notice.mute` 在本体 `_interfaces` 里合法，
+/// `brightness.set` 在背光执行器那套词表里**也合法**——可它们不是同一个名字。
+/// 拼写错（`brightnes.set`）谁都看得出来；**两套各自合法的词表撞车，只有把这一格接上才看得见**。
+///
+/// ## 边界（**两条判据不互相冒充**）
+///
+/// 执行器**根本没注册**不属本条：那是 [`execute`] 第 3 步的"没有对应的执行器"，
+/// 本条对它**跳过、不报**——否则同一件事会有两个说法。
+///
+/// ## 返回
+///
+/// 全部不一致（**不是第一处**）：有几项就报几项，一项一个字符串，便于一次改完。
+pub fn cross_check(
+    manifest: &crate::carrier::capd::Manifest,
+    registry: &Registry,
+) -> Result<(), Vec<String>> {
+    let mut bad = Vec::new();
+    for cap in manifest.iter() {
+        let Some(p) = registry.get(&cap.provider) else {
+            // 没注册 ⇒ 第 3 步正面回答它，本条不冒充那条判据。
+            continue;
+        };
+        if !p.capabilities().iter().any(|c| *c == cap.name) {
+            bad.push(format!(
+                "`{}`：清单把它交给执行器 `{}`，而 `{}` 自报的能力是 {:?} \
+                 —— 两边各有一个合法名字，却不是同一个（不是拼写错）",
+                cap.name,
+                cap.provider,
+                cap.provider,
+                p.capabilities()
+            ));
+        }
+    }
+    if bad.is_empty() {
+        Ok(())
+    } else {
+        Err(bad)
+    }
+}
+
 /// 执行一次调用：**清单 → 动词 → 执行器 → 结果**。
 ///
 /// 顺序固定，且**每一步失败都不进入下一步**：
@@ -504,10 +573,11 @@ impl Registry {
 /// 1. 清单里没有这项能力 ⇒ **拒绝**（根本不动手）；
 /// 2. 清单里没有这个动词 ⇒ **拒绝**；
 /// 3. 没有对应执行器 ⇒ **拒绝**（并点名"注册表里没有"）；
-/// 4. 需要人确认 ⇒ 问确认入口；确认未给或入口不可用 ⇒ **拒绝**；
-/// 5. 需要载体撤销点 ⇒ 先做撤销点；做不成 ⇒ **拒绝**（不带着"撤不回去"的风险动手）；
-/// 6. 执行；
-/// 7. 组装结果（成功/失败）。
+/// 4. **执行器自报的能力里没有这一项 ⇒ 拒绝**（`cap.d` 与执行器两套词表对不上，见 [`cross_check`]）；
+/// 5. 需要人确认 ⇒ 问确认入口；确认未给或入口不可用 ⇒ **拒绝**；
+/// 6. 需要载体撤销点 ⇒ 先做撤销点；做不成 ⇒ **拒绝**（不带着"撤不回去"的风险动手）；
+/// 7. 执行；
+/// 8. 组装结果（成功/失败）。
 ///
 /// ⚠️ **本函数不做"允不允许"的裁决**：它能做的只有"拒绝"，永远不能"放行"——
 /// 放行由调用方在**问过门禁之后**才走到这里。
@@ -546,6 +616,17 @@ pub fn execute(
             }))
         }
     };
+    // ★ 第 4 步：**执行器自报的能力里必须有这一项**（2026-10-04 接上那一格）。
+    //   与第 3 步分开写是刻意的：**"没注册"与"注册了但不会这个"是两件事**，
+    //   拒绝的理由要各说各的，否则复盘时分不清是"没装"还是"装错了"。
+    if !provider.capabilities().iter().any(|c| *c == cap.name) {
+        return Outcome::refused(json!({
+            "reason": "执行器自报的能力里没有这一项（两套词表对不上）",
+            "capability": cap.name,
+            "provider": cap.provider,
+            "provider_capabilities": provider.capabilities(),
+        }));
+    }
     if cap.needs_confirm() && !confirm(&inv.capability, &inv.params) {
         return Outcome::refused(json!({
             "reason": "需要人确认而未获确认（默认拒绝）",
@@ -669,14 +750,14 @@ mod unit {
     #[test]
     fn refuses_when_confirmation_is_required_but_missing() {
         let m = manifest(
-            r#"{"capability":"a.b","provider":"job","verbs":["list"],"confirm":"required"}"#,
+            r#"{"capability":"job.start","provider":"job","verbs":["list"],"confirm":"required"}"#,
         );
         let mut reg = Registry::new();
         reg.add(Box::new(Job::default()));
         let o = execute(
             &m,
             &reg,
-            &inv("a.b", "list", json!({})),
+            &inv("job.start", "list", json!({})),
             &no_confirm,
             &no_undo,
         );
@@ -686,7 +767,7 @@ mod unit {
         let o2 = execute(
             &m,
             &reg,
-            &inv("a.b", "list", json!({})),
+            &inv("job.start", "list", json!({})),
             &yes_confirm,
             &no_undo,
         );
@@ -696,14 +777,14 @@ mod unit {
     #[test]
     fn refuses_to_act_when_the_undo_point_cannot_be_made() {
         let m = manifest(
-            r#"{"capability":"a.b","provider":"job","verbs":["list"],"risk":"high","undo":"before-each"}"#,
+            r#"{"capability":"job.start","provider":"job","verbs":["list"],"risk":"high","undo":"before-each"}"#,
         );
         let mut reg = Registry::new();
         reg.add(Box::new(Job::default()));
         let o = execute(
             &m,
             &reg,
-            &inv("a.b", "list", json!({})),
+            &inv("job.start", "list", json!({})),
             &yes_confirm,
             &no_undo,
         );
@@ -713,7 +794,7 @@ mod unit {
         let o2 = execute(
             &m,
             &reg,
-            &inv("a.b", "list", json!({})),
+            &inv("job.start", "list", json!({})),
             &yes_confirm,
             &ok_undo,
         );
@@ -747,5 +828,123 @@ mod unit {
         assert!(Backlight::to_raw(101, 255, &json!({"scale":"percent"})).is_err());
         assert!(Backlight::to_raw(300, 255, &json!({})).is_err());
         assert!(Backlight::to_raw(1, 255, &json!({"scale":"nonsense"})).is_err());
+    }
+
+    /// 测试替身：只自报能力、不动手——用它把"**两套词表**"这一格单独钉住。
+    struct Stub {
+        who: &'static str,
+        caps: Vec<&'static str>,
+    }
+
+    impl Provider for Stub {
+        fn name(&self) -> &'static str {
+            self.who
+        }
+        fn capabilities(&self) -> Vec<&'static str> {
+            self.caps.clone()
+        }
+        fn call(&self, _verb: &str, _params: &Value) -> Result<Value, String> {
+            Ok(json!({"stub": true}))
+        }
+    }
+
+    /// ★ **会红**：两套词表**各有一个合法名字**、却不是同一个（**不是拼写错**）。
+    ///
+    /// `notice.mute` 在本体 `_interfaces` 里合法；`brightness.set` 在背光那套词表里**也合法**。
+    /// 这一格在 2026-10-04 之前**零调用点** ⇒ 两句话可以永远并存、没有任何东西会红。
+    #[test]
+    fn red_when_the_two_vocabularies_name_different_things() {
+        let m = manifest(r#"{"capability":"notice.mute","provider":"backlight","verbs":["get"]}"#);
+        let mut reg = Registry::new();
+        reg.add(Box::new(Stub {
+            who: "backlight",
+            caps: vec!["brightness.set"],
+        }));
+
+        // ① 对账函数：点名是哪一项、两边各叫什么。
+        let bad = cross_check(&m, &reg).unwrap_err();
+        assert_eq!(bad.len(), 1, "两套词表撞车必须被点出来：{bad:?}");
+        assert!(bad[0].contains("notice.mute"), "{}", bad[0]);
+        assert!(bad[0].contains("brightness.set"), "{}", bad[0]);
+
+        // ② 同一条清单走执行路径 ⇒ **拒绝**（根本不动手），理由与"没注册"分开。
+        let o = execute(
+            &m,
+            &reg,
+            &inv("notice.mute", "get", json!({})),
+            &no_confirm,
+            &no_undo,
+        );
+        assert_eq!(o.result, crate::carrier::outcome::REFUSED);
+        assert!(
+            o.detail.to_string().contains("自报的能力里没有这一项"),
+            "{}",
+            o.detail
+        );
+    }
+
+    /// ★ **正控**：对得上的那一对 ⇒ **绿**（不许把不该红的也判红）。
+    #[test]
+    fn green_when_the_provider_claims_that_capability() {
+        let m = manifest(r#"{"capability":"notice.mute","provider":"backlight","verbs":["get"]}"#);
+        let mut reg = Registry::new();
+        reg.add(Box::new(Stub {
+            who: "backlight",
+            caps: vec!["notice.mute"],
+        }));
+
+        assert!(cross_check(&m, &reg).is_ok(), "对得上的那一对不许红");
+        let o = execute(
+            &m,
+            &reg,
+            &inv("notice.mute", "get", json!({})),
+            &no_confirm,
+            &no_undo,
+        );
+        assert_eq!(
+            o.result,
+            crate::carrier::outcome::OK,
+            "正控：对账过了就该走到执行：{}",
+            o.detail
+        );
+    }
+
+    /// **出厂那一对**：`cap.d/` 的清单在出厂注册表上必须**全部对得上**。
+    ///
+    /// ★ 第二句是必需的**正控**：空清单会让第一句**恒真**——那就成了装饰。
+    #[test]
+    fn the_factory_manifest_and_the_factory_registry_agree() {
+        let m = Manifest::load_dir(Path::new("cap.d")).unwrap();
+        let reg = Registry::builtin();
+        assert!(
+            cross_check(&m, &reg).is_ok(),
+            "出厂 cap.d 与出厂执行器对不上：{:?}",
+            cross_check(&m, &reg)
+        );
+        assert_eq!(m.names().len(), 3, "三份清单都要被读到：{:?}", m.names());
+    }
+
+    /// 执行器**没注册**不属对账这一条（**两条判据不互相冒充**）。
+    #[test]
+    fn an_unregistered_provider_is_not_a_vocabulary_mismatch() {
+        let m = manifest(r#"{"capability":"notice.mute","provider":"ghost","verbs":["get"]}"#);
+        let reg = Registry::new();
+        assert!(
+            cross_check(&m, &reg).is_ok(),
+            "没注册由第 3 步回答，对账对它跳过"
+        );
+        let o = execute(
+            &m,
+            &reg,
+            &inv("notice.mute", "get", json!({})),
+            &no_confirm,
+            &no_undo,
+        );
+        assert_eq!(o.result, crate::carrier::outcome::REFUSED);
+        assert!(
+            o.detail.to_string().contains("没有对应的执行器"),
+            "{}",
+            o.detail
+        );
     }
 }

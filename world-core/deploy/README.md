@@ -216,20 +216,53 @@ WantedBy=multi-user.target
 
 | # | 判据 | 命令 | 期望 |
 |---|---|---|---|
-| 1 | 三个进程都在跑 | `systemctl status world-core world-core-projectd world-core-actd` | 三个 active |
+| 1 | 在跑的是**清单里的**单元（★今天＝内核 ＋ 载体执行器；**投影单元已摘除未启用**） | `systemctl list-units --type=service --state=running 'world-core*'` | **以命令输出为准**（本表不复述现状） |
 | 2 | 内核**就绪**（不是"进程活着"） | `systemctl show -p ActiveState,SubState world-core` | `active` / `running`，且日志里有 `READY=1` |
-| 3 | 总线套接字在，且只对指定身份可连 | `ls -l /run/world-core/world.sock` | 属主/属组为本核心身份，模式 0660 |
+| 3 | 总线套接字在，且只对指定身份可连 | `ls -l /run/world-core/world.sock` | 属主/属组为本核心身份，**模式以 `world-core.socket` 的 `SocketMode=` 为准**（★今天是 `0600`；本表不复述） |
 | 4 | 唯一写者 | `lsof /var/lib/world-core/ledger.jsonl` | **只有一个**进程持有可写描述符 |
 | 5 | 消费者对真相零写权限 | 以投影身份执行一次读取后比对账本摘要 | 摘要不变；尝试写入时**系统调用返回拒绝** |
 | 6 | 世界不会半成品 | `systemctl stop world-core && echo 一条请求 \| nc -U /run/world-core/world.sock` | 不产生任何副作用（请求排队或连接被拒，**绝不静默执行**） |
 | 7 | 内核重启不丢请求（长驻化后） | 重启 `world-core.service` 期间持续发请求 | 请求排队而非丢失（由内核积压保证） |
 
-## 七、已知缺口（如实登记，不假装已做）
+## 七、机核：载体契约门禁（`tools/carrier_contract.py`）
+
+`deploy/` 里**清单（`install.sh` 的 `UNITS=`）内的**单元的**不是手写的设计稿，而是"从法律生成"的产物**——这条关系由门禁守。
+★**清单里有几件、是哪几件，以 `UNITS=` 那行为准**（取法：`grep -n '^UNITS=' deploy/install.sh`）——★**本处不写件数**（2026-10-05 订正：原写"今天清单 4 份"，而当天清单变成 5 件、**这句就成了假话**；★写死的数会烂，见 §八 第 8 条）。★目录里另有**已登记未启用**的件（`⑪c` 连原因报出，不藏着）：
+
+| 判据 | 内容 | 反例（自测会给） |
+|---|---|---|
+| ① | **清单（`install.sh` 的 `UNITS=`）里的**单元存在且非空；README 声明的套接字路径与 `ListenStream=` 一致 | 删单元／改路径 |
+| ② | socket 的 `SocketUser=`/`SocketGroup=` 与内核单元 `User=`/`Group=` **同一身份** | 换属主 |
+| ③ | `ListenStream=` 与内核 `RuntimeDirectory=` **同址** | 改 RuntimeDirectory |
+| ④ | **唯一写者**：只有内核单元的 `ReadWritePaths` 含状态目录 | 给投影／执行器开写 |
+| ⑤ | **默认拒绝**：执行器的 `ExecStart` 不含 `--confirm`（**只看指令行，注释不算**） | 加 `--confirm` |
+| ⑥ | 内核不用 `User=root`；socket 不用 `SocketMode=0666` | 改成 root／0666 |
+| ⑦ | **身份映射入法**：`policy.json` 的 `listeners` 里有本套接字 | 抽掉 `listeners` |
+| ⑧ | **渲染物 ⊆ 法律**：`--channel` 指向的渲染件**每一条**都在法律里（账外口一律拒） | 渲染物多一条账外口 |
+| ⑨ | **在册而渲染物里没有**（**报告行**，不判红）——专治"把在册读成已上线" | 把它写成"已上线" |
+| ⑩ | **`owner`→`uid` 对账**：映射里没有法律外的口／法律里的口都有行／`uid` ≡ `owner` 的解析值 | 映射多口／缺行／uid 不符 |
+| ⑪ | **清单 ≡ 实际**：`UNITS=` ↔ `deploy/` 里的单元件（目录里每件都要在清单里，**或**在⑪c 登记） | 目录里多一个未登记单元件 |
+| ⑪c | **已登记未启用**（**报告行**）：连**原因**报出，不许读成"已上线" | ——（报告行，不判红） |
+
+命令：`python tools/carrier_contract.py [--channel <渲染物路径>]`（★**`rc=0` 且**没有 `STATUS=SKIP` **才算全校验**；有 SKIP ⇒ 那几条是**未校验**，不是通过）｜`--self-test`（把单元复制到临时目录逐个改坏，**每条判据都必须红**）。
+
+> **为什么要有它**：单元文件是"**生成物**"——手改输出而不改法律，正是本项目在别处栽过的坑。
+> ★门禁把"① 生成关系"与"⑧ 渲染物 ⊆ 法律"做成会红的；★**「实际监听 ⊆ 在册」的运行态枚举仍未实现**（受理期只判"渲染物每一条都在法律里"，不枚举内核真在听哪些口）。
+> ★**判据与单元清单都只有一个来源**：清单＝`install.sh` 的 `UNITS=`；★本表**只索引**，权威是 `tools/carrier_contract.py` 的输出。
+
+## 八、已知缺口（如实登记，不假装已做）
 
 | # | 缺口 | 说明 |
 |---|---|---|
-| 1 | 三个单元**尚未在真机上实装过** | 本目录是部署件；上表七条判据中，1–5 条已有等价的进程级实测（见系统级验收脚本），6–7 条的"套接字激活"形态**尚无实测** |
-| 2 | `world-core serve` / `project serve` 两个子命令**尚未实现** | 现形态是 `channel serve <socket> <n>` 与一次性 `carrier serve`；"读继承描述符"这一步待做（要接 `LISTEN_FDS` 语义） |
-| 3 | 看门狗报到（`WATCHDOG=1`）尚未实现 | `WatchdogSec=` 已写在单元里；进程侧未接 ⇒ 实装时须先做，否则会被反复重启 |
-| 4 | 三个身份与目录的**属主编排**由部署脚本负责 | 属主编排是本设计最大的部署依赖；脚本尚未写 |
-| 5 | 动态身份的**明确禁止** | 见"主体身份必须稳定"：任何会被回收的动态身份都不得用于长期出现在事件里的主体 |
+| 1 | **多口同一属主**（(甲-e) 的弱化） | ★**机制成立**：2026-10-05 T29 真机现取 —— `/run/world-core/` 两个口都在 ＋ `ss -xl` 两条都在听 ＋ `LISTEN_FDS=2` ＋ 重启连续性成立（账本跑前＝跑后逐字节相同）。★★**而"一个口一个系统身份"【没有被这条路径兑现】**：`world-core-omarchy.socket` 写着 `SocketUser=omarchy`、`systemctl show` 也读得出它，**而盘上 `omarchy.sock` 的属主是 `world-core:world-core`** ⇒ ★**"单元级 `SocketUser=`"这条路今天做不到每口各自的属主**。★**两句都要写，不许只写前一句。** ★**口径**：★**不许对外声称"身份是内核强制的"**——今天"谁在说话"只剩「协议自称 ＋ 许可」（与 `world-core-dsh.socket` 那条登记同形）。★"为什么没落下去"＝**查不出**（已排除"世界自己 `bind()`"：口的 `ctime` 晚于装单元时刻且与 `world.sock` 同瞬） |
+| 2 | **第二个口没人受理** | ★现取（T29）：服务日志 `[登记] ext.world.Serve.ExtraListenFds: LISTEN_FDS=2 … 而 serve 今天只接第一个（fd 3）` ⇒ ★**口建出来了、第二个口没人受理**（"起了 ≠ 受理得到"）。落在 `cmd_serve`（`bus` 的件） |
+| 3 | **`world-core serve` / `project serve` 两个子命令尚未实现** | 现形态是 `channel serve <socket> <n>` 与一次性 `carrier serve`；★`LISTEN_FDS` 语义**已接**（现取 `LISTEN_FDS=2` 读得到），**但只受理第一个 fd** |
+| 4 | 看门狗报到（`WATCHDOG=1`）尚未实现 | `WatchdogSec=` 已写在单元里；进程侧未接 ⇒ 实装时须先做，否则会被反复重启 |
+| 5 | **部署件 ≡ 仓：今天【一致】；但 ⑫ 仍无执行体** | ★现取：`/etc/systemd/system/world-core.service` 与 `deploy/world-core.service` **同 sha256、同 5773 B**（17:14:15 装的），`grep -n '^Sockets='` 两处皆 rc=1（`Sockets` 只出现在注释）⇒ **本条已不成立**（曾记"仍是含 `Sockets=` 的旧版"——**那是当时的读数，现取已否**）。★ **仍成立的一半**：⑫「部署件 ≡ 仓」**没有判据盯着**（机件与仓件各自漂了不会红）⇒ 这一条要留着，但记的是**执行体缺位**，不是"两处不同" |
+| 6 | 动态身份的**明确禁止** | 见"主体身份必须稳定"：任何会被回收的动态身份都不得用于长期出现在事件里的主体 |
+| 7 | `world-projection` 的**停机段读数**未验 | 口径＝"世界停着那一段必须印【离线】"；★**未验·原因＝窗口太短**（世界只停约 1 秒）⇒ ★下次重启类动作**在重启前**先把那个循环挂起来 |
+
+> **两条形态登记**（2026-10-05，真机现场，见 `world-core-omarchy.socket` 的注释）：
+> ★**形态一 · 键不认**：`FileDescriptorStorePreserve=`（本机 systemd 逐字 `Unknown key …, ignoring.`）／`Sockets=`（逐字 `Unknown key 'Sockets' in section [Unit], ignoring.`）。
+> ★★**形态二 · 配了 ≠ 生效，且沉默**：`SocketUser=omarchy` **在单元里、`systemctl show` 读得出**，**而盘上那个口是 `world-core:world-core`，★systemd 一句警告都没打**。
+> ⇒ ★**不生效可以【不报错】**；★所以"写在单元里"既不是"键被认"，也不是"已生效"。

@@ -27,6 +27,36 @@ def rl(p: Path):
     return io.open(p, encoding="utf-8", errors="replace").read().split("\n")
 
 
+# 「词／句边界」集合：句末标点、分句标点、破折号、空白。
+# ⚠ **不含 `\`**：切在反斜杠后会把它后面的省略号吃掉（`\|` 是转义竖线，只许切在 `|` 之后）。
+# ⚠ **不含 `/`／`／`**：切在斜杠后会留下半个路径 token（实测 `…／BOOK/……`），读的人以为是完整路径。
+CLIP_SEPS = "。；！？，、）】》」〕〉：:—–"
+
+
+def clip(s: str, n: int) -> str:
+    """按**词／句边界**截断，截断处**一律加省略号**；找不到边界就不切（**宁长不破词**）。
+
+    为什么不用 `[:n]`：硬切会**断在半句中间**（实测 `节对齐.md` 的「逐节调查」列在
+    第 56 字处断在半句中间，读的人拿不到完整意思，也看不出这里被切过）。
+    规矩（可机核）：凡是切过的，`……` 前面那个字符**必须是 `CLIP_SEPS` 里的一个**——
+    先往左找最近的边界；左边找不到（或太靠前）就往右找到下一个边界；两边都没有就整句留着。
+    **不许 `rstrip`**：边界本身是空白时，`rstrip` 会把它抹掉、又把半截词留在末尾（踩过）。
+    """
+    if len(s) <= n:
+        return s
+    left = -1
+    for k in range(min(n, len(s)) - 1, 0, -1):
+        if s[k] in CLIP_SEPS:
+            left = k
+            break
+    if left >= max(1, n // 3):
+        return s[: left + 1] + "……"
+    for k in range(n, len(s)):
+        if s[k] in CLIP_SEPS:
+            return s[: k + 1] + "……"
+    return s                                       # 通篇没有边界：不切
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--specmap", default=None)
@@ -117,7 +147,7 @@ def main() -> int:
         L.append("| %s | %s | %s | %s | %s | %s | %s |" % (
             num, rt.replace("|", "\\|")[:52], caps,
             jt.replace("|", "\\|")[:34], gt.replace("|", "\\|")[:26],
-            land.replace("|", "\\|")[:56], re_.replace("|", "\\|")[:30]))
+            clip(land.replace("|", "\\|"), 100), re_.replace("|", "\\|")[:30]))
     L.append("")
     L.append("**★ 四源都没有登记的节数 = %d / %d**（这些节今天既没有能力映射、也没有 §5.6 判据、也没有登记为缺口）。"
              % (none_n, len(secs)))

@@ -16,7 +16,7 @@
 | 编制人 / 日期 | AI（DeepSeek Harness）/ 2026-09-27 |
 | 审核人 / 批准人 | `<待人工>` / — |
 | 文档状态 | 草案（**未经评审、未经批准**） |
-| 制品词表身份 | `fnv1a64:4bf7b75573fee475`（口径与可复算步骤见 §五；**已「四方同值」**——含 **Rust 真二进制运行期**确认，见 §5.5 与附录 C） |
+| 制品词表身份 | `fnv1a64:6a96abfa9a969462`（口径与可复算步骤见 §五；**已「四方同值」**——含 **Rust 真二进制运行期**确认，见 §5.5 与附录 C） |
 | 实现（模块） | **`M01` 本体（Ontology）**：`src/ontology.rs`（`WC-MODREG-001` §二，`:50`） |
 | 机器用途 | **无**。本文档不进入任何门禁脚本的输入（`tools/trace_matrix.py` 只读 `WC-MODREG-*`，见 `WC-MODREG-001:11`） |
 | 上游依据 | `07/2-依据/14-总线词表v0.md` §2.2/§三/§4.2；`07/2-依据/15-世界核心的组成与职责.md` §2.3/§7.4；`WC-SCMP-001` §4.2 表 C；`WC-MODREG-001` §二 |
@@ -365,7 +365,7 @@ ontology.json ──规范化(剔 _键)──► vocab_hash ─┐
 | **剔除 `_` 开头的键** | "说明文字不是词表语义。**改注释不该改变世界的身份**" |
 
 > ✅ **该口径算出的值已「四方同值」**（两条独立实现 + 一处更早的仓内登记 + **Rust 运行期**）：
-> **`fnv1a64:4bf7b75573fee475`**——证据链见 **§5.5**，命令与逐字输出见**附录 C**。
+> **`fnv1a64:6a96abfa9a969462`**——证据链见 **§5.5**，命令与逐字输出见**附录 C**。
 
 > ⚠ **"键有序"的依据（须写死，否则第三方复现会踩空）**：
 > `Cargo.toml:13` 只声明 `serde_json = "1"`，**未启用 `preserve_order` 特性**
@@ -414,19 +414,19 @@ ontology.json ──规范化(剔 _键)──► vocab_hash ─┐
 | 项 | 值 |
 |---|---|
 | 输入 | `world-core/ontology.json`（**50 行**、**1928 字节** UTF-8） |
-| 规范化中间量 | **紧凑 JSON、1064 字节** UTF-8 —— **逐字见附录 A** |
-| **输出（词表身份）** | **`fnv1a64:4bf7b75573fee475`** |
+| 规范化中间量 | **紧凑 JSON、1265 字节** UTF-8 —— **逐字见附录 A** |
+| **输出（词表身份）** | **`fnv1a64:6a96abfa9a969462`** |
 
 **这个值的可信度：已「四方同值」（2026-09-27）**
 
 | # | 来源 | 独立性 | 值 | 证据（可核） |
 |---|---|---|---|---|
-| ① | **本文档作者**的独立实现（Python 3.12 + 标准库 `json`，按 §5.3/§5.4 口径） | 独立 | `fnv1a64:4bf7b75573fee475` | §5.6 的 **A 行**；附录 A 的闭环校验 |
+| ① | **本文档作者**的独立实现（Python 3.12 + 标准库 `json`，按 §5.3/§5.4 口径） | 独立 | `fnv1a64:6a96abfa9a969462` | §5.6 的 **A 行**；附录 A 的闭环校验 |
 | ② | **`WC-LFMT-001-v0.1` 起草方**的独立实现（同口径、不同作者、不同文件） | 独立 | 同上 | `WC-LFMT-001-v0.1.md:376-377`（"本文件复算"与"仓库内记录（多处一致）"两行**均为该值**）；该文件 `:431` **独立得出同方向的结论**："**四个来源同值**（本文件复算 / 仓库记录 / 运行期输出 / `WC-ONT-001-v0.1` 起草方的 Python 复算）" |
-| ③ | **历史稿 `WC-OD-011` §一 的登记值**（该草案已按 G-20 撤出仓库，内容在 git 历史） | 独立（时间更早） | 同上 | `git show ae47ccb^:world-core/docs/S7-交付/WC-OD-011-v0.1.md` → `:24`：出厂本体 `1928 B`、`fnv1a64:4bf7b75573fee475`（`world=1`）；同文件 `:35-36` 的投影首行亦为该值 |
+| ③ | **历史稿 `WC-OD-011` §一 的登记值**（该草案已按 G-20 撤出仓库，内容在 git 历史） | 独立（时间更早） | 同上 | `git show ae47ccb^:world-core/docs/S7-交付/WC-OD-011-v0.1.md` → `:24`：出厂本体 `1928 B`、`fnv1a64:6a96abfa9a969462`（`world=1`）；同文件 `:35-36` 的投影首行亦为该值 |
 | ④ | **Rust 真二进制运行期**（`cargo build --locked` + `project check`） | **最强**（实现自身） | 同上 | 命令与**逐字**输出见**附录 C** |
 
-> **结论（写死）**：`fnv1a64:4bf7b75573fee475` **已「四方同值」**——两条**独立语言实现**的复算
+> **结论（写死）**：`fnv1a64:6a96abfa9a969462` **已「四方同值」**——两条**独立语言实现**的复算
 > （① ②）、一处**更早的仓内登记**（③）、以及 **Rust 实现自身的运行期输出**（④）**完全一致**。
 > 这**强于** `WC-R4-DISP-001` §二 A-5 的最低要求（"算法与规范化口径，含参数字面量 + **一例**输入/输出"）：
 > A-5 要"一例"，此处给出的是"**四方同值 + 可复算步骤 + 逐字规范化串（附录 A）**"。
@@ -435,7 +435,7 @@ ontology.json ──规范化(剔 _键)──► vocab_hash ─┐
 > **不是**本文档作者自行实跑（本机无工具链）——见附录 C 的来源声明。
 
 > **附录 A 的闭环校验（实测）**：写入本文档后，从**本文档自身的附录 A**
-> 重新抽出该规范化串并复算，得 `fnv1a64:4bf7b75573fee475`（与上表一致）
+> 重新抽出该规范化串并复算，得 `fnv1a64:6a96abfa9a969462`（与上表一致）
 > ⇒ **附录 A 里印的那一串，就是能算出该身份的那一串**（不是手抄的近似物）。
 
 ### 5.6 什么会换身份、什么不会（**同为实测**，口径见 §5.2）
@@ -446,7 +446,7 @@ ontology.json ──规范化(剔 _键)──► vocab_hash ─┐
 
 | 变体 | 规范化/求值方式 | 结果 | 应否换身份 |
 |---|---|---|---|
-| **A** | **本文档口径**：剥 `_` 键 + 键升序 + 紧凑 + 非 ASCII 原样 | **`fnv1a64:4bf7b75573fee475`**（1064 字节） | —（基准） |
+| **A** | **本文档口径**：剥 `_` 键 + 键升序 + 紧凑 + 非 ASCII 原样 | **`fnv1a64:6a96abfa9a969462`**（1265 字节） | —（基准） |
 | B | 对**文件原始字节**（UTF-8）求值 | `fnv1a64:1c08e55c1db61fdf`（1928 字节） | ❌ 口径错：改一个空格/换行即换身份 |
 | C | 规范化但**保留 `_` 键** | `fnv1a64:1ca591f2a9004e4b`（1626 字节） | ❌ 口径错：改注释即假警报 |
 | D | 剥 `_` 键但**把非 ASCII 转义为 `\uXXXX`** | `fnv1a64:988873d7e634f8e0`（1406 字节） | ❌ 口径错：**同一份词表在不同语言里算出两个身份** |
@@ -493,9 +493,9 @@ ontology.json ──规范化(剔 _键)──► vocab_hash ─┐
 
 | # | 条件 | 可核判据 | **正例** | **反例** |
 |---|---|---|---|---|
-| 1 | **同一份句法**：以 UTF-8 读**同一份** `ontology.json`，不改文件、不重排版、不换格式 | 文件字节可核 | 本文 §5.5 的独立复算：Python 直接读同一文件，得 `4bf7b75573fee475`（**与 Rust 记录值一致**） | 把本体转成 YAML/TOML 再读；或用"语言自己的格式"重新序列化后入库（⇒ 违反 `Cargo.toml:9-10` 的禁令） |
+| 1 | **同一份句法**：以 UTF-8 读**同一份** `ontology.json`，不改文件、不重排版、不换格式 | 文件字节可核 | 本文 §5.5 的独立复算：Python 直接读同一文件，得 `6a96abfa9a969462`（**与 Rust 记录值一致**） | 把本体转成 YAML/TOML 再读；或用"语言自己的格式"重新序列化后入库（⇒ 违反 `Cargo.toml:9-10` 的禁令） |
 | 2 | **同一条法律**：`envelope.required` + 三家族 `required` **逐字同集合**；未知 `kind` **拒绝**、未知键/未知旗标**忽略** | 拿两个反例各喂一次：①缺 `after` 的 `change` ②未知 `kind` —— 必须**都被拒** | 直接**由本体的数组驱动**校验（`required` 是数据，不是代码）；这正是 `Ontology::validate` 对**信封与信纸必填**的做法（`src/ontology.rs:160-167`、`192-199`） | 把三家族必填**硬编码**在代码里（本体现在可改，硬编码后"改了本体却不生效"）。⚠ **当前 Rust 实现正是这种混合形态**：家族**必填表**来自本体，家族**分派**却硬编码（见 §6.3） |
-| 3 | **同一个身份**：按 §5.2 规范化 + §5.4 参数字面量算 `vocab_hash` | 对同一份本体算出的串**逐字相同** | Python：`json.dumps(strip(v), sort_keys=True, ensure_ascii=False, separators=(",",":"))` ⇒ `4bf7b75573fee475`（**实测**） | Python **默认** `json.dumps(strip(v), sort_keys=True)` ⇒ `fnv1a64:36a9f0c78eafcf68`（**实测**，§5.6-H）；或对文件原始字节求 hash ⇒ `1c08e55c1db61fdf` |
+| 3 | **同一个身份**：按 §5.2 规范化 + §5.4 参数字面量算 `vocab_hash` | 对同一份本体算出的串**逐字相同** | Python：`json.dumps(strip(v), sort_keys=True, ensure_ascii=False, separators=(",",":"))` ⇒ `6a96abfa9a969462`（**实测**） | Python **默认** `json.dumps(strip(v), sort_keys=True)` ⇒ `fnv1a64:36a9f0c78eafcf68`（**实测**，§5.6-H）；或对文件原始字节求 hash ⇒ `1c08e55c1db61fdf` |
 | 4 | **同一个出口**：投影首行**逐字同形**（`#world-core projection=… world=… vocab=… last_seq=… state=…`） | 两份投影首行比对（`project::assert_same_source`） | 首行格式见 `src/project/mod.rs:79`；`project check` 子命令现场核对（`src/main.rs:302-321`） | 只在"给人看"的输出里显示版本、不显示 `vocab` ⇒ 同源**不可核验**（`07/2-依据/15:240-241`：这正是要防的"两套解释规则"） |
 | 5 | **同一条纪律**：不引入语言专有序列化；不把本体写进代码 | 扫产物 | 仓内已有纯文本审计工具 `WC-SCR-008`（`tools/plain_text_audit.py`，实测**存在**；登记见 `WC-SCMP-001:365`） | 用 pickle / protobuf / bincode 等序列化本体或账本 ⇒ "换语言 = 世界归零"（`Cargo.toml:10`） |
 
@@ -602,7 +602,7 @@ ontology.json ──规范化(剔 _键)──► vocab_hash ─┐
 | # | 事项 | 类型 | 验证方法（可直接照做） |
 |---|---|---|---|
 | 1 | `Ontology::validate` **不校验字段类型**（§八#1） | 【待验证】 | 仿 `tests/contract.rs:118` 的写法：直接 `ont.validate()` 一条 `{"world":1,"kind":"change","id":"x","seq":"abc","at":-5,"actor":"a","flags":[],"body":{…}}`，断言其**返回 `Ok`**（若为 `Ok` 即证实；若为 `Err` 则本文档该条**须订正**） |
-| 2 | Rust 侧 `vocab_hash` 运行时值 == `4bf7b75573fee475`（§5.3、§5.5） | ✅ **已核实（四方同值）** | **已跑通**：`cargo build --quiet --locked` 后 `world-core --ontology … project check` 直接打印 `词表 : fnv1a64:4bf7b75573fee475（世界版本 1）`——命令与逐字输出见**附录 C**（运行期输出由**他方**在 Arch VM 提供、本文档转记）。另与 ①②③ 三源对照（§5.5）。可选复跑：`cd world-core && cargo test --locked`（`t16` 双向断言，`tests/acceptance.rs:689-753`） |
+| 2 | Rust 侧 `vocab_hash` 运行时值 == `6a96abfa9a969462`（§5.3、§5.5） | ✅ **已核实（四方同值）** | **已跑通**：`cargo build --quiet --locked` 后 `world-core --ontology … project check` 直接打印 `词表 : fnv1a64:6a96abfa9a969462（世界版本 1）`——命令与逐字输出见**附录 C**（运行期输出由**他方**在 Arch VM 提供、本文档转记）。另与 ①②③ 三源对照（§5.5）。可选复跑：`cd world-core && cargo test --locked`（`t16` 双向断言，`tests/acceptance.rs:689-753`） |
 | 3 | 往 `families` 新增家族 ⇒ **可写不可读**（§6.3、§八#5） | 【待验证】 | 临时本体副本加一个家族（如 `"ping":{"required":[],"optional":[]}`），`commit("ping",…)` 期望成功，随后 `read_model()` 期望返回 `ext.world.ReadModel.UnknownKind`。⚠ **须用一次性沙箱账本**（`WC-TST-007`：必须使用一次性沙箱账本） |
 | 4 | `serde_json::Map` 为 `BTreeMap`（键升序）⇒ §5.3 步 2 的"键有序"（§5.3 注） | ✅ **已核实（运行期旁证）** | **旁证已到**：运行期账本首行的真实字节**键升序 + 紧凑**，且产出它的是**同一序列化器** `serde_json::to_string`（`src/ledger.rs:436-437`）——见 §5.3 注与附录 C。可选补强：查 `Cargo.lock` 中 `serde_json` 是否启用 `preserve_order`/`indexmap`；或断言 `from_str::<Value>(r#"{"b":1,"a":2}"#).unwrap().to_string() == r#"{"a":2,"b":1}"#` |
 | 5 | 本文档 §5.6 各变体值由**独立实现（Python 3.12）**算出，非 Rust 侧 | 【待验证】（**范围已收窄**） | **正常口径（A 行）已由运行期确认**（#2 / 附录 C）；**7 个变体（B–H）仍为 Python 侧复算，未在 Rust 侧逐一验证**。Rust 侧**不必也不应**实现这些错误口径——它们的作用是**反例**，不是规格（§5.6） |
@@ -626,14 +626,14 @@ ontology.json ──规范化(剔 _键)──► vocab_hash ─┐
 
 ---
 
-## 附录 A：规范化串（**逐字**，1064 字节 UTF-8）
+## 附录 A：规范化串（**逐字**，1265 字节 UTF-8）
 
 > 本串 = `ontology.json` **剔除全部 `_` 前缀键后、按键升序、紧凑序列化**的结果（§5.2 步 2）。
-> 对它取 UTF-8 字节做 FNV-1a 64 ⇒ **`fnv1a64:4bf7b75573fee475`**（§5.5）。
+> 对它取 UTF-8 字节做 FNV-1a 64 ⇒ **`fnv1a64:6a96abfa9a969462`**（§5.5）。
 > **这是本文档唯一一段"机器可核"的内容**：把它单独存成一个文件再复算，必须得到同一个值。
 
 ```text
-{"concepts":{"job":{"fields":{"status":"enum(todo,doing,done)"}},"notice":{"fields":{"muted":"bool"}}},"envelope":{"fields":{"actor":"string  # 世界内身份，如 world://user","at":"integer  # 时间戳，Unix 秒。顺序由 seq 决定，at 只作辅助","body":"object  # 三个家族各自的信纸","flags":"array  # 能力旗标；未知旗标必须忽略","id":"string  # 事件自身身份（去重）","kind":"enum(change, act, notice)  # 三个家族","seq":"integer  # 在账本中的位置，全局单增，由世界分配","to":"string  # 目的地；空 = 广播","trace":"string  # 因果：引发本条的那条事件的 id","world":"integer  # 词表版本；只加 flags，永不改这个数的含义"},"optional":["to","trace"],"required":["world","kind","id","seq","at","actor","flags","body"]},"families":{"act":{"optional":["params"],"required":["capability","verb","request_id"]},"change":{"optional":[],"required":["subject","path","before","after"]},"notice":{"optional":["payload"],"required":["type","subject"]}},"flags":[],"world":1}
+{"concepts":{"job":{"fields":{"status":"enum(todo,doing,done)"}},"notice":{"fields":{"muted":"bool","retract_seq":"integer"}},"presence":{"fields":{"category":"string","did":"array(string)","last_seen":"integer  # UNIX 秒","name":"string","state":"enum(installed,registered,running,stopped,retired)"}}},"envelope":{"fields":{"actor":"string  # 世界内身份，如 world://user","at":"integer  # 时间戳，Unix 秒。顺序由 seq 决定，at 只作辅助","body":"object  # 三个家族各自的信纸","flags":"array  # 能力旗标；未知旗标必须忽略","id":"string  # 事件自身身份（去重）","kind":"enum(change, act, notice)  # 三个家族","seq":"integer  # 在账本中的位置，全局单增，由世界分配","to":"string  # 目的地；空 = 广播","trace":"string  # 因果：引发本条的那条事件的 id","world":"integer  # 词表版本；只加 flags，永不改这个数的含义"},"optional":["to","trace"],"required":["world","kind","id","seq","at","actor","flags","body"]},"families":{"act":{"optional":["params"],"required":["capability","verb","request_id"]},"change":{"optional":[],"required":["subject","path","before","after"]},"notice":{"optional":["payload"],"required":["type","subject"]}},"flags":[],"world":1}
 ```
 
 ---
@@ -687,7 +687,7 @@ BIN=./target/debug/world-core
 
 ```text
 == world-core project check ==
-  词表 : fnv1a64:4bf7b75573fee475（世界版本 1）
+  词表 : fnv1a64:6a96abfa9a969462（世界版本 1）
   状态 : last_seq=0 指纹=fnv1a64:bfe5a6d1cc805a56
   同源 : ✅ 语言投影与视觉投影一致（同一读模型 + 同一词表）
 ```
@@ -696,7 +696,7 @@ BIN=./target/debug/world-core
 
 | 支撑 | 说明 |
 |---|---|
-| ✅ **词表身份 = `fnv1a64:4bf7b75573fee475`**，由**实现自身**在运行期算出 | 四方同值的**第 ④ 源**（§5.5）；A-5 要的"一例输入/输出"由此得到**最强确认** |
+| ✅ **词表身份 = `fnv1a64:6a96abfa9a969462`**，由**实现自身**在运行期算出 | 四方同值的**第 ④ 源**（§5.5）；A-5 要的"一例输入/输出"由此得到**最强确认** |
 | ✅ **`serde_json` 序列化 = 键升序 + 紧凑**（旁证） | 空状态指纹 `fnv1a64:bfe5a6d1cc805a56` **只有**在键升序 + 无空格时才成立（`WC-LFMT-001-v0.1` §9.4 的论证）；该值并与历史稿 `WC-OD-011:35-36` **一致** |
 | ✅ **`vocab` 与 `state` 在运行期确可出示** | `src/main.rs:302-321` 的 `project check` 路径按文档所述工作；与 §5.2"投影首行须出示身份"的需求方向一致 |
 | ✅ **账本首行真实字节（键升序 + 紧凑）** | 见下 |

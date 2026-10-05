@@ -777,3 +777,176 @@ fn cli17_checkpoint_resume_falls_back_to_post_hoc_comparison() {
         "必须点名 ResumeMismatch（事后比对）；stderr={err}"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// cli-18 —— ★「在场者名册出口」`presence list`（第 14 轮新增；**只增**）
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// 跑一次 `presence list` 并返回 `(退出码, stdout, stderr)`。
+fn presence_list(lp: &std::path::Path) -> (i32, String, String) {
+    let a = args_for(lp, &["presence", "list"]);
+    run(&as_refs(&a))
+}
+
+/// **cli-18**：`presence list` 是**世界的**名册，**不是**载体清单——三条判据，条条会红。
+///
+/// ## 判据
+///
+/// | # | 情形 | 期望 |
+/// |---|---|---|
+/// | ① | 世界里**已申报**的 3 个在场者 | **必须都在册**，且每条给出 `name`／`category`／`state`／`last_seen` |
+/// | ② | ★ **只在载体里存在、从未向世界申报**的东西 | **不许出现**（夹具里**真造**一份桌面条目） |
+/// | ③ | 名册的**每一条** | **都能在世界里找到出处**：该主体在**账本原文**里有对应事件；且名册集合**恰等于**账本里的在场者主体集合 |
+///
+/// ## 为什么这三条不是同一条的三个说法
+///
+/// ① 拦「漏列」；② 拦「把载体侧的东西算进世界」——名册一旦去读桌面目录或包管理器数据库，
+/// 它就不再是**世界的**名册（那是"两处真相"）；③ 拦「凭空多一条／条目与账本脱钩」，
+/// 而且它**拿账本原文独立复核**，不拿名册自己复核自己。
+///
+/// ## 反例（必红，原始输出见交付回执）
+///
+/// - `cmd_presence` 多吐一条只在载体里存在的条目（`foot`）⇒ ② 变红；
+/// - `cmd_presence` 少吐一条（只报 2 个）⇒ ① 与 ③ 变红；
+/// - `cmd_presence` 列一个账本里没有的主体 ⇒ ③ 变红。
+///
+/// ## 一处**如实**的边界
+///
+/// 夹具用 `std::env::temp_dir()` 下的**私有子目录**（既有 `tmpdir()` 口径）——**不是**直接把
+/// 账本放进 `/tmp`：世界自己的静态墙只看账本**所在目录**的 mode，`/tmp` 本身是 1777 会拒开。
+#[test]
+fn cli18_presence_list_is_the_world_roster_not_the_carrier_inventory() {
+    let d = tmpdir("cli18");
+    let lp = d.join("ledger.jsonl");
+
+    // ── 夹具⓪：世界里申报 3 个在场者（每个 4 格，全部用本体**已声明**的 `presence` 字段）──
+    const THREE: [(&str, &str); 3] = [
+        ("pcmanfm", "file-manager"),
+        ("mousepad", "editor"),
+        ("firefox", "browser"),
+    ];
+    for (name, cat) in THREE {
+        let subject = format!("world://presence/{name}");
+        let bodies = [
+            format!(r#"{{"subject":"{subject}","path":"name","before":null,"after":"{name}"}}"#),
+            format!(r#"{{"subject":"{subject}","path":"category","before":null,"after":"{cat}"}}"#),
+            format!(
+                r#"{{"subject":"{subject}","path":"state","before":null,"after":"installed"}}"#
+            ),
+            format!(
+                r#"{{"subject":"{subject}","path":"last_seen","before":null,"after":1791044558}}"#
+            ),
+        ];
+        for b in &bodies {
+            let a = args_for(&lp, &["append", "change", b]);
+            let (code, out, err) = run(&as_refs(&a));
+            assert_eq!(
+                code, 0,
+                "夹具⓪：申报必须能落账（{b}）；stdout={out} stderr={err}"
+            );
+        }
+    }
+
+    // ── 夹具②：「装在机器上、却从未向世界申报」的东西**真的存在** ──
+    //     在夹具里造一份桌面条目（载体侧真有它），而世界侧**一个字节都没收到过**。
+    let carrier = d.join("carrier/usr/share/applications");
+    fs::create_dir_all(&carrier).unwrap();
+    let ghost = carrier.join("foot.desktop");
+    fs::write(&ghost, "[Desktop Entry]\nName=foot\nType=Application\n").unwrap();
+    assert!(ghost.is_file(), "夹具②：载体侧的桌面条目必须真的建出来了");
+
+    // 世界侧不许有它——否则②那条反例是**假的**（这一条是反例自身的正控）
+    let a = args_for(&lp, &["state", "--json"]);
+    let (code, sj, err) = run(&as_refs(&a));
+    assert_eq!(code, 0, "夹具：state --json 必须 rc=0；stderr={err}");
+    let sjv: serde_json::Value = serde_json::from_str(sj.trim()).unwrap();
+    assert!(
+        sjv["objects"].get("world://presence/foot").is_none(),
+        "夹具②：世界里**不许**有 `world://presence/foot`（本条要判的正是「载体里有、世界没有」）"
+    );
+
+    // ── 名册 ──
+    let (code, out, err) = presence_list(&lp);
+    assert_eq!(
+        code, 0,
+        "`presence list` 必须 rc=0；stdout={out} stderr={err}"
+    );
+
+    // 判据①：3 个都在册，且每条给出四格（值按既有读出口口径＝JSON 原样）
+    for (name, cat) in THREE {
+        let subject = format!("world://presence/{name}");
+        assert!(
+            out.contains(&subject),
+            "判据①：`{subject}` 必须在册；名册=\n{out}"
+        );
+        let line = out
+            .lines()
+            .find(|l| l.contains(&subject))
+            .unwrap_or_else(|| panic!("判据①：找不到 `{subject}` 那一行；名册=\n{out}"));
+        for (f, want) in [
+            ("name", format!("\"{name}\"")),
+            ("category", format!("\"{cat}\"")),
+            ("state", "\"installed\"".to_string()),
+            ("last_seen", "1791044558".to_string()),
+        ] {
+            assert!(
+                line.contains(&format!("{f}={want}")),
+                "判据①：`{subject}` 那条必须给 `{f}={want}`；实得：{line}"
+            );
+        }
+    }
+
+    // 名册里 `world://presence/` 的条目行（缩进两格、以主体名开头）
+    let listed: Vec<&str> = out
+        .lines()
+        .filter(|l| l.trim_start().starts_with("world://presence/"))
+        .collect();
+
+    // ── 判据②（**排在①的计数形态之前**：让②能独立变红，而不是被计数那条抢先）──
+    //    只在载体里存在、从未申报的假在场者 ⇒ **不许出现**
+    assert!(
+        !out.contains("world://presence/foot"),
+        "判据②：名册不许出现未申报的假在场者；\n{out}"
+    );
+    assert!(
+        !out.contains("foot"),
+        "判据②：名册里不许出现只在载体里存在的名字（名册**不读**桌面目录／包管理器）；\n{out}"
+    );
+
+    // ── 判据③ ──
+    //    名册的每一条都能在**账本原文**里找到出处；且名册集合恰等于账本里的在场者主体集合。
+    let raw = fs::read_to_string(&lp).unwrap();
+    let subj_in_ledger: std::collections::BTreeSet<String> = raw
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter_map(|v| v["body"]["subject"].as_str().map(str::to_string))
+        .collect();
+    let roster: std::collections::BTreeSet<String> = listed
+        .iter()
+        .map(|l| l.split_whitespace().next().unwrap().to_string())
+        .collect();
+    for s in &roster {
+        assert!(
+            subj_in_ledger.contains(s),
+            "判据③：`{s}` 必须在账本原文里有对应事件（出处可查）；账本里的主体={subj_in_ledger:?}"
+        );
+    }
+    let ledger_presences: std::collections::BTreeSet<String> = subj_in_ledger
+        .iter()
+        .filter(|s| s.starts_with("world://presence/"))
+        .cloned()
+        .collect();
+    assert_eq!(
+        roster, ledger_presences,
+        "判据③：名册集合必须**恰等于**账本里的在场者主体集合（`presence list` 是算出来的，不是另记的一份）"
+    );
+
+    // ── 判据①（**计数形态**：多一条少一条都红）──
+    assert_eq!(
+        listed.len(),
+        3,
+        "判据①：名册恰有 3 条（多一条少一条都红）；实得 {listed:?}\n{out}"
+    );
+    println!("---- cli18 名册原文（现取）----\n{out}");
+}

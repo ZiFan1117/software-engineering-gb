@@ -42,9 +42,267 @@
 
   "concepts": {
     "_comment": "世界里有哪些实体、各有哪些字段（最小集；扩展走账本里的词表定义事件）",
-    "notice": { "fields": { "muted": "bool" } },
-    "job": { "fields": { "status": "enum(todo,doing,done)" } }
+    "notice": { "fields": { "muted": "bool", "retract_seq": "integer" } },
+    "job": { "fields": { "status": "enum(todo,doing,done)" } },
+    "presence": { "fields": { "name": "string", "category": "string", "state": "enum(installed,registered,running,stopped,retired)", "did": "array(string)", "last_seen": "integer  # UNIX 秒" } }
   },
 
-  "flags": []
+  "flags": [],
+
+  "_five_elements": {
+    "_why_underscore": "★ 五要素分节一律挂在 `_` 前缀顶层键下。口径（本项目已定案）：`Ontology::vocab_hash` **递归剔除** `_` 开头的键 ⇒ 在 `_` 键下加分节**不换词表身份**（`fnv1a64:6a96abfa9a969462` 保持不变），而装载器照常读得到它们、存在性判据照做。**不许**为了加节去动任何非 `_` 顶层键。",
+    "_why_concepts_stays": "`concepts`（世界里的实体与字段）是**已有的非 `_` 顶层键**，它今天参与词表身份 ⇒ 本批**原样冻结**。它的**权威读法**已迁到下面的 `_objects`（装载器优先读 `_objects`，`concepts` 作为**冻结映射**保留是为了不改身份）。两份不同源的地方：`concepts` 缺 `instance_mode`／`_nested`，那两样只在 `_objects` 里。",
+    "_reading_order": "装载器逐节读：对象＝`_objects`（缺则退回冻结的 `concepts` 段）、关系＝`_links`、接口·能力＝`_interfaces`、动作＝`_actions`、函数＝`_functions`。**任一节缺失 ⇒ 拒启**（错误码 `ext.world.Ontology.MissingSection`）。"
+  },
+
+  "_objects": {
+    "_element": "对象（Object）—— 类型 → 属性（值类型参与校验）",
+    "_comment": "『世界里存在什么』。字段值是**机器可读的类型声明**（`bool`／`string`／`integer`／`number`／`array`／`object`／`ref(<类型>)`／`enum(a,b,…)`）；**不是**这几种写法的自由度说明文字一律**放行**（本体没声明类型口径，判据不替它发明）。",
+    "notice": {
+      "fields": { "muted": "bool", "retract_seq": "integer" },
+      "instance_mode": "many"
+    },
+    "job": {
+      "fields": { "status": "enum(todo,doing,done)", "step": "integer", "steps_total": "integer", "step_label": "string", "retract_seq": "integer" },
+      "instance_mode": "many"
+    },
+    "presence": {
+      "fields": { "name": "string", "category": "string", "state": "enum(installed,registered,running,stopped,retired)", "did": "array(string)", "last_seen": "integer  # UNIX 秒" },
+      "instance_mode": "many"
+    },
+    "surface": {
+      "fields": { "name": "string", "role": "string", "order": "integer", "visible": "bool", "retract_seq": "integer" },
+      "instance_mode": "many"
+    },
+    "cell": {
+      "fields": { "owner": "ref(surface)", "order": "integer", "shown": "bool", "label": "string", "value": "string", "tooltip": "string", "style": "string", "action": "string", "enabled": "bool", "retract_seq": "integer" },
+      "instance_mode": "many"
+    },
+    "port": {
+      "fields": { "name": "string", "path": "string", "identity": "string", "mode": "string", "owner_uid": "integer", "state": "enum(declared,listening,retired)", "retract_seq": "integer" },
+      "instance_mode": "many"
+    }
+  },
+
+  "_links": {
+    "_element": "关系（Link）—— 命名关系 ＋ 两端类型 ＋ 基数",
+    "_comment": "『哪两类对象之间允许存在什么连接』。这是**一等声明**，不是外键。两端的类型必须已在 `_objects` 里声明，否则 `ext.world.Ontology.UndeclaredRelationEndpoint`。★ **关系是【世界里的一条记录】，不是两个应用之间的连线** —— 应用之间永远没有直连；两个应用「有关系」这件事，是世界从它自己的记录里【算】出来的（`C10 投递：「该给谁」由世界算`）。",
+    "part-of": {
+      "from": "notice",
+      "to": "job",
+      "card": "many",
+      "bidirectional": false
+    },
+    "cell-of": {
+      "from": "cell",
+      "to": "surface",
+      "card": "many",
+      "bidirectional": false
+    },
+    "runs-on": {
+      "from": "presence",
+      "to": "presence",
+      "card": "many",
+      "bidirectional": false
+    },
+    "speaks-on": {
+      "from": "presence",
+      "to": "port",
+      "card": "many",
+      "bidirectional": false
+    }
+  },
+
+  "_interfaces": {
+    "_element": "接口·能力（Interface）—— 可读／可配／可调",
+    "_comment": "『这类东西能被怎样对待』。条文落在**能力**上（不是落在具体类型／具体对象上）——授权只在 `_permissions` 里按**能力名**给。",
+    "notice.mute": { "kind": "invoke", "what": "把一条通告静音" },
+    "notice.unmute": { "kind": "invoke", "what": "解除静音" },
+    "job.start": { "kind": "invoke", "what": "起一个作业" },
+    "job.finish": { "kind": "invoke", "what": "结束一个作业" },
+    "job.cancel": { "kind": "invoke", "what": "取消一个作业" },
+    "ledger.compact": { "kind": "invoke", "what": "压实账本（不可逆）" },
+    "world.rekey": { "kind": "config", "what": "换世界的钥匙材料（不可逆）" },
+    "world.migrate": { "kind": "config", "what": "迁移世界（不可逆）" },
+    "presence.report": { "kind": "invoke", "what": "在场者报告自己的状态（**申报面**；「有没有许可」不在这里定，由 `_permissions.grants` ＋ `default: deny` 决定）" }
+  },
+
+  "_actions": {
+    "_element": "动作（Action）",
+    "_comment": "『怎么改』。动作是**唯一**的写入通道。每一条动作必须**引用一个已声明的能力**（`capability` 字段）——引用了不存在的能力 ⇒ `ext.world.Ontology.ActionCapabilityUnknown`。",
+    "notice.mute": { "capability": "notice.mute", "reversible": true },
+    "notice.unmute": { "capability": "notice.unmute", "reversible": true },
+    "job.start": { "capability": "job.start", "reversible": true },
+    "job.finish": { "capability": "job.finish", "reversible": true },
+    "job.cancel": { "capability": "job.cancel", "reversible": true },
+    "ledger.compact": { "capability": "ledger.compact", "reversible": false },
+    "world.rekey": { "capability": "world.rekey", "reversible": false },
+    "world.migrate": { "capability": "world.migrate", "reversible": false },
+    "presence.report": { "capability": "presence.report", "reversible": true }
+  },
+
+  "_functions": {
+    "_element": "函数（Function）—— **只有入口名**（引用到底层函数）",
+    "_comment": "『怎么算』。函数**不改本体**——要落地只能被某个动作引用、由该动作执行。本表**只收入口名**：它是一张**引用表**，代码不进本体。",
+    "_no_command_literal": "★ 判据：入口表里出现**命令字面量**（带空格、带 `/` 的路径、带引号，或**已登记的宿主包管理器命令名**）⇒ 红（`ext.world.Ontology.FunctionLiteralNotAllowed`）。理由：命令今天硬编码在 Rust 里（`src/carrier/**`），把 `pacman` 这类字面量抄进本体等于让本体长出**第二份**可执行事实。",
+    "_registered_host_commands": ["pacman", "apt", "apt-get", "dnf", "yum", "zypper", "apk", "brew", "choco", "winget", "systemctl", "pacman-key"],
+    "entries": {}
+  },
+
+  "_permissions": {
+    "_element": "许可条文（**不是**能力本身：授权授在**能力**上）",
+    "_comment": "『谁能把某个能力授给谁／从谁收回』。条文并入本体，但**授权对象只能是 `_interfaces` 里已声明的能力**——授在**具体类型**或**具体对象**上 ⇒ 红（`ext.world.Ontology.GrantNotOnCapability`）。",
+    "_default_closed": "★ 判据：`default` 必须**显式**写 `\"deny\"`。缺 `default` 或写成别的词 ⇒ 红（`ext.world.Ontology.PermissionDefaultOpen`）——默认允许不是安全默认，是法律没写全。",
+    "default": "deny",
+    "grants": {
+      "notice.mute": { "who": ["world://user", "world://agent/dsh"], "scope": ["world://user", "world://agent/dsh", "world://presence/omarchy"] },
+      "notice.unmute": { "who": ["world://agent/dsh"], "scope": ["world://agent/dsh", "world://presence/omarchy"] },
+      "ledger.compact": { "who": ["world://user"], "scope": ["world://*"] },
+      "presence.report": { "who": ["world://user"], "scope": ["world://presence/pcmanfm", "world://presence/omarchy"] },
+      "_omarchy_note": "★ 新身份 `world://presence/omarchy`（界面自己的口 `/run/world-core/omarchy.sock`）：**只动 `scope`，不动 `who`**。理由可核——`src/lib.rs::check_presence_levels` 判「许可」时逐字读的是 `p.scope`（`gate::pattern_matches(pat, actor)`），**不读 `who`**；而本段自己的口径写着 `who` ＝『谁能把某个能力授给谁／从谁收回』⇒ 把界面写进 `who` 就是**另外给它一份「发许可证」的权力**，本批**不给**。★ 授权只授在**能力**上（`notice.mute`／`notice.unmute`／`presence.report`），**没有一条授在具体对象上**。★ 拿到许可 ≠ 能说话：`world://presence/*` 还要过第①级**申报**（它名下要有格），两级都过才交回门禁。",
+      "_omarchy_scope_why": "为什么这三条：界面的「点一下」是**一条 `act`**（家族 act，能力＝动作名），不是直接改字段；它今天要用的能力就是「静音／解除静音」，另加它自己报在场状态用的 `presence.report`。★ 与本项目既有口径一致：**能力清单不在这里发明**——名字都取自 `policy.json.capabilities` ∩ 本文件 `_interfaces`（两处同集由 `World::open` 逐项核对）。"
+    },
+    "_presence_report_note": "★ 在场者两级分开（顺序是死的）：①**申报**给的是“依据”（该在场者有没有在世界里申报过——判据＝折叠出的状态里这个主体有没有格）；②**授权**给的是“许可”（`grants.<能力>.scope` 命中该主体；`default: deny`）。**二者不许合并**——一旦合并，等于在场者自己给自己发许可证，世界就不再管着它。报得再全，也不自动拿到任何能力；开放只由许可决定。",
+    "_grant_via_ledger": "授予／收回是**事实**，走账本事件（`change` 写 `world://user` 的能力格 → 门禁 `authorize_write` 裁决 → 落笔）。本段只是**条文的声明面**：谁**有资格**授予、授给谁。改本段＝改法律（走评审）；改一次授权＝落一条事件。"
+  },
+
+  "_subscribe": {
+    "_element": "订阅形状 —— 「**订户可以要什么**」（接口·能力面，不是新的领域分节）",
+    "_why": "订阅要说清的是**形状**：订户能按什么去要、要到的东西长什么样。它不替订户记进度——见下 `since_seq` 的口径。",
+    "shape": {
+      "what": "订户按「**从第几条起**」+「要哪几类事件」两个维度提要求；世界按这个要求给一段**读物**。",
+      "since_seq": {
+        "required": true,
+        "_why": "**位点记在收件人自己那里**（唯一权威），世界**不替收件人存进度**：世界一旦替它存，就多出一份会漂的真相。⇒ 调用方**必须**给出位点；**缺则拒**（错误码 `ext.world.Subscribe.NoSinceSeq`）。",
+        "_recovery": "叫醒**可以漏**——漏了由订户拿自己的位点**重新按 `seq` 补读**，不靠世界记。"
+      },
+      "stale_forbidden": {
+        "rule": "**读不到就说读不到**：世界若不可用（进程停掉、账本读不出），订阅面**不许打印任何缓存／上一次的数**。",
+        "_why": "旧数被当成现状，比没有数更坏——那是把『曾经是什么』冒充『现在是什么』。"
+      }
+    },
+    "_status": "本键**只声明形状**；执行体（`subscribe` 命令）另行落地。按本仓口径，这属「**先声明、后使用**」——`usage` 会如实把它报成『已声明、尚未被使用』，**只报告、绝不红**。"
+  },
+
+  "_pending_tables": {
+    "_element": "本批**只登记、不实现**的四张必配表（防止范围爆炸）",
+    "_comment": "这四张表今天**不存在**（本体里没有它们的节，代码里也没有读它们的路径）。本批把它们的缺口**如实写在这里**，不落实现、不假装已定。",
+    "value_types_and_units": "**值的类型与单位**：`_objects` 的字段值今天只给**类型词**（`bool`／`enum(…)`），**没有单位**（秒／字节／档位）与量纲。缺口：`at` 声明 `integer  # Unix 秒`，那个『秒』只活在注释里，判据读不到它。",
+    "clock_and_timezone": "**时钟与时区口径**：`at` 是 Unix 秒（UTC 绝对时刻）——这条只在 `envelope.fields` 的说明文字里，**没有**『同一账本在任何时区折叠出同一状态』的判据（今天靠『不读时钟』这条实现事实成立，未立判据）。",
+    "identity_and_naming": "**主键·标识与命名规则**：实例名的**唯一性**今天无人判（`world://notice/a` 写两次是两次普通写入）；标识与命名的字符集／长度／大小写口径**没有**任何声明面。",
+    "version_migration": "**版本迁移面**：`world` 是词表版本（升版即拒启，已实现）；但**事件层的字段含义演进（upcasting）落点未定**——`WC-SRS-001` 的 `REQ-F-027` 只落『加法演进那一层』，`WC-FSR-001` 的 `SL-06`／`CON-04` 记着**待人裁**（责任人＝项目负责人，时点＝S4 中段）。本批不选路。"
+  },
+
+  "_meta_layers": {
+    "_comment": "★ 以下两节**挂不进五要素**，如实标注归属，不假装它们挂在某个要素下（评审甲 2026-09-28 判定）。写法上仍是 `_` 键下的独立节。**十二节的完整归属表见 `_section_map`**——那里是权威，本段只是人读的展开。",
+    "reading_and_verification_layer": "**元层**：读法定义／验法。『怎么摆』（投影首行四要素、规范化字节口径）与『怎么验』（各要素上的判据）不是对象、不是关系、不是能力、不是动作、不是函数——它们是**对**这些要素的读法与验法。逐条实现今天分布在 `src/project/**`、`src/readmodel.rs` 与 `check.sh` 各步。",
+    "ingress_layer": "**接入层**：接入映射（哪个口＝哪个身份）。它今天在 `policy.json` 的 `listeners`（**不是**本体），依据书 §4.3『身份与允许分开』与协议 §8『口给出身份』。它不是五要素之一——它是『外部怎么进来』，与『世界内部有什么』不同层。本批**不动它**（那一段正是另一工区的在飞改动）。"
+  },
+
+  "_section_map": {
+    "_comment": "★ **十二节的归属表**（写死在这里，供人读、也供判据读）。**判据**：本表声明的 `_` 分节键集合 == 文件里**实际存在**的 `_` 分节键集合（实际＝全部顶层 `_` 键 − `_not_domain_sections` 里列名的键）⇒ 多一处、少一处都拒启（`ext.world.Ontology.SectionMapDrift`）。⇒ **新加一个 `_` 分节却不在本表列名，装不起来。**",
+    "_why": "为什么要把「谁挂在哪」写死：『其余一切挂进五要素』这句话**不成立**（评审甲 2026-09-28 逐节试挂后判定）——十二节里只有 4 节**整节**挂得进、4 节**半挂**、4 节**挂不进**。不写死就会出现「某节到底算不算某个要素的一部分」各说各话，而**没有任何东西会因此变红**。★ **不许**为了把某节塞进某个要素而重命名它或合并它的语义：`attach: \"out\"` 的节**如实**留在元层／接入层。",
+    "_attach_kinds": {
+      "full": "整节属于该要素",
+      "half": "半挂：有一半属于该要素，另一半不属（理由写在 `_why_half`）",
+      "out": "**挂不进**五要素：归属元层或接入层，**不**声称它挂在某个要素下"
+    },
+    "_homes": [
+      "对象（Object）",
+      "关系（Link）",
+      "接口·能力（Interface）",
+      "动作（Action）",
+      "函数（Function）",
+      "元层（Meta）",
+      "接入层（Ingress）"
+    ],
+    "_not_domain_sections": {
+      "_note": "这些 `_` 键**不是**十二节里的分节（是说明／总表／本表自己／登记表）。★ **它们必须逐一在此列名**——新加一个 `_` 键而既不在 `sections` 里、也不在此列名 ⇒ 拒启。",
+      "_comment": "顶层说明文字（一行）",
+      "_source": "出处说明（一行）",
+      "_five_elements": "五要素的总口径表（`_` 键口径、读序、为什么 `concepts` 冻结）",
+      "_section_map": "本表自己",
+      "_pending_tables": "四张必配表的**登记**（缺口清单，不是分节）"
+    },
+    "sections": {
+      "类型（对象）": {
+        "home": "对象（Object）",
+        "attach": "full",
+        "keys": ["_objects"],
+        "_note": "『世界里存在什么』：类型 → 属性（值类型参与校验）。冻结映射 `concepts`（非 `_` 键）是它的**身份侧**，两处同名字段的一致性由 `ConceptsDrift` 盯着。"
+      },
+      "关系": {
+        "home": "关系（Link）",
+        "attach": "full",
+        "keys": ["_links"],
+        "_note": "命名关系 ＋ 两端类型 ＋ 基数。**端点必须已声明**。"
+      },
+      "接口·能力": {
+        "home": "接口·能力（Interface）",
+        "attach": "full",
+        "keys": ["_interfaces", "_subscribe"],
+        "_note": "可读／可配／可调。条文落在**能力**上，不落在具体类型／具体对象上。（`_subscribe` 同族：它说的是「**订户可以要什么**」，不是新的领域分节。）"
+      },
+      "动作": {
+        "home": "动作（Action）",
+        "attach": "full",
+        "keys": ["_actions"],
+        "_note": "唯一写入通道；每条动作**必须引用一个已声明的能力**。"
+      },
+      "函数入口": {
+        "home": "函数（Function）",
+        "attach": "half",
+        "_why_half": "**只挂「引用」那一半**：本表只收入口名（引用到底层函数），**代码不进本体**。函数不改本体，要落地只能被某个动作引用、由该动作执行。",
+        "keys": ["_functions"]
+      },
+      "许可条文": {
+        "home": "接口·能力（Interface）",
+        "attach": "half",
+        "_why_half": "**授权不是能力**：条文（谁能把某个能力授给谁／从谁收回）并入本体、**授权对象只能是能力**；但**授予／收回这件事实走账本事件**，不写进条文。⇒ 一半是条文（属法律面）、一半是事实（属账本）。",
+        "keys": ["_permissions"]
+      },
+      "订阅形状": {
+        "home": "动作（Action）",
+        "attach": "half",
+        "_why_half": "**半挂**：`notice` 家族的可选格 `payload` 的形状（订阅什么、回什么）由**动作**的产物决定，但形状本身不是动作的声明面（本体今天不声明它）。",
+        "keys": [],
+        "_where": "今天**本体里没有独立分节**：形状活在 `WC-IRS-001` 的接口面与 `src/delivery.rs` 的投递语义里。"
+      },
+      "错误码与结局": {
+        "home": "动作（Action）",
+        "attach": "half",
+        "_why_half": "**半挂**：『这件事的结局如何、失败给什么码』是动作的收束面，但错误码的**清单**不属动作的声明（动作只声明它引用哪个能力）。",
+        "keys": [],
+        "_where": "今天**本体里没有独立分节**：码族活在 `src/error.rs` 与 `WC-IC-001` §三 的错误码表里；本体侧只由各判据的 `Violation` 报出。"
+      },
+      "接入映射": {
+        "home": "接入层（Ingress）",
+        "attach": "out",
+        "_why_out": "**挂不进五要素**：『哪个口＝哪个身份』说的是**外部怎么进来**，与『世界内部有什么』不同层（书 §4.3『身份与允许分开』、协议 §8『口给出身份』）。",
+        "keys": ["_meta_layers"],
+        "_where": "权威载体在 `policy.json` 的 `listeners`（**不是**本体）；本体这一侧只在 `_meta_layers` 里**如实登记**它不在此处。"
+      },
+      "读法定义": {
+        "home": "元层（Meta）",
+        "attach": "out",
+        "_why_out": "**挂不进五要素**：它是『**怎么摆**』——对要素的读法（投影首行四要素、规范化字节口径），不是第五个要素。",
+        "keys": ["_meta_layers"],
+        "_where": "实现分布在 `src/project/**`、`src/readmodel.rs`；本体这一侧只在 `_meta_layers` 里登记。"
+      },
+      "旁道与收据与缓存": {
+        "home": "元层（Meta）",
+        "attach": "out",
+        "_why_out": "**挂不进五要素**：旁道（大对象不走主干道）／收据／缓存说的是**字节怎么走、什么不是真相**，不是世界里的东西。",
+        "keys": [],
+        "_where": "今天**本体里没有独立分节**：实现落在 `src/checkpoint.rs`（缓存＝快照，**非真相**）与 `src/delivery.rs`；书 §4.5 的货运道面**尚未实现**（已在 `_pending_tables` 之外如实登记）。"
+      },
+      "验法": {
+        "home": "元层（Meta）",
+        "attach": "out",
+        "_why_out": "**挂不进五要素**：它是『**怎么验**』——挂在各要素上的判据，本身不是要素。",
+        "keys": ["_meta_layers"],
+        "_where": "各要素的判据落在 `src/ontology.rs` 的 `Violation` 族与 `tests/**`；本体这一侧只在 `_meta_layers` 里登记。"
+      }
+    }
+  }
 }

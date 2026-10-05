@@ -38,6 +38,7 @@
 //! **给人看的东西也要能被机器核对**，这是本项目对"可信"的最低要求。
 
 pub mod language;
+pub mod surface;
 pub mod visual;
 
 use crate::readmodel::State;

@@ -697,7 +697,7 @@ B 类 22 条至少要先改 §五 的覆盖声明，C 类 9 条要先让用例�
 | 静态墙调用点 **6 行 / 5 个文件** | `grep -rn "guard::assert_after_create\|guard::assert_not_other_writable" src/` | `channel.rs:172`、`checkpoint.rs:81`、`gate.rs:206`、`ledger.rs:245`、`ledger.rs:266`、`ontology.rs:81` |
 | `to` / `trace` 在 `src/` 与 `tests/` 的读写命中 **0** | `grep -rn '"to"\|"trace"' src/ tests/` | 无输出（0 命中） |
 | 本体：`envelope.required` **8** / `optional` **2** / `concepts` **2** / `flags` **[]** | `python -c "import json;d=json.load(open('ontology.json'));print(len(d['envelope']['required']),len(d['envelope']['optional']),len([k for k in d['concepts'] if not k.startswith('_')]),d['flags'])"` | `8 2 2 []` |
-| 策略：`capabilities` **8** / `subjects.allow` **2** | `python -c "import json;p=json.load(open('policy.json'));print(len([k for k in p['capabilities'] if not k.startswith('_')]),len(p['subjects']['allow']))"` | `8 2` |
+| 策略：`capabilities` **9** / `subjects.allow` **4** | `python -c "import json;p=json.load(open('policy.json'));print(len([k for k in p['capabilities'] if not k.startswith('_')]),len(p['subjects']['allow']))"` | `9 4` |
 | `tools/` 文件 **8** 个 | `ls tools/ \| wc -l`（或等价的目录列举） | 8 |
 | 本体静态墙**已覆盖**本体一路 | `grep -n "本体" src/ontology.rs src/guard.rs` | `src/ontology.rs:81`：`guard::assert_not_other_writable(path, "本体（法律·形状）")` |
 | 祖先链**未遍历**（只查直接父目录） | `grep -n "path.parent()" src/guard.rs` | `src/guard.rs:69`：`if let Some(dir) = path.parent()…` |
