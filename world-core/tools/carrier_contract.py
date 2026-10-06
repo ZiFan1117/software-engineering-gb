@@ -63,8 +63,7 @@ STATE_DIR = '/var/lib/world-core'
 #   与 `world-core-omarchy.socket`，而目录里有 6 件）。
 #   ⇒ **唯一来源＝`install.sh` 的 `UNITS=`**（见 `unit_list`）。`UNITS_FALLBACK` 只在**读不到 install.sh**
 #     时用一个"最保守的四件"占位，**且它一被用到 ⇒ ①a／⑪ 判红**（不是静默降级）。
-UNITS_FALLBACK = ['world-core.socket', 'world-core.service',
-                  'world-core-projectd.service', 'world-core-actd.service']
+UNITS_FALLBACK = ['world-core.socket', 'world-core.service', 'world-core-actd.service']
 
 # ★ **已登记"未启用"**（在目录里、**不在清单里**）——★**每一件都必须写出原因**；★它不是"免检名单"：
 #   `⑪b` 仍然对**任何未登记的**多出来的单元件判红，`⑪c` 把这几件**连原因一起报出来**（不许藏着）。
@@ -75,14 +74,22 @@ UNITS_FALLBACK = ['world-core.socket', 'world-core.service',
 #   ⇒ ★**本条口径**：★`NOT_INSTALLED` **只登记"未启用"这个事实 ＋ 原因指针**；
 #     ★★ **不许把"当前机器状态"（有没有某个用户／某个口在不在听）写死在这里** ——
 #     ★那类事实**归它自己的判据（⑨／⑫ 那条「盘上属主 ≡ 映射 uid」）现取**，★不在这里复述。
-NOT_INSTALLED = {
-    'world-core-projectd.service':
-        'Lead 令 item 2 摘掉；★**理由待重核**（原文写的是 `ExecStart=… project serve` 指向**不存在的子命令**，'
-        '而 2026-10-05 机上有 `… project serve /run/world-projectd/project.sock` 在跑、单元件也在 `/etc/systemd/system/`'
-        '（929 B）⇒ ★**这两条读数与那句理由不一致**；★本席未读 `cmd_project` ⇒ **不判谁对**，只记"待重核"）'
-        '；＋ `Restart=on-failure/2s`（★装上每 2 秒抖一次这一条**未被否**）；'
-        '★未跟踪件（无 git 解析根）⇒ **只摘不删**',
-}
+#
+# ★★ **2026-10-06：本表清空** —— 唯一那一件（`world-core-projectd.service`）**已退役**（工作树移除，git 历史留）。
+#   退场前定案的三条（都是现取的，不是推定）：
+#     ① **它的 `ExecStart` 是死子命令**：`cmd_project`（`src/main.rs:1068`）只认
+#        `language`／`visual`／`surface`／`check` —— **没有 `serve`**；配上 `Restart=on-failure`＋`RestartSec=2s`
+#        ⇒ 装上去就是每 2 秒抖一次（`install.sh` 原本就是这么写的，2026-10-06 复核**成立**）。
+#        （★ 先前那条"待重核"到此闭合：当时看到的 `"accept" | "serve"` 属于 **`cmd_channel`**，不是 `cmd_project`。）
+#     ② **它与设计要求直接矛盾**：`deploy/README.md` §四／`WC-ARCH-001`／`系统全景图` 三处都写
+#        "投影服务＝**独立 uid `world-projectd`**、**零写权限**"，而单元件在 2026-10-05 被改成
+#        `User=world-core`／`Group=world-core` ⇒ **一个事实两个说法**。
+#     ③ **当初"不许删"的理由已消失**：它原先是**未跟踪件**（无解析根），而 2026-10-06 的收口提交
+#        把它带进了版本控制（`git ls-files` 可核）⇒ 按本仓"退场件要给解析根"的口径，**现在退场合规**。
+#   **解析根**：`git show deafbae:world-core/deploy/world-core-projectd.service`（退场前提交）。
+#   **设计要求仍在**（未落地）：`WC-ARCH-001`／`系统全景图`／`deploy/README.md` §四 —— 本件**不替它们改口径**；
+#   "设计已定·未落地"这一档按既有先例（`grant_path_guard.py` 的 G-02 那一族）**登记**。
+NOT_INSTALLED = {}
 
 
 def read(p):

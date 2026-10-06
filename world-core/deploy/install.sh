@@ -22,7 +22,10 @@ ACTD_STATE=/var/lib/world-actd
 ACTD_RUN=/run/world-actd
 
 CORE_USER=world-core
-PROJ_USER=world-projectd
+# ★ 2026-10-06：原先这里还有 `PROJ_USER=world-projectd` —— **已删**。它只服务于已退役的
+#   投影单元 `world-core-projectd.service`（见下面 `UNITS` 上方那段定案）；设计要求（独立 uid、
+#   零写权限）仍在 `WC-ARCH-001`／`系统全景图`／`deploy/README.md` §四，属"设计已定·未落地"，
+#   **不替它在这台机器上建一个用不上的用户**。
 ACTD_USER=agent
 # ★ 界面（Omarchy）自己的系统身份：它连的是自己的口 `/run/world-core/omarchy.sock`，
 #   而那个口在法律里映射到 `world://presence/omarchy` ⇒ **口给出身份**，不靠请求体自称。
@@ -33,12 +36,18 @@ DSH_USER=dsh
 
 # 装哪些单元（**这份清单是权威**：装了哪几个口＝这条机器上世界对外开了哪几个口）
 #
-# ★ `world-core-projectd.service` **已从清单摘除**（Lead 令 item 2，二者择一取"摘掉"）：
-#   它的 `ExecStart=… project serve` 指向**不存在的子命令**（`cmd_project` 只认
-#   `language`／`visual`／`check`），配上 `Restart=on-failure` ＋ `RestartSec=2s`
-#   ⇒ **装上去就是每 2 秒抖一次**。
-#   ★**单元件本体保留在 `deploy/` 里、不删**：它**是未跟踪件**（无 git 历史 ⇒
-#   **没有解析根**），按本项目"退场的件要给解析根"的口径，**没有解析根就不许静默退场**。
+# ★★ 2026-10-06：`world-core-projectd.service` **已退役**（工作树移除）⇒ `deploy/` 现在**正好**＝本清单 5 件。
+#   三条定案（都是现取，非推定）：
+#     ① 它的 `ExecStart=… project serve` 是**死子命令**（`cmd_project` 只认
+#        `language`／`visual`／`surface`／`check`）＋ `Restart=on-failure`／`RestartSec=2s`
+#        ⇒ 装上去每 2 秒抖一次；
+#     ② 它与设计要求**直接矛盾**：设计要"独立 uid `world-projectd`、零写权限"，
+#        而单元件 2026-10-05 被改成 `User=world-core`／`Group=world-core`（一个事实两个说法）；
+#     ③ 当初"**不许删**"的唯一理由——它是**未跟踪件、没有解析根**——**已消失**：
+#        2026-10-06 的收口提交把它带进了版本控制（`git ls-files` 可核）⇒ 退场合规。
+#   **解析根**：`git show deafbae:world-core/deploy/world-core-projectd.service`。
+#   设计要求仍在 `WC-ARCH-001`／`系统全景图`／`deploy/README.md` §四 —— 那三处**不改口径**，
+#   "实现未落地"按既有先例（`grant_path_guard.py` 的 G-02 那一族）**登记**。
 #   ⇒ 现状：**在目录里、不在清单里＝未启用**；要启用它，先把 `project serve` 落实现。
 UNITS="world-core.socket world-core.service world-core-actd.service world-core-omarchy.socket world-core-dsh.socket"
 
@@ -202,15 +211,9 @@ verify() {
   else
     say "  [FAIL] 内核单元的 ReadWritePaths 未含 $STATE_DIR"; rc=1
   fi
-  # ★ "文件不在"不得读成"合规"（本脚本开头就立过这条纪律）：投影单元已从清单摘除 ⇒
-  #   它**不在** `/etc/systemd/system/` 里 ⇒ 这一条 **未校验**，★不许打 `[ok]`。
-  if [ ! -f "$UNIT_DIR/world-core-projectd.service" ]; then
-    say "  [--] 投影单元不在清单里（已摘除）⇒ **未校验**（不是\"合规\"）"
-  elif grep -q "ReadWritePaths=.*$STATE_DIR" "$UNIT_DIR/world-core-projectd.service" 2>/dev/null; then
-    say "  [FAIL] 投影单元竟然可写状态目录"; rc=1
-  else
-    say "  [ok] 投影单元不写状态目录"
-  fi
+    # ★ "文件不在"不得读成"合规"（本脚本开头就立过这条纪律）：投影单元**已退役**（2026-10-06，
+    #   见 `UNITS` 上方定案）⇒ **本项无对象**，故**不判**：既不打 `[ok]`、也不打"未校验"
+    #   （它不在清单里、也不该在），只留这一句说明。设计要求仍在架构件里（"实现未落地"）。
   if grep -q "ReadWritePaths=.*$STATE_DIR" "$UNIT_DIR/world-core-actd.service" 2>/dev/null; then
     say "  [FAIL] 载体执行器竟然可写状态目录"; rc=1
   else
@@ -267,7 +270,7 @@ case "$MODE" in
     ;;
   uninstall)
     need_root
-    systemctl disable --now world-core.socket world-core-omarchy.socket world-core-dsh.socket world-core.service world-core-projectd.service world-core-actd.service 2>/dev/null || true
+    systemctl disable --now world-core.socket world-core-omarchy.socket world-core-dsh.socket world-core.service world-core-actd.service 2>/dev/null || true
     rm -f "$UNIT_DIR"/world-core*.service "$UNIT_DIR"/world-core*.socket
     systemctl daemon-reload
     say "已移除单元；账本（$STATE_DIR）与法律（$CONF_DIR）**未动**"
@@ -277,7 +280,7 @@ case "$MODE" in
     say "== 1/5 身份 =="
     # ★ 界面自己的系统身份：它的口 SocketUser=omarchy ⇒ 没有这个用户，那个 socket 单元起不来。
     #   「一个口一个身份」要落到系统上，就得**一个口一个系统用户**。
-    ensure_user "$CORE_USER"; ensure_user "$PROJ_USER"; ensure_user "$ACTD_USER"; ensure_user "$OMARCHY_USER"
+    ensure_user "$CORE_USER"; ensure_user "$ACTD_USER"; ensure_user "$OMARCHY_USER"
     # ★ DSH 同形：没有 `dsh` 这个用户 ⇒ `/etc/world-core/owner_uid.json` 里那条只能是 `null`
     #   （`tools/gen_owner_uid.py` 的口径③：查不到 ⇒ `null`，**绝不写 0**），渲染物里就没有它的口。
     ensure_user "$DSH_USER"

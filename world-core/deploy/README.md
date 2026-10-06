@@ -9,8 +9,17 @@
 |---|---|---|---|
 | **`world-core.socket`** | 写入总线：**监听套接字由载体持有**，不是由进程自己持有 | — | — |
 | **`world-core.service`** | 内核进程：本体 · 账本 · 读模型 · 运行时 · 门禁 · 通道 | 专用身份 | **可写（唯一写者）** |
-| **`world-core-projectd.service`** | 投影服务：语言投影 / 视觉投影 | 另一个专用身份 | **只读** |
+| ~~**`world-core-projectd.service`**~~ | 投影服务：语言投影 / 视觉投影（**已退役**，见下表下注） | 另一个专用身份 | **只读** |
 | **`world-core-actd.service`** | 载体执行器：调载体、做撤销点、等人确认 | **被管者身份** | **无权限**（只能经总线提交请求） |
+
+> ★ **上表那条被划掉的行＝【设计要求】，不是【现状】**（2026-10-06）：
+> `world-core-projectd.service` **已退役**（工作树移除；`deploy/` 现在**正好**＝`install.sh` 的 5 件清单）。
+> 三条定案：① 它的 `ExecStart=… project serve` 是**死子命令**（`cmd_project` 只认
+> `language`／`visual`／`surface`／`check`）＋ `Restart=on-failure`／`RestartSec=2s` ⇒ 装上去每 2 秒抖一次；
+> ② 单元件 2026-10-05 被改成 `User=world-core` ⇒ 与设计"独立 uid"**矛盾**；
+> ③ 当初"不许删"的理由（未跟踪件、无解析根）已消失。**解析根**：
+> `git show deafbae:world-core/deploy/world-core-projectd.service`。
+> 设计要求仍在（`WC-ARCH-001`／`系统全景图`／本件 §四）⇒ 归"**设计已定·未落地**"，如实登记。
 
 **为什么套接字单独一份单元**：这样"服务挂了请求不丢"由**内核的连接积压**保证——
 进程重启期间套接字仍在，客户端拿到的是"排队"而不是"连不上"。
@@ -124,7 +133,16 @@ TimeoutStopSec=15s
 WantedBy=multi-user.target
 ```
 
-## 四、`world-core-projectd.service`（投影服务，只读）
+## 四、`world-core-projectd.service`（投影服务，只读）——★ **本节是「设计要求」，今天没有执行体**
+
+> **实现状态（2026-10-06，现取）**：单元件**已退役**（工作树移除、git 历史留；
+> 解析根 `git show deafbae:world-core/deploy/world-core-projectd.service`）。三条定案：
+> ① `ExecStart=… project serve` 是**死子命令**（`cmd_project` 只认 `language`／`visual`／`surface`／`check`）
+> ＋ `Restart=on-failure`／`RestartSec=2s` ⇒ 装上去每 2 秒抖一次；
+> ② 单元件 2026-10-05 被改成 `User=world-core`／`Group=world-core` ⇒ 与**本节下面的设计**（独立 uid、只读）**矛盾**；
+> ③ 当初"不许删"的理由（未跟踪件、无解析根）已消失 —— 收口提交把它带进了版本控制。
+> ⇒ **本节以下照旧是设计要求**（"独立 uid、零写权限"）；它属**设计已定·未落地**这一档，**如实登记**，
+> 不因为一个坏实现退场而把要求也删掉。下面这段 `ini` 是**设计示意**，不是现役件。
 
 ```ini
 [Unit]
