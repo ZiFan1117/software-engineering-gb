@@ -43,13 +43,20 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))  # world-core/tools/ -> world-core/ -> 仓库根
 
 # 缺省扫描根：按序取第一个**存在**的候选。
-# 为什么要"存在"才算：本仓的架构夹在工作区里是**仓的兄弟目录**（`<仓父>/语义世界-架构`），
-# 真实布局 D:\Code\08-worldcore-openspec\world-core\tools\ → D:\Code\语义世界-架构。
+# 为什么要"存在"才算：架构夹是**独立于仓的工作料**（设计件＋评审件＋研究料，**故意不进版本控制**）。
+# 真实布局变过两次，两次都记在这儿：
+#   · 2026-10-05 之前：`<仓父>/语义世界-架构`（`D:\Code\08-worldcore-openspec\world-core\tools\` → `D:\Code\语义世界-架构`）
+#   · 2026-10-06 起：**并入本仓**（`.gitignore` 挡着）→ `<仓>/语义世界-架构`；同日作者指示
+#     "这些文档不需要了、放到相应的地方" ⇒ 整夹退役到归档 `<D:\Code\heavy-archive\语义世界-架构-退役-2026-10-06>`
+#     ⇒ **候选里必须有它**，否则本条判据会静默变成"未校验"（实测：不加这一格时，
+#        `python tool/kind_guard.py --allow-missing` 打印"未找到架构件目录…**未校验**"）。
 DEFAULT_CANDIDATES = (
     os.environ.get("WC_ARCH_DIR") or "",
     os.path.join(os.path.dirname(REPO_ROOT), "语义世界-架构"),
     os.path.join(REPO_ROOT, "语义世界-架构"),
     os.path.join(REPO_ROOT, "docs", "架构"),
+    # ↓ 2026-10-06 退役后的落点（**绝对路径**：归档在仓外）
+    r"D:\Code\heavy-archive\语义世界-架构-退役-2026-10-06",
 )
 
 # ── 判据 ①②③ 的字样（判据正文见文件头）────────────────────────────────
