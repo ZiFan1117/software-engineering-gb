@@ -1,8 +1,0 @@
-# /etc/agent/cap.d/package.yaml —— 高危能力：装包前自动快照 + 用户确认
-capability: package.install
-provider: package
-verbs: [install]
-risk: high
-audit: always
-snapshot: before-each
-require: confirm

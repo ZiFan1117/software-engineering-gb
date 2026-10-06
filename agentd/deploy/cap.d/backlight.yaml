@@ -1,7 +1,0 @@
-# /etc/agent/cap.d/backlight.yaml —— 低危能力
-capability: brightness.set
-provider: backlight
-verbs: [get, set]
-risk: low
-audit: always
-snapshot: never

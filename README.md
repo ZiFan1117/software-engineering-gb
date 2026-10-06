@@ -55,6 +55,35 @@
 
 ---
 
+## 〇、代码在哪（**先读这一节**；2026-10-06 增）
+
+> 为什么单列一节：此前"**我要看代码**"这个最简单的问句，在这座仓里**没有一个地方一句话回答**——
+> 代码埋在 `world-core/` 之下，而与它并列的还有 4 个**不是代码**的夹子（规格、设计料、上游快照×3）。
+> 本节就是那句话。**表里每条都给可复算的落点，不给"大概在那边"。**
+
+| 我想找 | 去哪（一条就够） |
+|---|---|
+| **世界核心的实现代码** | `world-core/src/`——总装 `lib.rs`／`main.rs`；账本 `ledger.rs`；门禁 `gate.rs`；本体执行者 `ontology.rs`；读模型 `readmodel.rs`；信封 `event.rs`；通道 `channel.rs`；投递 `delivery.rs`；检查点 `checkpoint.rs`；**Agent 运行时** `agent/`；**载体适配** `carrier/`；**投影** `project/` |
+| **某个能力的对外承诺** | `openspec/specs/<能力>/spec.md`（今天 6 个能力、`Requirement` 条数以 `openspec/BRIDGE.md` 为准） |
+| **某条承诺的证据（哪个测试在作证）** | `openspec/specs/**` 里的 `- **证据**：<path>::<fn>` 行 → 直接落到 `world-core/tests/<file>.rs`；**改名即失锚**，由 `tools/spec_bridge.py` 判据② 盯着 |
+| **接口契约（模块之间怎么说话）** | `world-core/docs/S2-设计/WC-IC-001-v0.1.md`（**一册**，每模块一节；依赖列逐边与模块登记表一致） |
+| **跑测试／跑门禁** | 在 VM 上 `bash world-core/check.sh`（21 步、阻断式）；仓根 `./check.sh` 是它的**转发入口**。⚠️ 宿主（Windows）没有 cargo/bash，跑不了 |
+| **代码结构是否合规（原子化）** | `python world-core/tools/module_graph.py`——单意图／`deps == import` 且无环／四件同夹；它同时是 `check.sh` 的第 ⑨ 步 |
+| **流程文档（谁在什么时候按什么规矩做的）** | `world-core/docs/S0-立项/` → `S1-需求/` → `S2-设计/` → `S3-骨架/` → `S4-实现/` → `S5-测试/` → `S6-验收/`（阶段号就是目录号） |
+| **书的原文（上位标准）** | `world-core/docs/理论/语义世界-理论书-第一版-合订.md`（**唯一正件**；书 ＞ 规格 ＞ 流程） |
+| **设计／评审／规程／研究料** | `语义世界-架构/`（**故意不入库**；2026-10-06 起与本仓同址） |
+| **上游参考实现（只读素材）** | `refs/`（buzz／lively.next／lively4-core／sepa）、`omarchy/`、`omarchy-pkgs/`——**都不入库** |
+
+**三步走（从"一句话需求"到"一行代码"）**：
+1. **承诺**：先按能力名去 `openspec/specs/` 找到那条 `Requirement`；
+2. **证据**：顺着它的 `- **证据**：…` 找到 `world-core/tests/<file>.rs::<用例名>`——**这就是"它会红"的那条**；
+3. **实现**：由用例里的调用点（或 `world-core/docs/S2-设计/WC-MODREG-001-v0.1.md` 的模块登记表）落到 `world-core/src/<模块>.rs`。
+
+> ★ **本节的射程**：它只回答"**在哪**"，不回答"**对不对**"。对不对由 `tools/` 下那些**会红的**守卫回答
+> （见 §三：`check.sh` 21 步＝✅18／⏭2／⚠️1 那种读数）。
+
+---
+
 ## 一、仓库一层有什么（实测）
 
 > 命令：仓库根 `Get-ChildItem -Force`；版本状态取自 `git ls-files -- <路径>` 的计数。
@@ -64,16 +93,17 @@
 | **`world-core/`** | **世界核心**：Rust 实现（`src/`、`tests/`、`ontology.json`、`policy.json`）＋**流程文档**（`docs/`）＋**门禁工具**（`tools/`）＋出厂门禁 `check.sh` | 131 |
 | **`openspec/`** | **规格层**：`specs/`（对外承诺）＋`changes/`（在办与归档的改动）＋`schemas/`（融合档 `opsx-swe-gb`）＋`BOOK/`（书的派生工作件）＋`BRIDGE.md`／`MAINTENANCE.md`／`config.yaml` | 63 |
 | **`.github/`** | **门禁自身**：`workflows/world-core-gate.yml`（CI 八作业）＋`PULL_REQUEST_TEMPLATE.md`（PR＝一次正式评审的记录） | 2 |
-| `agentd/` | **参考实现（Go）**：能力路由＋快照钩子＋结构化审计＋完工铃（见 `agentd/README.md:1`） | 28 |
+| **`语义世界-架构/`** | **设计／评审／规程／研究料**（184 篇 md＋研究料）——**故意不入库**（`.gitignore` 挡着）。2026-10-06 起与主仓**同址**（此前是 `D:\Code\` 下的兄弟目录）；`world-core/tools/kind_guard.py` 的缺省候选本来就认这一格，搬进来后实测仍扫到同一批 184 篇 | **0**（不入库） |
+| ~~`agentd/`~~ | **已退场（2026-10-06）**：Go 参考实现（28 件）按作者裁定移除工作树 —— `WC-FC-2026-005` §3.1「不再作独立组件」；能力面已由 **Rust 版**接替（`world-core/src/agent/` 4 件 ＋ `world-core/tests/agent_*.rs` 4 件，读数见该 change）。**旧件仍在 git 历史**：`git show deafbae:agentd/cmd/agentd/main.go` | **0**（已移出工作树） |
 | `omarchy/` | **上游源码快照**（机制参考，不兼容其生态） | **0**（不入库） |
 | `omarchy-pkgs/` | 同上，包构建那一半 | **0**（不入库） |
-| `refs/` | **外部参考仓快照** 4 份：`buzz`（5 361 件）／`lively.next-index`（**空目录，0 件**）／`lively4-core`（4 507 件）／`sepa`（3 423 件） | **0**（不入库） |
-| `.agents/` | **AI 侧工作流技能**：OpenSpec 的 6 个 `SKILL.md` ＋ `.openspec-target` | 7 |
-| `README.md` | 本件（前门） | — |
-| `check.sh` | **`agentd` 的单一入口**：`go build` → `go vet` → `go test`，末尾打印 `CHECK_OK`／`CHECK_FAIL`。⚠️ 它**不跑**世界核心的门禁——那是 `world-core/check.sh`（见 **§三**） | — |
+| `refs/` | **外部参考仓快照** 4 份：`buzz`／`lively.next-index`／`lively4-core`／`sepa`（合计 1.18 GB／63 648 件，本仓磁盘占用的大头） | **0**（不入库） |
+| `.agents/` | **AI 侧工作流技能**：`worldcore-sdd`／`openspec-swe-gb-fusion` 两篇 `SKILL.md` | 8 |
+| `README.md` | 本件（前门，含 **§〇「代码在哪」**） | — |
+| `check.sh` | **仓根唯一入口**：**转发**到 `world-core/check.sh`（出厂门禁 21 步）。⚠️ 它**自己什么也不跑** —— 只把这一次调用交出去；入口断链时 rc=2，**不报绿** | — |
 | `变更记录.md` | 2026-09-25 那次目录重排的**旧编号对照表**；它描述的正是**已退场**的布局（实测 41 处旧路径引用），保留作史料 | — |
 | `.gitattributes` | 行尾与 BOM 纪律：`.sh/.rs/.json/.yml/.yaml/.py/.csv/.md` 等一律 `eol=lf`（`:8`、`:16-23`、`:33`）；`*.ps1` **必须带 UTF-8 BOM**（`:24-28`） | — |
-| `.gitignore` | 把上游快照挡在版外：`omarchy/`（`:2`）、`omarchy-pkgs/`（`:3`）、`refs/`（`:4`） | — |
+| `.gitignore` | 把上游快照与设计夹挡在版外：`omarchy/`（`:2`）、`omarchy-pkgs/`（`:3`）、`refs/`（`:4`）、`语义世界-架构/`（2026-10-06 增） | — |
 
 > **`world-core/` 再深一层**（本件用到的三处）：`docs/`＝流程文档、`tools/`＝门禁工具与守卫、
 > `src/`＋`tests/`＝Rust 实现与测试；另有 `cap.d/`（能力声明样本）、`deploy/`、`templates/`（七类模板）、
