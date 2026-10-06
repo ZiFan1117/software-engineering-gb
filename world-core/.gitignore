@@ -10,3 +10,11 @@
 
 # 演示/临时
 /demo*
+
+# ★ 2026-10-06 增：Python 字节码缓存。
+#   现取：`tools/__pycache__/` 已积了 **17 件**（本仓工具都是 `python3 tools/xxx.py` 这么跑的，
+#   跑一次就落一批）。它**没有入库**（`git ls-files world-core/tools/__pycache__` = 0），
+#   但**此前也没有被挡**——将来任何一次 `git add -A` 都会把它一起收进来。
+#   ⇒ 挡在版外（与"/target/ 不回流"同一条纪律：**生成物不入库**）。
+__pycache__/
+*.pyc

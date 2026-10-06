@@ -41,3 +41,10 @@ Cargo.lock text eol=lf
 #    dsh.socket 39／omarchy.socket 50／socket 39）⇒ 本条是**预防**，不改任何现有字节。
 *.service text eol=lf
 *.socket  text eol=lf
+# ⚠️ 2026-10-06 增：`.gitignore` 此前**未声明**（现取 `git check-attr eol -- .gitignore` = `unspecified`），
+#   于是 `git add` 逐条警告「LF will be replaced by CRLF the next time Git touches it」。
+#   这一条的**害处不是"不好看"**：`.gitignore` 一旦带 CRLF，模式尾部会多一个 `\r`，
+#   **忽略规则会静默失效**——正是本仓 §五 那类「**配了 ≠ 生效，而且可以不报错**」。
+#   实测后果面就在眼前：`world-core/tools/__pycache__/` 今天积了 17 件（本仓今日刚把它挡在版外），
+#   若 `.gitignore` 本身被转成 CRLF，那条 `__pycache__/` 会**挡不住而无人报警**。
+.gitignore text eol=lf
