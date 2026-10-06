@@ -1,0 +1,50 @@
+[Unit]
+Description=世界核心 · 界面（Omarchy）的接入（**一个口一个身份**：本口只属于 world://presence/omarchy）
+Documentation=man:systemd.socket(5)
+PartOf=world-core.service
+
+[Socket]
+# ★ 这个口解决的那个洞：**界面此前没有自己的身份**。
+#   界面唯一的写路径走的是内核口 `/run/world-core/world.sock`，而那个口在法律里映射到
+#   `world://core` ⇒ 界面上点一下，账本里记的作者是 **世界核心自己** ——
+#   "谁点的"在世界里查不出来（主人手写的一条 change 与界面点一下产生的一条，逐字同形）。
+#   ⇒ 新身份**靠新口给出**（书 §4.3：口给出的 actor 就是身份），**不靠请求体自称**：
+#     自称在通道层是硬拒的（`ext.world.Channel.Impersonation`）。
+ListenStream=/run/world-core/omarchy.sock
+
+# ★★ `Service=` **必须显式写** —— 2026-10-05 T24 现场（systemd 原文，逐字）：
+#     `world-core-omarchy.socket: Socket service world-core-omarchy.service not loaded, refusing.`
+#     `Failed to listen on 世界核心 · 界面（Omarchy）的接入（**一个口一个身份**：本口只属于 world://presence/omarchy）`
+#   ⇒ 本单元名**不等于**服务名 ⇒ systemd 默认把 socket 配到**同名服务** `world-core-omarchy.service`，
+#     而它**不存在** ⇒ **口根本没建出来**（`/run/world-core/omarchy.sock` 不出现）。
+#   ★ 对照：`world-core.socket` 之所以能起，只因**它的单元名与 `world-core.service` 同名**
+#     —— 默认配对**恰好**对上，不是它写对了什么。
+#   ⇒ 一条判据（待落地）：**每个 `.socket` 单元要么与某 `.service` 同名，要么显式给 `Service=`**。
+Service=world-core.service
+
+# 谁能连：**本口归它自己的系统身份**。0600 ＝ 只有属主连得上——
+# 内核在 `connect()` 时就挡住别人，比"连上来再问你是谁"更早、更硬。
+# ★ 三处口径**同批统一为 0600**：本单元 ＋ `src/bus/mod.rs::bind()` 的 `set_permissions(0o600)`
+#   ＋ 盘上那个套接字。此前 `world-core.socket` 写 0660（属组表达"谁能连"），
+#   而代码文档写 0600 ⇒ 同一个事实两个取值、都不红。
+SocketMode=0600
+SocketUser=omarchy
+SocketGroup=omarchy
+Accept=no
+# 服务重启期间保留排队中的请求（默认即 no = 不丢弃）
+FlushPending=no
+# ★ `FileDescriptorStorePreserve=no` **已删**（Lead 裁 2026-10-05）：
+#   本机 systemd 判它 `Unknown key 'FileDescriptorStorePreserve' in section [Socket], ignoring.`
+#   ⇒ **这份声明没有执行体**，只会在日志里刷一行噪音；★"它想说什么"已登记过（信息不丢）。
+
+# ★★ **本单元的处置（2026-10-05 裁 (甲) 之后）：【留档 · 不再启用】。**
+#   裁 (甲)＝两个口写进 `world-core.socket` 的多条 `ListenStream=`；
+#   本单元若仍被 enable，启动时会打印
+#   `Socket service world-core.service already active, refusing.` ＋ `Failed to listen on …`
+#   ⇒ ★它是"已知会失败"的件。★**保留不删**的理由：它是**未跟踪件（无 git 解析根）**，
+#   按本项目"退场的件要给解析根"的口径，**没有解析根就不许静默退场**；
+#   ★旧的 enable 状态由运维 `systemctl disable` 收掉（本条只登记事实）。
+#   ★给它留的路：若改走 (甲-b)（世界自己 `bind()` 其余口），本单元**会被重新启用**（那时它才有执行体）。
+
+[Install]
+WantedBy=sockets.target

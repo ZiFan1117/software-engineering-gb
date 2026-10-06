@@ -23,7 +23,7 @@ r"""module_graph.py —— 机核层的守卫：把 `WC-ATOM-001` §四 机核�
 把 `WC-MODREG-001` 写作「生成物，勿手编」。**本仓到今天为止没有任何生成器产出该表**——
 那份登记表是**手编**的。故本脚本**不**把 A-5 列入自己的判据（把它写成已建闸就是假证）；
 `WC-ATOM-001` §五 与 `WC-MODREG-001` §3.1 按「无生成器即不称生成物」在本轮就地更正，
-**A-5 的真实落点仍只有 `openspec/BRIDGE.md` 那一族生成物**（判据⑪⑫⑬ 管它）。
+**A-5 的真实落点仍只有 `openspec/generated/BRIDGE.md` 那一族生成物**（判据⑪⑫⑬ 管它）。
 
 判据（与 `WC-ATOM-001` §二 六条约定的 A-1/A-2/A-3/A-4 逐条对应）
 ------------------------------------------------------------------
@@ -1009,6 +1009,14 @@ def module_tokens(rows, body):
         for sp in row["src_all"]:
             if sp.endswith("/"):
                 names.add(sp.rstrip("/").split("/")[-1])
+            elif os.path.basename(sp) == "mod.rs":
+                # ★ `src/X/mod.rs` ⇒ 标识符取**目录名** `X`。
+                # 取文件名会得到 `mod`（Rust 关键字，认不出任何用例）⇒ 该模块的测试锚点**塌掉而判据仍绿**。
+                # 实测（2026-10-07，仓外副本）：`src/ledger.rs` → `src/ledger/mod.rs` 后
+                # `anchors_total` 303→195、`M02` 锚点 111→3，而判据③ 仍报 4/0。
+                parent = os.path.dirname(sp).rstrip("/").split("/")[-1]
+                if parent:
+                    names.add(parent)
             else:
                 names.add(os.path.basename(sp)[: -len(".rs")])
         # 模块名里的关键段（`src/project/language.rs` ⇒ `language` 已在上列；`src/lib.rs` ⇒ `lib`）
