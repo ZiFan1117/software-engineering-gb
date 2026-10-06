@@ -72,7 +72,7 @@
 | **流程文档（谁在什么时候按什么规矩做的）** | `world-core/docs/S0-立项/` → `S1-需求/` → `S2-设计/` → `S3-骨架/` → `S4-实现/` → `S5-测试/` → `S6-验收/`（阶段号就是目录号） |
 | **书的原文（上位标准）** | `world-core/docs/理论/语义世界-理论书-第一版-合订.md`（**唯一正件**；书 ＞ 规格 ＞ 流程） |
 | **设计／评审／规程／研究料** | `语义世界-架构/`（**故意不入库**；2026-10-06 起与本仓同址） |
-| **上游参考实现（只读素材）** | `refs/`（buzz／lively.next／lively4-core／sepa）、`omarchy/`、`omarchy-pkgs/`——**都不入库** |
+| **上游供料（只读素材）** | **已移出本仓**（2026-10-06）→ `D:\Code\heavy-archive\worldcore-上游料-2026-10-06\`：`refs/`（36 个上游标准料目录＋`_standards-PROVENANCE.md`）、`omarchy/`、`omarchy-pkgs/` |
 
 **三步走（从"一句话需求"到"一行代码"）**：
 1. **承诺**：先按能力名去 `openspec/specs/` 找到那条 `Requirement`；
@@ -95,9 +95,9 @@
 | **`.github/`** | **门禁自身**：`workflows/world-core-gate.yml`（CI 八作业）＋`PULL_REQUEST_TEMPLATE.md`（PR＝一次正式评审的记录） | 2 |
 | **`语义世界-架构/`** | **设计／评审／规程／研究料**（184 篇 md＋研究料）——**故意不入库**（`.gitignore` 挡着）。2026-10-06 起与主仓**同址**（此前是 `D:\Code\` 下的兄弟目录）；`world-core/tools/kind_guard.py` 的缺省候选本来就认这一格，搬进来后实测仍扫到同一批 184 篇 | **0**（不入库） |
 | ~~`agentd/`~~ | **已退场（2026-10-06）**：Go 参考实现（28 件）按作者裁定移除工作树 —— `WC-FC-2026-005` §3.1「不再作独立组件」；能力面已由 **Rust 版**接替（`world-core/src/agent/` 4 件 ＋ `world-core/tests/agent_*.rs` 4 件，读数见该 change）。**旧件仍在 git 历史**：`git show deafbae:agentd/cmd/agentd/main.go` | **0**（已移出工作树） |
-| `omarchy/` | **上游源码快照**（机制参考，不兼容其生态） | **0**（不入库） |
-| `omarchy-pkgs/` | 同上，包构建那一半 | **0**（不入库） |
-| `refs/` | **外部参考仓快照** 4 份：`buzz`／`lively.next-index`／`lively4-core`／`sepa`（合计 1.18 GB／63 648 件，本仓磁盘占用的大头） | **0**（不入库） |
+| ~~`omarchy/`~~ | **已移出（2026-10-06）**：上游源码快照（73 MB），与代码并列很突兀、作者判定无用 ⇒ 落 `D:\Code\heavy-archive\worldcore-上游料-2026-10-06\omarchy\` | **0**（不入库；已不在工作树） |
+| ~~`omarchy-pkgs/`~~ | **已移出（2026-10-06）**：同上，包构建那一半（9 MB） ⇒ 落 `…\worldcore-上游料-2026-10-06\omarchy-pkgs\` | **0**（不入库；已不在工作树） |
+| ~~`refs/`~~ | **已移出（2026-10-06）**：上游**标准料库**——36 个子目录（`bfo-2020`／`iao`／`in-toto`／`rekor`／`opa`／`c2sp`／`w3c-trace-context`／`skos`／`prov-o`…）＋`_standards-PROVENANCE.md`，**1.18 GB／63 648 件**（本仓磁盘占用的大头）⇒ 落 `…\worldcore-上游料-2026-10-06\refs\`。★ 一处**运行时输入**连带改：`world-core/tools/fetch_bfo_terms.py` 的缺省 `--owl` 现在**先看仓内、再看归档** | **0**（不入库；已不在工作树） |
 | `.agents/` | **AI 侧工作流技能**：`worldcore-sdd`／`openspec-swe-gb-fusion` 两篇 `SKILL.md` | 8 |
 | `README.md` | 本件（前门，含 **§〇「代码在哪」**） | — |
 | `check.sh` | **仓根唯一入口**：**转发**到 `world-core/check.sh`（出厂门禁 21 步）。⚠️ 它**自己什么也不跑** —— 只把这一次调用交出去；入口断链时 rc=2，**不报绿** | — |

@@ -60,7 +60,14 @@ RDF = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
 OWL = "{http://www.w3.org/2002/07/owl#}"
 RDFS = "{http://www.w3.org/2000/01/rdf-schema#}"
 
-# 正源（**本地整包**里的那一个文件）。`refs/` 不入版本控制 ⇒ 它是外部料、不是交付物。
+# 正源（**本地整包**里的那一个文件）。上游料库不入版本控制 ⇒ 它是外部料、不是交付物。
+# ★ 2026-10-06：上游料库已**搬出仓库**（作者指示：这些夹子挡在代码旁边很突兀、且无用）
+#   —— `refs/` 现落 `D:\Code\heavy-archive\worldcore-上游料-2026-10-06\refs\`。
+#   本常量随之改为**归档里的绝对位置**；`--owl` 仍可覆盖（例如你把整包放回仓内时）。
+DEFAULT_OWL_ABS = os.path.join(
+    r"D:\Code\heavy-archive\worldcore-上游料-2026-10-06",
+    "refs", "bfo-2020", "21838-2", "owl", "bfo-core.owl")
+# 兼容旧写法：仓内相对路径（若整包被放回仓内，这个仍然指得到）。
 DEFAULT_OWL_REL = os.path.join("refs", "bfo-2020", "21838-2", "owl", "bfo-core.owl")
 # 整包的上游（★逐字记进生成物：这是"这个字节从哪来"的那一半）。
 UPSTREAM_URL = "https://codeload.github.com/BFO-ontology/BFO-2020/tar.gz/refs/heads/master"
@@ -178,13 +185,15 @@ def main():
     ap = argparse.ArgumentParser(description="生成 BFO 类集薄层（bfo-terms.json）")
     ap.add_argument("--repo", default=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                     help="仓库根（默认：本文件的上两级目录）")
-    ap.add_argument("--owl", default=None, help="正源 owl 文件（默认 refs/bfo-2020/21838-2/owl/bfo-core.owl）")
+    ap.add_argument("--owl", default=None, help="正源 owl 文件（缺省：先看仓内 refs/…，再看归档 worldcore-上游料-2026-10-06/refs/…）")
     ap.add_argument("--out", default=None, help="生成物路径（默认 world-core/tools/bfo-terms.json）")
     ap.add_argument("--no-network", action="store_true", help="跳过 OLS4 交叉核对（如实记'未做'）")
     a = ap.parse_args()
 
     repo = os.path.abspath(a.repo)
-    owl = a.owl or os.path.join(repo, DEFAULT_OWL_REL)
+    # 缺省正源：先看**仓内**旧位置（整包被放回仓内时仍适用），没有就落到**归档**里那份。
+    _in_repo = os.path.join(repo, DEFAULT_OWL_REL)
+    owl = a.owl or (_in_repo if os.path.isfile(_in_repo) else DEFAULT_OWL_ABS)
     out = a.out or os.path.join(repo, "world-core", "tools", "bfo-terms.json")
 
     if not os.path.isfile(owl):
