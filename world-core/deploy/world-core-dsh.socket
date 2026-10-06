@@ -11,8 +11,13 @@ PartOf=world-core.service
 ListenStream=/run/world-core/dsh.sock
 
 # ★★ 同类修正（2026-10-05，同批）：`Service=` **必须显式写**。
-#   ★ 本单元**从未安装过**（`dsh` 身份今天还没建、它不在 `install.sh` 的 `UNITS=` 里）⇒ **本条无现场读数**；
-#     加它是因为**同一条成因已经在 `world-core-omarchy.socket` 上实打实发生过**：
+#   ⚠ **2026-10-06 订正（现取）**：本括号原写「本单元**从未安装过**（`dsh` 身份今天还没建、
+#     它不在 `install.sh` 的 `UNITS=` 里）」—— **后半句与事实不符**：`install.sh` 的
+#     `UNITS=` 现取**含** `world-core-dsh.socket`
+#     （`UNITS="world-core.socket world-core.service world-core-actd.service world-core-omarchy.socket world-core-dsh.socket"`）。
+#     ⇒ 能站得住的只有前半句的一半：**`dsh` 这个 uid 今天仍没有权威载体**（本文件下面那段自述），
+#     而「该口在真机上装没装、在不在听」**本席没有现场读数**（2026-10-06 VM 连接超时，取不到）。
+#   ★ 保留它的理由（不因订正而删）：**同一条成因已经在 `world-core-omarchy.socket` 上实打实发生过** ——
 #     `Socket service world-core-<名>.service not loaded, refusing.` ⇒ 口建不出来。
 #   ★ 同一口径：**每个 `.socket` 要么与某 `.service` 同名，要么显式给 `Service=`。**
 Service=world-core.service

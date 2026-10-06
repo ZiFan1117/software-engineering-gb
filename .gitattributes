@@ -31,3 +31,13 @@ Cargo.lock text eol=lf
 #    导致同一份文件「工作区字节」与「仓库字节」算出两个不同的 SHA-256（冻结摘要口径二义）。
 #    实测（git ls-files --eol 全 156 个追踪文件（w/lf 147、w/crlf 6、w/mixed 3，截至 3a6b342） + 真跑 git add --renormalize .）：本条对内容地址影响为 0。
 *.md    text eol=lf
+# ⚠️ 2026-10-06 增：`.service` / `.socket` 此前**未声明** ⇒ `git add` 时 git 逐条警告
+#    「in the working copy of 'world-core/deploy/world-core-actd.service', LF will be replaced by CRLF
+#      the next time Git touches it」（现取，6 份单元全中）。
+#    它们是**运行在 Linux VM 上、由 systemd 逐行读**的件：工作区一旦被转成 CRLF，
+#    轻则单元里多出 `\r`、重则某条指令解析失败 —— 与上面 G-25 记的 `*.md` 是同一条病
+#    （同一份件「工作区字节」≠「仓库字节」）。
+#    现取（订正当时）：6 份单元在盘上**都还是 LF**（CR=0：actd 34 行／projectd 48／service 92／
+#    dsh.socket 39／omarchy.socket 50／socket 39）⇒ 本条是**预防**，不改任何现有字节。
+*.service text eol=lf
+*.socket  text eol=lf
