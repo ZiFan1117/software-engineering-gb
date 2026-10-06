@@ -352,6 +352,21 @@ else
 fi
 
 echo
+step "⑥c 载体契约（部署面单元 ≡ 设计＋法律）"
+# 为什么要有这一步（现取，2026-10-06）：`tools/carrier_contract.py` 是**判 `world-core/deploy/` 那条守卫**
+#   （12 条判据：单元 ⊆ 清单／清单 ⊆ 目录／`User=` 不许 root／`SocketMode` 不许 0666／
+#   `ExecStart` 不许带 `--confirm`／单元 ∧ 法律 `listeners`／渲染物 ⊆ 法律／owner→uid 映射对账…）。
+#   **但它在任何门禁里都不被调用**：`check.sh` 0 处、`.github/workflows/world-core-gate.yml` 0 处
+#   （现取：`Select-String -SimpleMatch 'carrier_contract'` 两处都是 0）⇒ **有守卫、没人跑**
+#   —— 与 ①b／①c／⑥b 同一条病："闸不在门禁里等于没有闸"。
+# ★ 它自带 `STATUS=SKIP`：宿主机缺 POSIX 元数据／部署件（`/etc/world-core/owner_uid.json`／`channel.json`）时，
+#   它会**显式打印未校验**并 rc=0 —— `run_tail` 认这一行 ⇒ 那一步会正确显示 ⏭（未校验 ≠ 通过），
+#   不需要像 ⑥b 那样另写前置分岔。
+# ⚠ 射程（如实写）：**本步在 VM 上的颜色今天是【未取到】**——2026-10-06 收口时 VM（`192.168.56.10:22`）
+#   连接超时，取不到读数；宿主机现取为「绿（红 0 条）＋ 5 条未校验」、rc=0。
+run_tail 14 "载体契约（部署面单元 ≡ 设计＋法律）" python3 tools/carrier_contract.py
+
+echo
 step "⑦ S1 需求验证面补建（第一轮 TC-042/046–052；第二轮 TC-053–TC-075）"
 # 为什么放在这里：R1 的九席独立评审实测指出，SRS §五 声明的一批用例**从未实存**，
 # 而若干 `REQ-F-*` 的「应当失败」反例**只挂在这些不存在的用例上**——
