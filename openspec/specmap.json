@@ -1922,40 +1922,40 @@
     {
      "num": "1.1",
      "title": "同一件事，三方不是一个意思",
-     "line": 80
+     "line": 157
     },
     {
      "num": "1.2",
      "title": "三方的\"意思\"是从哪来的",
-     "line": 92
+     "line": 169
     },
     {
      "num": "1.3",
      "title": "承载缺口：意思没有一处由大家共同依赖的地方",
-     "line": 104
+     "line": 181
     },
     {
      "num": "1.4",
      "title": "判定缺口：起了分歧，没有一处能裁",
-     "line": 114
+     "line": 191
     },
     {
      "num": "1.5",
      "title": "这两个缺口今天造成什么",
-     "line": 122
+     "line": 199
     },
     {
      "num": "1.6",
      "title": "已经统一的那一部分",
-     "line": 136
+     "line": 213
     },
     {
      "num": "1.7",
      "title": "别人的做法为什么不够",
-     "line": 153
+     "line": 230
     }
    ],
-   "line": 76
+   "line": 153
   },
   {
    "chap": "二",
@@ -1964,60 +1964,60 @@
     {
      "num": "2.1",
      "title": "那个位置",
-     "line": 177
+     "line": 254
     },
     {
      "num": "2.2",
      "title": "它为什么不能是库、协议、应用",
-     "line": 199
+     "line": 276
     },
     {
      "num": "2.3",
      "title": "三个名字",
-     "line": 219
+     "line": 296
     },
     {
      "num": "2.4",
      "title": "只有一种写法",
-     "line": 241
+     "line": 318
     },
     {
      "num": "2.5",
      "title": "一本账",
-     "line": 263
+     "line": 340
     },
     {
      "num": "2.6",
      "title": "读法可以有若干份",
-     "line": 285
+     "line": 362
     },
     {
      "num": "2.7",
      "title": "极小核心",
-     "line": 301
+     "line": 378
     },
     {
      "num": "2.8",
      "title": "它只固定意思的形式",
-     "line": 319
+     "line": 396
     },
     {
      "num": "2.9",
      "title": "一个说法要回答的七个问题",
-     "line": 337
+     "line": 414
     },
     {
      "num": "2.10",
      "title": "能装的话有三类",
-     "line": 369
+     "line": 446
     },
     {
      "num": "2.11",
      "title": "说了要送到",
-     "line": 391
+     "line": 468
     }
    ],
-   "line": 173
+   "line": 250
   },
   {
    "chap": "三",
@@ -2026,20 +2026,20 @@
     {
      "num": "3.1",
      "title": "多方同时在场时，意思只能由共同依赖的那一层承担",
-     "line": 419
+     "line": 496
     },
     {
      "num": "3.2",
      "title": "什么情况下这一层不必要",
-     "line": 451
+     "line": 528
     },
     {
      "num": "3.3",
      "title": "这一条今天有几分分量",
-     "line": 477
+     "line": 554
     }
    ],
-   "line": 415
+   "line": 492
   },
   {
    "chap": "四",
@@ -2048,35 +2048,35 @@
     {
      "num": "4.1",
      "title": "只有一个地方能写",
-     "line": 497
+     "line": 574
     },
     {
      "num": "4.2",
      "title": "谁被允许做什么",
-     "line": 515
+     "line": 592
     },
     {
      "num": "4.3",
      "title": "谁在说话由系统给出",
-     "line": 537
+     "line": 614
     },
     {
      "num": "4.4",
      "title": "读的那一份",
-     "line": 559
+     "line": 636
     },
     {
      "num": "4.5",
      "title": "外面发生的事怎么写成一条消息",
-     "line": 583
+     "line": 660
     },
     {
      "num": "4.6",
      "title": "怎么把话送到",
-     "line": 605
+     "line": 682
     }
    ],
-   "line": 493
+   "line": 570
   },
   {
    "chap": "五",
@@ -2085,35 +2085,35 @@
     {
      "num": "5.1",
      "title": "先说它做不到什么",
-     "line": 633
+     "line": 710
     },
     {
      "num": "5.2",
      "title": "两份记录对不对得上",
-     "line": 649
+     "line": 726
     },
     {
      "num": "5.3",
      "title": "没声明过的东西照样落账",
-     "line": 665
+     "line": 742
     },
     {
      "num": "5.4",
      "title": "系统还能强制到什么程度",
-     "line": 683
+     "line": 760
     },
     {
      "num": "5.5",
      "title": "可不可逆，两份配置对不上",
-     "line": 707
+     "line": 784
     },
     {
      "num": "5.6",
      "title": "每条结论对应的检验，今天跑是红是绿",
-     "line": 727
+     "line": 804
     }
    ],
-   "line": 629
+   "line": 706
   },
   {
    "chap": "六",
@@ -2122,45 +2122,45 @@
     {
      "num": "6.1",
      "title": "\"同一件事\"还没有判定程序",
-     "line": 770
+     "line": 847
     },
     {
      "num": "6.2",
      "title": "判定的人不能是写它的人",
-     "line": 798
+     "line": 875
     },
     {
      "num": "6.3",
      "title": "这套名字的规矩还没有定",
-     "line": 824
+     "line": 901
     },
     {
      "num": "6.4",
      "title": "两件事的先后由谁定",
-     "line": 850
+     "line": 927
     },
     {
      "num": "6.5",
      "title": "每一格都有人读得到吗",
-     "line": 874
+     "line": 951
     },
     {
      "num": "6.6",
      "title": "三件是否充分",
-     "line": 892
+     "line": 969
     },
     {
      "num": "6.7",
      "title": "\"该不该干\"没有判据",
-     "line": 924
+     "line": 1001
     },
     {
      "num": "6.8",
      "title": "这批\"还没定\"的事记在哪一格",
-     "line": 946
+     "line": 1023
     }
    ],
-   "line": 766
+   "line": 843
   }
  ],
  "judges": [
@@ -2171,7 +2171,7 @@
    "pass": "一条记录能答全这四项",
    "result": "绿。写入口是编译期事实，带一段必须编译失败的用例（2026-09-27 读 world-core/src/lib.rs 第 39–63、143–213 行）；账本相关实测均可检出（2026-09-27，VM）",
    "color": "green",
-   "line": 733
+   "line": 810
   },
   {
    "sec": "5.1",
@@ -2180,7 +2180,7 @@
    "pass": "有一本记外面效果的账，加一张对账表",
    "result": "红。没有第二本账，也没有对账表；补偿记录撤不掉世界外面的效果",
    "color": "red",
-   "line": 734
+   "line": 811
   },
   {
    "sec": "5.1",
@@ -2189,7 +2189,7 @@
    "pass": "有归责与损失机制",
    "result": "红。没有归责与损失机制；判定的人不能是写它的人，而第二个执行者不会出现",
    "color": "red",
-   "line": 735
+   "line": 812
   },
   {
    "sec": "5.2",
@@ -2198,7 +2198,7 @@
    "pass": "判定能看内容，且两份由不同一方生成",
    "result": "绿而无效。命令跑得通（world-core project check），只比头部四项（src/project/mod.rs 第 124 行），两份还是它自己渲染的（src/main.rs 第 394–397 行，2026-09-27 读）。按\"能不能证明\"判，这一格是红的",
    "color": "amber",
-   "line": 736
+   "line": 813
   },
   {
    "sec": "5.2",
@@ -2207,7 +2207,7 @@
    "pass": "缺格即报错",
    "result": "红。未实现",
    "color": "red",
-   "line": 737
+   "line": 814
   },
   {
    "sec": "5.3",
@@ -2216,7 +2216,7 @@
    "pass": "写入被拒",
    "result": "红。rc=0，账本落笔，state --json 把它算进去（2026-09-27，VM）；concepts 在 world-core/src/ 零命中（2026-09-27 复核）",
    "color": "red",
-   "line": 738
+   "line": 815
   },
   {
    "sec": "5.3",
@@ -2225,7 +2225,7 @@
    "pass": "旧记录仍可判读",
    "result": "未跑，判红。这一条要先有跨版本读取的实现",
    "color": "red",
-   "line": 739
+   "line": 816
   },
   {
    "sec": "5.4",
@@ -2234,7 +2234,7 @@
    "pass": "九项逐条有结论",
    "result": "部分红。九项中拦得住 3 项、拦不住但看得见 2 项、拦不住 3 项、分情况 1 项（2026-09-27，VM；被管者 uid 1001；九项本轮已复跑，两遍结果一致，唯一变化是 #6 目录 mode 由\"此前是\"转为\"拦得住\"）",
    "color": "half",
-   "line": 740
+   "line": 817
   },
   {
    "sec": "5.4",
@@ -2243,7 +2243,7 @@
    "pass": "能答出否决权在谁手里",
    "result": "已答。否决权落在能改那份出厂清单文件的人手里；而那份文件被同一个用户改写后不留痕（2026-09-27，VM）",
    "color": "red",
-   "line": 741
+   "line": 818
   },
   {
    "sec": "5.4",
@@ -2252,7 +2252,7 @@
    "pass": "离开之后仍能独立复算",
    "result": "未做，判红",
    "color": "red",
-   "line": 742
+   "line": 819
   },
   {
    "sec": "5.4",
@@ -2261,7 +2261,7 @@
    "pass": "append 的第 4 个位置参数与它的缺省值都写在用法提示里",
    "result": "绿。用法提示里 world://user 出现 2 处、可选参数 [actor] 出现 1 处（world-core/src/main.rs 第 20、22、45 行，2026-09-27 后读）；append 缺参数时 stderr 三行点明缺省身份（同文件第 332–337 行）。同行的另一半仍是红的：那个缺省主体是全权主体，可写任意对象（policy.json 第 28 行），\"不写身份＝最高授权\"这件事没有变",
    "color": "green",
-   "line": 743
+   "line": 820
   },
   {
    "sec": "5.5",
@@ -2270,7 +2270,7 @@
    "pass": "两处互校存在，且摩擦挂在动作的不可逆等级上",
    "result": "红。闸读不到风险等级（src/gate.rs 第 44–48 行）；摩擦挂在执行者身份上（policy.json 第 32 行的 irreversible_actors，名单里只有 world://user），而那个人同时可写任意对象（同文件第 28 行）；两处无互校（2026-09-27 读配置与源码）",
    "color": "red",
-   "line": 744
+   "line": 821
   },
   {
    "sec": "5.5",
@@ -2279,7 +2279,7 @@
    "pass": "两个轴各自有结论，且互不冒充",
    "result": "红。cap.d/ledger.compact.json 第 6 行写 \"undo\": \"before-each\"，policy.json 第 20 行写 \"reversible\": false；载体撤销撤的是文件系统字节（src/carrier/mod.rs 第 30–34 行），与世界状态无关，而没有任何一处把两件事分开核对（2026-09-27 读配置与源码）",
    "color": "red",
-   "line": 745
+   "line": 822
   },
   {
    "sec": "5.6附表",
@@ -2288,7 +2288,7 @@
    "pass": "",
    "result": "未跑，判红",
    "color": "red",
-   "line": 751
+   "line": 828
   },
   {
    "sec": "5.6附表",
@@ -2297,7 +2297,7 @@
    "pass": "",
    "result": "半绿。表已覆盖十余个对象，未逐对象分列",
    "color": "half",
-   "line": 752
+   "line": 829
   },
   {
    "sec": "5.6附表",
@@ -2306,7 +2306,7 @@
    "pass": "",
    "result": "未采集，判红。这条另有一个特点：在\"不干\"的世界里它同样满分，因为它判的是造出来的东西好不好",
    "color": "red",
-   "line": 753
+   "line": 830
   },
   {
    "sec": "5.6附表",
@@ -2315,7 +2315,7 @@
    "pass": "",
    "result": "未跑，判红",
    "color": "red",
-   "line": 754
+   "line": 831
   }
  ],
  "tests": {
@@ -2397,6 +2397,7 @@
    "factory_ontology",
    "factory_policy",
    "write_policy",
+   "write_ontology",
    "write_manifest",
    "flags_of",
    "a01_conflicting_reversibility_refuses_to_start",
@@ -2407,6 +2408,31 @@
    "a06_risk_sets_friction_weight_but_not_the_verdict",
    "a07_carrier_undo_is_neither_cross_checked_nor_a_proof_of_world_reversibility",
    "undo_of"
+  ],
+  "tests/carrier_boundary.rs": [
+   "tmpdir",
+   "manifest_dir",
+   "deploy_dir",
+   "directives",
+   "app_dependencies",
+   "kernel_units_from",
+   "socket_perm_directives_outside_socket_units",
+   "run_cli",
+   "c01_unit_dependencies_must_not_point_at_applications",
+   "c02_with_every_application_down_the_world_still_checks_and_folds_the_same",
+   "c03_world_sources_never_read_the_carrier_units",
+   "string_literals",
+   "walk",
+   "c04_socket_permission_directives_belong_only_to_socket_units"
+  ],
+  "tests/carrier_serve.rs": [
+   "tmpdir",
+   "run_serve",
+   "s01_serve_without_listen_fds_is_refused_and_names_the_code",
+   "s02_serve_with_a_foreign_listen_pid_is_refused",
+   "s03_serve_without_listen_pid_is_refused",
+   "s04_serve_with_an_unusable_fd3_is_refused",
+   "s05_a_bad_notify_socket_does_not_mask_the_listen_fds_refusal"
   ],
   "tests/channel_bounds.rs": [
    "commit_requested",
@@ -2423,7 +2449,12 @@
    "l03_a_silent_connection_is_cut_at_the_idle_timeout",
    "l04_messages_over_the_per_second_limit_are_refused_across_connections",
    "l05_the_four_numbers_come_only_from_the_config",
-   "l06_the_factory_config_really_carries_the_four_numbers"
+   "l06_the_factory_config_really_carries_the_four_numbers",
+   "write_json",
+   "law_one",
+   "render_one",
+   "l07_the_render_is_checked_against_the_law_before_it_is_used",
+   "l08_the_factory_law_really_declares_every_rendered_identity"
   ],
   "tests/cli.rs": [
    "libc_uid",
@@ -2446,7 +2477,9 @@
    "cli14_project_check_feeds_both_projections_the_same_state_and_vocab",
    "cli15_usage_lists_three_checkpoint_subcommands",
    "cli16_checkpoint_format_mismatch_is_named",
-   "cli17_checkpoint_resume_falls_back_to_post_hoc_comparison"
+   "cli17_checkpoint_resume_falls_back_to_post_hoc_comparison",
+   "presence_list",
+   "cli18_presence_list_is_the_world_roster_not_the_carrier_inventory"
   ],
   "tests/contract.rs": [
    "tmpdir",
@@ -2530,7 +2563,66 @@
    "h05_the_cli_read_path_refuses_a_missing_declared_cell_end_to_end",
    "h06_an_empty_declared_cell_list_is_not_read_as_lenient",
    "h07_the_declared_inventory_is_mechanically_enumerable",
-   "h08_every_declared_envelope_field_is_covered_and_the_coverage_is_load_bearing"
+   "h08_every_declared_envelope_field_is_covered_and_the_coverage_is_load_bearing",
+   "run_wc",
+   "base_args",
+   "cli_append",
+   "cli_state",
+   "muted",
+   "retract_body",
+   "read_back",
+   "append_raw_with_chain",
+   "append_lying_before",
+   "ledger_with_a_lying_before",
+   "r01_a_retraction_of_the_bad_seq_makes_the_ledger_foldable_again",
+   "r02_the_retracted_seq_stays_in_the_ledger_and_carries_a_retracted_mark",
+   "r03_retracting_a_missing_or_already_retracted_seq_is_refused_by_name",
+   "r04_the_retraction_itself_is_in_the_ledger_not_only_in_memory",
+   "r05_a_retracted_effect_is_not_replayed_as_the_current_value",
+   "r06_retraction_does_not_change_the_world_now_and_stays_out_of_the_canonical_form"
+  ],
+  "tests/ontology_elements.rs": [
+   "tmpdir",
+   "manifest_dir",
+   "factory_ontology",
+   "factory_policy",
+   "chmod600",
+   "factory_json",
+   "write_ontology",
+   "write_policy",
+   "red_then_green",
+   "cli_check",
+   "m01_every_missing_element_section_refuses_to_load_but_the_intact_one_loads",
+   "m02_cli_check_refuses_when_an_element_section_is_missing_and_passes_when_restored",
+   "m03_field_value_types_are_checked_including_closed_enums_and_refs",
+   "m04_relation_endpoints_must_be_declared_types",
+   "m05_embedded_types_are_declared_not_expressed_by_three_segment_paths",
+   "m06_instance_counts_by_type_are_exposed_and_single_instances_are_enforced",
+   "m07_permissions_live_in_the_ontology_and_may_only_be_granted_on_capabilities",
+   "m08_actions_referencing_unknown_capabilities_are_refused_on_both_sides",
+   "m09_function_entries_admit_only_entry_names_never_command_literals",
+   "m10_five_element_sections_live_under_underscore_keys_so_the_vocabulary_identity_is_unchanged",
+   "m11_the_two_object_declarations_must_not_contradict_each_other",
+   "m12_the_twelve_sections_attribution_table_must_match_the_real_underscore_sections",
+   "m13_dead_entries_dangling_refs_and_dead_capabilities_are_refused",
+   "m14_usage_lists_unused_declarations_but_never_fails",
+   "m16_describe_returns_the_intersection_of_interfaces_and_grants",
+   "m17_read_instance_face_shows_the_prior_value_and_the_default_output_is_unchanged",
+   "m18_subscribe_requires_a_cursor_and_never_shows_stale_numbers",
+   "m19_serve_refuses_a_non_numeric_owner_uid",
+   "append_raw_with_chain",
+   "m20_write_side_refuses_a_lying_before_and_check_refuses_a_lying_ledger",
+   "has_ready_line",
+   "cli_check_raw",
+   "cli_sub_raw",
+   "cli_read",
+   "cli_describe",
+   "cli_usage",
+   "m15_carrier_specific_strings_must_not_enter_the_ontology_identity",
+   "m21_presence_semantics_are_declared_and_a_value_outside_the_closed_set_is_refused",
+   "m22_presence_report_is_two_levels_declare_then_authorize",
+   "m23_capability_scope_names_concrete_subjects_not_a_wildcard",
+   "m24_link_cardinality_only_executed_values_or_nothing"
   ],
   "tests/ontology_ext.rs": [
    "tmpdir",
@@ -2551,6 +2643,31 @@
    "e05_the_public_write_entry_lands_an_unknown_flag_end_to_end",
    "x01_an_extension_item_colliding_with_a_core_field_is_refused_at_load",
    "x02_a_pure_extension_keeps_the_fold_byte_identical"
+  ],
+  "tests/ontology_instance.rs": [
+   "tmpdir",
+   "chmod600",
+   "chmod600",
+   "manifest_dir",
+   "factory_ontology",
+   "factory_policy",
+   "write_ontology",
+   "cells_for",
+   "ledger_with",
+   "i01_an_instance_whose_type_is_not_declared_is_refused_by_the_read_side",
+   "i02_a_recovered_ledger_line_with_an_undeclared_entity_is_refused",
+   "i03_declared_instances_still_fold",
+   "i04_pure_extension_still_reads_the_old_ledger",
+   "i05_a_bare_subject_is_still_not_judged",
+   "i06_nested_four_segment_instances_are_judged_by_their_own_type",
+   "i07_an_empty_declared_entity_set_refuses_to_fold",
+   "i08_not_wiring_this_half_means_no_judgment_not_a_pass",
+   "i09_an_absent_declaration_face_is_not_verified_and_never_green",
+   "i10_an_empty_declaration_face_is_not_verified_and_never_green",
+   "i11_every_declared_thing_visible_is_green",
+   "i12_a_declared_thing_that_is_not_visible_is_red_and_named",
+   "i13_a_declared_presence_instance_must_have_visible_cells",
+   "i14_every_declared_projection_must_be_reachable"
   ],
   "tests/perf.rs": [
    "env_usize",
@@ -2588,6 +2705,26 @@
    "p04_ledger_grows_so_does_each_reading",
    "p05_a_lagging_reading_neither_breaks_nor_bleeds_into_the_other",
    "p06_the_two_exits_do_not_carry_each_others_shapes"
+  ],
+  "tests/projection_surface.rs": [
+   "chg",
+   "st",
+   "one_surface_one_cell",
+   "s01_only_screen_facing_types_come_out",
+   "s02_carries_a_position",
+   "s03_the_three_readings_are_same_source"
+  ],
+  "tests/return_vocabulary.rs": [
+   "world_accepts",
+   "kernel_reserved",
+   "unreadable",
+   "executor_bell",
+   "gate_bell",
+   "rv01_the_executors_bell_is_not_understood_by_the_world",
+   "rv02_the_worlds_own_bell_is_understood",
+   "rv03_the_kernel_prefix_exemption_carries_weight",
+   "short_circuited",
+   "rv04_gutting_the_criterion_moves_the_verdict"
   ],
   "tests/trace_notice.rs": [
    "tmpdir",

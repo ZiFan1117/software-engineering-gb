@@ -64,7 +64,7 @@
 | 我想找 | 去哪（一条就够） |
 |---|---|
 | **世界核心的实现代码** | `world-core/src/`——总装 `lib.rs`／`main.rs`；账本 `ledger.rs`；门禁 `gate.rs`；本体执行者 `ontology.rs`；读模型 `readmodel.rs`；信封 `event.rs`；通道 `channel.rs`；投递 `delivery.rs`；检查点 `checkpoint.rs`；**Agent 运行时** `agent/`；**载体适配** `carrier/`；**投影** `project/` |
-| **某个能力的对外承诺** | `openspec/specs/<能力>/spec.md`（今天 6 个能力、`Requirement` 条数以 `openspec/BRIDGE.md` 为准） |
+| **某个能力的对外承诺** | `openspec/specs/<能力>/spec.md`（**能力数现取**：`openspec list --specs`；`Requirement` 条数以 `openspec/BRIDGE.md` 为准） |
 | **某条承诺的证据（哪个测试在作证）** | `openspec/specs/**` 里的 `- **证据**：<path>::<fn>` 行 → 直接落到 `world-core/tests/<file>.rs`；**改名即失锚**，由 `tools/spec_bridge.py` 判据② 盯着 |
 | **接口契约（模块之间怎么说话）** | `world-core/docs/S2-设计/WC-IC-001-v0.1.md`（**一册**，每模块一节；依赖列逐边与模块登记表一致） |
 | **跑测试／跑门禁** | 在 VM 上 `bash world-core/check.sh`（21 步、阻断式）；仓根 `./check.sh` 是它的**转发入口**。⚠️ 宿主（Windows）没有 cargo/bash，跑不了 |
@@ -116,7 +116,7 @@
 | 层 | 谁（实测） | 它只回答一个问题 | 冲突时 |
 |---|---|---|---|
 | **1 书（理念）** | `world-core/docs/理论/`——实测**只有 1 件**：合订本 `语义世界-理论书-第一版-合订.md`（433 843 字节／2 572 行／LF／无 BOM；卷首自述"一本把'说法'这一层讲清楚的书"，装配日期 2026-09-27） | 这一层应当是什么、今天做到几分、还剩什么没定 | **书赢** |
-| **2 规格（对外承诺）** | `openspec/specs/`——实测 **6 个能力／33 条 `Requirement`**：`channel-identity` 2／`envelope-validation` 6／`gate-enforcement` 7／`ledger-integrity` 8／`projections` 5／`read-model` 5 | 这台东西对外承诺什么行为，每条由哪条会红的测试作证 | 与书冲突 ⇒ **改规格**（除非作者裁定改书） |
+| **2 规格（对外承诺）** | `openspec/specs/`——**能力数与各条 `Requirement` 的条数一律现取**（`openspec list --specs`）；★ 本件**不复述这些计数**（复述必烂：此前写死过「6 个能力／33 条」，而现取是 **9 个／49 条**） | 这台东西对外承诺什么行为，每条由哪条会红的测试作证 | 与书冲突 ⇒ **改规格**（除非作者裁定改书） |
 | **3 流程（过程证据）** | `world-core/docs/`——实测 `S0-立项` 5／`S1-需求` 5／`S2-设计` 16／`S3-骨架` 2／`S4-实现` 5／`S5-测试` 1／**`S7-交付` 0**、`评审` 9、`阶段外-待启用` 10、`demo` 1、`系统全景图.md`；**无 `S6`** | 谁在什么时候按什么规矩做的、谁签的字 | 与书或规格冲突 ⇒ **改流程文档** |
 
 **§〇 上位规则**（源：`openspec/schemas/README.md` §〇）：**书 > 规格 > 流程**。两条硬规矩：
@@ -231,7 +231,7 @@
 |---|---|
 | 想知道"这一层应当是什么" | 书：`world-core/docs/理论/语义世界-理论书-第一版-合订.md` |
 | 想按条目核对、或判一处冲突 | 尺子 `openspec/BOOK/理念条目.md` ＋ 台账 `openspec/BOOK/冲突总账.md` |
-| 想知道这台东西对外承诺什么 | `openspec/specs/`（6 个能力）与 `openspec/BRIDGE.md`（承诺 ↔ 流程侧需求号） |
+| 想知道这台东西对外承诺什么 | `openspec/specs/`（能力数现取：`openspec list --specs`）与 `openspec/BRIDGE.md`（承诺 ↔ 流程侧需求号） |
 | 想看正在改什么 | `openspec/changes/`：在办 3 件（`cover-unimplemented-capabilities` 未勾 26／`fc-2026-001-openspec-into-cm` 未勾 16·已勾 18／`fc-2026-002-spec-revisions` 未勾 42）＋归档 1 件（`2026-09-27-baseline-verified-doctrine`） |
 | 想看开发形态要求 | `world-core/docs/S0-立项/WC-ATOM-001-v0.1.md`（原子化编程：六条约定＋机核清单） |
 | 想知道规矩怎么定的 | `openspec/schemas/README.md`（融合档：谁管什么、产物链、评审档位）与 `openspec/MAINTENANCE.md`（规格层维护清单） |
